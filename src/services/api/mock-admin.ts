@@ -4,7 +4,8 @@
 
 import { computeAdminMetrics, inReconciliationQueue, type AdminMetrics, type MetricOrder } from '../../../supabase/functions/_shared/admin-metrics.ts'
 import type { OrderStatus } from '@/types'
-import type { PriceRuleView, ProviderStatus, ReconciliationOrder } from '@/types/admin'
+import { computeProfitAnalytics, type DateRange } from '../../../supabase/functions/_shared/admin-analytics.ts'
+import type { PriceRuleView, ProfitAnalytics, ProviderStatus, ReconciliationOrder } from '@/types/admin'
 import { mockBackend, type KeyValueStorage } from './mock-orders'
 
 export class AdminApiError extends Error {
@@ -99,6 +100,14 @@ export function createMockAdmin(storage: KeyValueStorage, now: () => number = Da
       const s = load()
       const mine = mockBackend.metricOrders()
       return computeAdminMetrics([...s.orders, ...mine], { ...DEMO_EXTRAS, totalUsers: DEMO_EXTRAS.totalUsers + 1 }, now())
+    },
+
+    getAnalytics(range: DateRange): ProfitAnalytics {
+      const s = load()
+      const t = now()
+      // demo treasury fees (the real ones come from treasury_transactions)
+      const fees = [{ amount: -1.5, created_at: new Date(t - 40 * HOUR).toISOString() }, { amount: -0.75, created_at: new Date(t - 5 * 24 * HOUR).toISOString() }]
+      return computeProfitAnalytics([...s.orders, ...mockBackend.metricOrders()], fees, range)
     },
 
     getProviders(): ProviderStatus[] {

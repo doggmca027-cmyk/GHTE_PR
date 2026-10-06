@@ -9,8 +9,8 @@ import { newIdempotencyKey } from '@/lib/idempotency'
 import { timeAgo } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
-import { adjustTreasury, getTreasury } from '@/services/api/admin'
-import type { TreasuryTx } from '@/types/admin'
+import { adjustTreasury, decideTopupProposal, getTreasury } from '@/services/api/admin'
+import type { TopupProposal, TreasuryTx } from '@/types/admin'
 
 export function TreasuryTab({ session }: { session: AuthSession }) {
   const { data, error, loading, reload } = useLoader(() => getTreasury(session), [session.token, session.isMock])
@@ -19,6 +19,9 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [busyProposal, setBusyProposal] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<string | null>(null)
 
   if (!data && loading) return <div className="h-[180px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />
   if (!data) {
@@ -33,6 +36,26 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
 
   const cursor = nextBefore === undefined ? data.nextBefore : nextBefore
   const rows = [...data.transactions, ...more.filter((m) => !data.transactions.some((t) => t.id === m.id))]
+
+  async function decide(p: TopupProposal, decision: 'approve' | 'reject') {
+    setBusyProposal(p.id)
+    setMessage(null)
+    setErrorMessage(null)
+    try {
+      await decideTopupProposal(session, p.id, decision)
+      haptic.success()
+      setMessage(decision === 'approve' ? `Approved: ${usd(p.amount)} debited from the treasury for ${p.providerName}.` : `Rejected the top-up for ${p.providerName}.`)
+      setMore([])
+      setNextBefore(undefined)
+    } catch (e) {
+      haptic.error()
+      setErrorMessage(e instanceof Error ? e.message : 'Could not save.')
+    } finally {
+      setBusyProposal(null)
+      setConfirming(null)
+      await reload() // always re-read: another admin may have decided it already
+    }
+  }
 
   async function loadMore() {
     if (cursor === null) return
@@ -56,6 +79,38 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
       </Card>
 
       {message && <p role="status" className="rounded-2xl bg-emerald-50 px-3.5 py-2.5 text-[13px] font-medium text-emerald-700">{message}</p>}
+
+      {errorMessage && <p role="alert" className="rounded-2xl bg-rose-50 px-3.5 py-2.5 text-[13px] font-medium text-rose-700">{errorMessage}</p>}
+
+      {data.proposals.length > 0 && (
+        <section aria-label="Pending top-ups" className="space-y-2">
+          <h2 className="px-1 text-sm font-bold text-content-primary">Pending Top-Ups</h2>
+          {data.proposals.map((p) => {
+            const short = p.amount > data.balance
+            const busy = busyProposal === p.id
+            return (
+              <article key={p.id} className="rounded-2xl border border-amber-300 bg-white px-3.5 py-3 shadow-card">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold text-content-primary">{p.providerName}</p>
+                    <p className="mt-0.5 text-xs text-content-secondary">Proposed {timeAgo(p.createdAt)}</p>
+                  </div>
+                  <p className="shrink-0 text-[15px] font-extrabold text-content-primary">{usd(p.amount)} {p.currency}</p>
+                </div>
+                {short && <p role="alert" className="mt-1 text-xs font-semibold text-amber-600">Treasury holds only {usd(data.balance)}. Fund it first.</p>}
+                <div className="mt-2 flex gap-2">
+                  <Button className="h-10 flex-1 text-[13px]" disabled={busy || short} onClick={() => { if (confirming === p.id) void decide(p, 'approve'); else { haptic.tap(); setConfirming(p.id) } }}>
+                    <Check size={15} strokeWidth={2} /> {confirming === p.id ? `Confirm ${usd(p.amount)}` : 'Approve'}
+                  </Button>
+                  <button type="button" disabled={busy} onClick={() => void decide(p, 'reject')} className="flex h-10 flex-1 items-center justify-center gap-1 rounded-2xl bg-surface-sub text-[13px] font-semibold text-content-secondary active:scale-95 disabled:opacity-50">
+                    <X size={15} strokeWidth={2} /> Reject
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+        </section>
+      )}
 
       <h2 className="px-1 text-sm font-bold text-content-primary">Ledger</h2>
       {rows.length === 0 && <Card className="p-4 text-sm text-content-secondary">No treasury transactions yet.</Card>}

@@ -74,3 +74,20 @@ export const treasuryTypeLabel = (type: string): string => TREASURY_LABELS[type]
 export function signedUsd(amount: number): string {
   return `${amount < 0 ? '-' : '+'}${usd(Math.abs(amount))}`
 }
+
+export type AnalyticsRangeKey = 'today' | '7d' | '30d' | 'all'
+
+export const ANALYTICS_RANGES: { key: AnalyticsRangeKey; label: string }[] = [
+  { key: 'today', label: 'Today' },
+  { key: '7d', label: 'Last 7 Days' },
+  { key: '30d', label: 'Last 30 Days' },
+  { key: 'all', label: 'All Time' },
+]
+
+/** Request body for admin-analytics. Omitted endDate = now; null = unbounded (All Time). "Today" starts at the viewer's local midnight. */
+export function analyticsRequest(key: AnalyticsRangeKey, now: Date = new Date()): { startDate: string | null; endDate?: null } {
+  const DAY = 86_400_000
+  if (key === 'all') return { startDate: null, endDate: null }
+  if (key === 'today') return { startDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString() }
+  return { startDate: new Date(now.getTime() - (key === '7d' ? 7 : 30) * DAY).toISOString() }
+}

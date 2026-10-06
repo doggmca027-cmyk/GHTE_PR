@@ -1,6 +1,7 @@
 import type { OrderStatus } from './smm'
 
 export type { AdminMetrics } from '../../supabase/functions/_shared/admin-metrics.ts'
+export type { ProfitAnalytics } from '../../supabase/functions/_shared/admin-analytics.ts'
 
 export interface ProviderStatus {
   id: string
@@ -100,8 +101,19 @@ export interface TreasuryTx {
   createdAt: string
 }
 
+/** A pending top-up proposal filed by the health monitor when a provider's balance is low. */
+export interface TopupProposal {
+  id: string
+  providerId: string
+  providerName: string
+  amount: number
+  currency: string
+  createdAt: string
+}
+
 export interface TreasuryPage {
   balance: number
+  proposals: TopupProposal[]
   updatedAt: string
   transactions: TreasuryTx[]
   /** Cursor (`beforeSeq`) for the next page, or null at the end of the ledger. */

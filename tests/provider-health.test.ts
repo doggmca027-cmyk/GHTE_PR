@@ -77,6 +77,9 @@ describe('balance alert rules (pure)', () => {
   it('low-balance text', () => {
     expect(buildMessage({ type: 'provider_low_balance', providerName: 'Panel A', balance: 4.5, currency: 'USD' }, 'en')).toBe('⚠️ <b>Provider Panel A balance is critically low:</b> 4.50 USD.')
     expect(buildMessage({ type: 'provider_low_balance', providerName: 'A', balance: 4.5, currency: 'USD' }, 'uk')).toContain('критично низький')
+    expect(buildMessage({ type: 'provider_low_balance', providerName: 'Panel A', balance: 4.5, currency: 'USD', proposalAmount: 95.5 }, 'en'))
+      .toBe('⚠️ <b>Provider Panel A balance is low.</b> A top-up proposal for <b>95.50 USD</b> has been generated.\nBalance: 4.50 USD.')
+    expect(buildMessage({ type: 'provider_low_balance', providerName: 'A', balance: 4.5, currency: 'USD', proposalAmount: 95.5 }, 'uk')).toContain('заявку на поповнення')
     expect(buildMessage({ type: 'provider_low_balance', providerName: '<i>x</i>', balance: 1, currency: 'USD' }, 'en')).not.toContain('<i>')
   })
 })
@@ -138,10 +141,12 @@ interface Script {
   balance?: Record<string, number>
   /** Telegram could not deliver the low-balance alert to anyone. */
   undelivered?: boolean
+  /** Filing a top-up proposal fails (database error). */
+  proposalFails?: boolean
 }
 
 function portsFor(db: PGlite, script: Script) {
-  const lowBalance: { name: string; balance: number; currency: string }[] = []
+  const lowBalance: { name: string; balance: number; currency: string; proposalAmount?: number }[] = []
   const alerts: { name: string; kind: AlertKind }[] = []
   const pings: string[] = []
   const ports: HealthPorts<Row> = {
@@ -158,17 +163,22 @@ function portsFor(db: PGlite, script: Script) {
       return { balance, currency: 'usd' }
     },
     async saveBalance(p, r, at) {
-      const rows = (await db.query<{ t: string; a: boolean; c: string }>(
-        `update providers set provider_balance = $2, last_balance_sync = $3, currency = coalesce($4, currency) where id = $1 returning low_balance_threshold::text t, balance_alert_sent a, currency c`,
+      const rows = (await db.query<{ t: string; a: boolean; c: string; g: string }>(
+        `update providers set provider_balance = $2, last_balance_sync = $3, currency = coalesce($4, currency) where id = $1 returning low_balance_threshold::text t, balance_alert_sent a, currency c, target_topup_balance::text g`,
         [p.id, r.balance, at, r.currency])).rows[0]
-      return { threshold: Number(rows.t), alertSent: rows.a, currency: rows.c }
+      return { threshold: Number(rows.t), alertSent: rows.a, currency: rows.c, target: Number(rows.g) }
     },
     async setBalanceAlertSent(p, from, to) {
       return (await db.query(`update providers set balance_alert_sent = $3 where id = $1 and balance_alert_sent = $2 returning id`, [p.id, from, to])).rows.length > 0
     },
+    async createTopupProposal(p, amount) {
+      if (script.proposalFails) throw new Error('db down')
+      const r = (await db.query<{ r: { amount: number; created: boolean } }>(`select create_topup_proposal($1::uuid, $2::numeric) r`, [p.id, amount])).rows[0].r
+      return { amount: Number(r.amount), created: r.created }
+    },
     async notifyLowBalance(p, r) {
       if (script.undelivered) return false
-      lowBalance.push({ name: p.name, balance: r.balance, currency: r.currency })
+      lowBalance.push({ name: p.name, balance: r.balance, currency: r.currency, proposalAmount: r.proposalAmount })
       return true
     },
     async applyCheck(p, from, to, at) {
@@ -331,7 +341,7 @@ describe('provider-health-monitor core', () => {
       const { ports, lowBalance } = portsFor(db, script)
       expect((await runHealthChecks(ports)).balanceAlerts).toBe(1)
       for (let i = 0; i < 4; i++) expect((await runHealthChecks(ports)).balanceAlerts).toBe(0) // still low: silent
-      expect(lowBalance).toEqual([{ name: 'A', balance: 4, currency: 'USD' }])
+      expect(lowBalance).toEqual([{ name: 'A', balance: 4, currency: 'USD', proposalAmount: 96 }])
       expect((await bal(A)).sent).toBe(true)
 
       script.balance = { [A]: 50 } // topped up
@@ -342,6 +352,69 @@ describe('provider-health-monitor core', () => {
       script.balance = { [A]: 9.99 } // second dip
       await runHealthChecks(ports)
       expect(lowBalance).toHaveLength(2)
+    })
+
+    const proposals = async () => (await db.query<{ provider_id: string; amount: string; status: string }>(`select provider_id, amount::text, status::text from topup_proposals order by created_at`)).rows
+
+    it('a low balance files one proposal for (target - balance) and the alert mentions it', async () => {
+      const { ports, lowBalance } = portsFor(db, { down: new Set(), balance: { [A]: 4.5 } })
+      await runHealthChecks(ports)
+      expect(await proposals()).toEqual([{ provider_id: A, amount: '95.5000', status: 'pending' }])
+      expect(lowBalance[0].proposalAmount).toBe(95.5)
+    })
+
+    it('files nothing while the balance is fine', async () => {
+      const { ports } = portsFor(db, { down: new Set(), balance: { [A]: 50 } })
+      await runHealthChecks(ports)
+      expect(await proposals()).toEqual([])
+    })
+
+    it('uses the per-provider target', async () => {
+      await db.exec(`update providers set low_balance_threshold = 20, target_topup_balance = 300 where id = '${A}'`)
+      const { ports } = portsFor(db, { down: new Set(), balance: { [A]: 15 } })
+      await runHealthChecks(ports)
+      expect((await proposals())[0].amount).toBe('285.0000')
+    })
+
+    it('stays at one pending proposal across ticks and overlapping runs', async () => {
+      const { ports } = portsFor(db, { down: new Set(), balance: { [A]: 1 } })
+      await Promise.all([runHealthChecks(ports), runHealthChecks(ports)])
+      for (let i = 0; i < 3; i++) await runHealthChecks(ports)
+      expect(await proposals()).toHaveLength(1)
+    })
+
+    it('does not spawn a new proposal after an approval while the balance has not recovered, but does on the next dip', async () => {
+      const script: Script = { down: new Set(), balance: { [A]: 1 } }
+      const { ports } = portsFor(db, script)
+      await runHealthChecks(ports)
+      await db.exec(`update topup_proposals set status = 'approved'`) // admin approved (simulated transfer: provider balance unchanged)
+      for (let i = 0; i < 3; i++) await runHealthChecks(ports)
+      expect(await proposals()).toHaveLength(1)
+
+      script.balance = { [A]: 100 } // the real top-up landed
+      await runHealthChecks(ports)
+      script.balance = { [A]: 2 } // next dip
+      await runHealthChecks(ports)
+      expect((await proposals()).map((p) => p.status)).toEqual(['approved', 'pending'])
+    })
+
+    it('if the proposal cannot be filed the lock is released and the next tick retries', async () => {
+      const script: Script = { down: new Set(), balance: { [A]: 1 }, proposalFails: true }
+      const { ports, lowBalance } = portsFor(db, script)
+      expect((await runHealthChecks(ports)).balanceAlerts).toBe(0)
+      expect((await bal(A)).sent).toBe(false)
+      expect(lowBalance).toEqual([])
+      script.proposalFails = false
+      expect((await runHealthChecks(ports)).balanceAlerts).toBe(1)
+      expect(await proposals()).toHaveLength(1)
+    })
+
+    it('a provider already at its target gets an alert but no zero-amount proposal', async () => {
+      await db.exec(`update providers set low_balance_threshold = 50, target_topup_balance = 50 where id = '${A}'`)
+      const { ports, lowBalance } = portsFor(db, { down: new Set(), balance: { [A]: 50 } })
+      await runHealthChecks(ports)
+      expect(await proposals()).toEqual([])
+      expect(lowBalance[0].proposalAmount).toBeUndefined()
     })
 
     it('a balance exactly at the threshold counts as low', async () => {

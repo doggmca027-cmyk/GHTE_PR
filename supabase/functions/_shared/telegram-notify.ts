@@ -17,7 +17,7 @@ export type NotifyEvent =
   /** Admin alert from provider-health-monitor: a provider went down ('unavailable') or came back ('healthy'). */
   | { type: 'provider_health'; providerName: string; status: 'unavailable' | 'healthy' }
   /** Admin alert from provider-health-monitor: a provider's balance fell to or below its threshold. */
-  | { type: 'provider_low_balance'; providerName: string; balance: number; currency: string }
+  | { type: 'provider_low_balance'; providerName: string; balance: number; currency: string; /** Amount of the top-up proposal that was filed, if any. */ proposalAmount?: number }
 
 /** Ukrainian for uk-*, English for everything else. */
 export function resolveLang(languageCode: string | null | undefined): NotifyLang {
@@ -64,7 +64,9 @@ const EN: { [K in NotifyEvent['type']]: Template<Extract<NotifyEvent, { type: K 
       ? `🚨 <b>Provider ${name(e.providerName)} is UNAVAILABLE</b>\nTraffic is routed to fallback.`
       : `✅ <b>Provider ${name(e.providerName)} is back ONLINE</b>\nRouting restored.`,
   provider_low_balance: (e) =>
-    `⚠️ <b>Provider ${name(e.providerName)} balance is critically low:</b> ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`,
+    e.proposalAmount
+      ? `⚠️ <b>Provider ${name(e.providerName)} balance is low.</b> A top-up proposal for <b>${plainAmount(e.proposalAmount)} ${escapeHtml(e.currency)}</b> has been generated.\nBalance: ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`
+      : `⚠️ <b>Provider ${name(e.providerName)} balance is critically low:</b> ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`,
 }
 
 const UK: typeof EN = {
@@ -81,7 +83,9 @@ const UK: typeof EN = {
       ? `🚨 <b>Провайдер ${name(e.providerName)} НЕДОСТУПНИЙ</b>\nТрафік переведено на резервного.`
       : `✅ <b>Провайдер ${name(e.providerName)} знову ONLINE</b>\nМаршрутизацію відновлено.`,
   provider_low_balance: (e) =>
-    `⚠️ <b>Баланс провайдера ${name(e.providerName)} критично низький:</b> ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`,
+    e.proposalAmount
+      ? `⚠️ <b>Баланс провайдера ${name(e.providerName)} низький.</b> Створено заявку на поповнення на <b>${plainAmount(e.proposalAmount)} ${escapeHtml(e.currency)}</b>.\nБаланс: ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`
+      : `⚠️ <b>Баланс провайдера ${name(e.providerName)} критично низький:</b> ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`,
 }
 
 const TEMPLATES: Record<NotifyLang, typeof EN> = { en: EN, uk: UK }

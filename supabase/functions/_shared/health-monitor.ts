@@ -34,6 +34,12 @@ export interface BalanceReading {
   currency: string
 }
 
+/** What to ask the treasury for: enough to bring the provider back to its target balance (0 = nothing to propose). */
+export function topupAmount(target: number, balance: number): number {
+  const needed = Math.round((target - balance) * 10_000) / 10_000
+  return needed > 0 ? needed : 0
+}
+
 export type BalanceAction = 'alert' | 'reset' | 'none'
 
 /**
@@ -77,12 +83,17 @@ export interface HealthPorts<P extends MonitoredProvider> {
    * returned a usable one (void when it answered but the balance could not be read).
    */
   ping(provider: P): Promise<BalanceReading | void>
-  /** Stores provider_balance / currency / last_balance_sync; returns the provider's threshold, alert lock and stored currency. */
-  saveBalance(provider: P, reading: { balance: number; currency: string | null }, at: string): Promise<{ threshold: number; alertSent: boolean; currency: string }>
+  /** Stores provider_balance / currency / last_balance_sync; returns the provider's threshold, top-up target, alert lock and stored currency. */
+  saveBalance(provider: P, reading: { balance: number; currency: string | null }, at: string): Promise<{ threshold: number; alertSent: boolean; currency: string; target: number }>
   /** Compare-and-set on balance_alert_sent = from. True for the single caller that flipped it. */
   setBalanceAlertSent(provider: P, from: boolean, to: boolean): Promise<boolean>
+  /**
+   * Files a top-up proposal of `amount` (idempotent: an existing pending proposal for the provider is returned as is).
+   * Rejects on a database failure.
+   */
+  createTopupProposal(provider: P, amount: number): Promise<{ amount: number; created: boolean }>
   /** Alerts the admins. Resolves true only if at least one admin actually received it. */
-  notifyLowBalance(provider: P, reading: BalanceReading, at: string): Promise<boolean>
+  notifyLowBalance(provider: P, reading: BalanceReading & { proposalAmount?: number }, at: string): Promise<boolean>
   /**
    * Stores the result. When `from === to` only last_health_check is touched ('unchanged'). Otherwise it is a
    * compare-and-set on health_status = from: 'changed' for the single winner, 'lost_race' for anyone else.
@@ -152,7 +163,7 @@ async function processBalance<P extends MonitoredProvider>(p: P, reading: Balanc
   try {
     const clean = sanitizeBalance(reading)
     if (!clean) return false
-    const { threshold, alertSent, currency } = await ports.saveBalance(p, clean, at)
+    const { threshold, alertSent, currency, target } = await ports.saveBalance(p, clean, at)
     const action = balanceAction(clean.balance, threshold, alertSent)
     if (action === 'reset') {
       await ports.setBalanceAlertSent(p, true, false)
@@ -161,7 +172,19 @@ async function processBalance<P extends MonitoredProvider>(p: P, reading: Balanc
     if (action !== 'alert') return false
     // Only the caller that flips the lock may alert (overlapping runs: one alert).
     if (!(await ports.setBalanceAlertSent(p, false, true))) return false
-    const delivered = await ports.notifyLowBalance(p, { balance: clean.balance, currency }, at).catch(() => false)
+    // File the top-up proposal first. A new proposal is filed once per dip (this lock), not on every tick: otherwise approving
+    // one while the real balance has not risen yet would immediately spawn the next. If filing fails, release the lock and retry next tick.
+    const needed = topupAmount(target, clean.balance)
+    let proposalAmount: number | undefined
+    if (needed > 0) {
+      try {
+        proposalAmount = (await ports.createTopupProposal(p, needed)).amount
+      } catch {
+        await ports.setBalanceAlertSent(p, true, false)
+        return false
+      }
+    }
+    const delivered = await ports.notifyLowBalance(p, { balance: clean.balance, currency, proposalAmount }, at).catch(() => false)
     // Nobody was told: release the lock so the next tick tries again instead of staying silent forever.
     if (!delivered) await ports.setBalanceAlertSent(p, true, false)
     return delivered

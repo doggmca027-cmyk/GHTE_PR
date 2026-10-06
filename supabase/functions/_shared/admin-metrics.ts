@@ -34,10 +34,10 @@ export const INFLIGHT_GRACE_MS = 10 * 60 * 1000
 const ACTIVE: OrderStatus[] = ['awaiting_payment', 'paid', 'processing', 'submitted', 'in_progress']
 
 const U = 10_000
-const units = (n: number) => Math.round(n * U)
+export const units = (n: number) => Math.round(n * U)
 
 /** round-half-up(a * b / c) on non-negative integers, like PostgreSQL round(numeric, 4) */
-const mulDivRound = (a: number, b: number, c: number) => Math.floor((a * b * 2 + c) / (2 * c))
+export const mulDivRound = (a: number, b: number, c: number) => Math.floor((a * b * 2 + c) / (2 * c))
 
 export function computeAdminMetrics(
   orders: MetricOrder[],

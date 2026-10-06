@@ -86,10 +86,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
           .from('providers')
           .update(patch)
           .eq('id', p.id)
-          .select('low_balance_threshold, balance_alert_sent, currency')
+          .select('low_balance_threshold, target_topup_balance, balance_alert_sent, currency')
           .single()
         if (error) throw new Error(`save balance: ${error.message}`)
-        return { threshold: Number(data.low_balance_threshold), alertSent: data.balance_alert_sent === true, currency: String(data.currency) }
+        return { threshold: Number(data.low_balance_threshold), alertSent: data.balance_alert_sent === true, currency: String(data.currency), target: Number(data.target_topup_balance) }
       },
 
       async setBalanceAlertSent(p, from, to) {
@@ -103,10 +103,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return (data ?? []).length > 0
       },
 
+      async createTopupProposal(p, amount) {
+        const { data, error } = await db.rpc('create_topup_proposal', { p_provider_id: p.id, p_amount: amount })
+        if (error) throw new Error(`top-up proposal: ${error.message}`)
+        return { amount: Number((data as { amount: unknown }).amount), created: (data as { created: unknown }).created === true }
+      },
+
       async notifyLowBalance(p, reading, at) {
         const { data: admins } = await db.from('users').select('id').eq('is_admin', true).eq('is_banned', false)
         const outcomes = await Promise.all((admins ?? []).map((a: { id: string }) =>
-          notify(a.id, { type: 'provider_low_balance', providerName: p.name, balance: reading.balance, currency: reading.currency }, `provider-balance:${p.id}:${at}`)))
+          notify(a.id, { type: 'provider_low_balance', providerName: p.name, balance: reading.balance, currency: reading.currency, proposalAmount: reading.proposalAmount }, `provider-balance:${p.id}:${at}`)))
         return outcomes.some((o) => o === 'sent' || o === 'mock_logged' || o === 'duplicate')
       },
 

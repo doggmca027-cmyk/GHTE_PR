@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { getAdminMetrics, getProviderStatus } from '@/services/api/admin'
 import { MetricCard } from './MetricCard'
+import { ProfitPanel } from './ProfitPanel'
 
 interface Props {
   session: AuthSession
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
+  const [refreshKey, setRefreshKey] = useState(0)
   const { data, error, loading, reload } = useLoader(
     async () => {
       const [metrics, providers] = await Promise.all([getAdminMetrics(session), getProviderStatus(session)])
@@ -58,21 +60,16 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
         <button
           type="button"
           aria-label="Refresh metrics"
-          onClick={() => { haptic.tap(); void reload() }}
+          onClick={() => { haptic.tap(); setRefreshKey((k) => k + 1); void reload() }}
           className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100/70 bg-white text-content-secondary shadow-sm active:scale-90"
         >
           <RefreshCw size={16} strokeWidth={1.75} className={cn(loading && 'animate-spin')} />
         </button>
       </div>
 
+      <ProfitPanel session={session} refreshKey={refreshKey} />
+
       <div className="grid grid-cols-2 gap-3">
-        <MetricCard label="Gross revenue" value={usd(m.grossRevenue)} hint={`Provider cost ${usd(m.estimatedCost)}`} />
-        <MetricCard label="Net profit" value={usd(m.grossProfit)} tone={m.grossProfit >= 0 ? 'success' : 'danger'} hint="Revenue minus cost" />
-        <MetricCard
-          label="Profit margin"
-          value={m.marginPct === null ? '-' : `${m.marginPct.toFixed(1)}%`}
-          tone={m.marginPct !== null && m.marginPct < 0 ? 'danger' : 'default'}
-        />
         <MetricCard label="Active orders" value={formatInt(m.activeOrders)} hint={`${formatInt(m.totalOrders)} total`} />
         <MetricCard label="Users" value={formatInt(m.totalUsers)} />
         <MetricCard

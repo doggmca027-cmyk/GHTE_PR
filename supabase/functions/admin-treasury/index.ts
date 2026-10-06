@@ -2,6 +2,9 @@
 //   Authorization: Bearer <JWT issued by telegram-auth>
 //   { action: "GET", limit?, beforeSeq? }
 //       -> { success, balance, updatedAt, transactions: [...newest first], nextBefore }  (nextBefore = cursor for the next page, or null)
+//   { action: "APPROVE_PROPOSAL" | "REJECT_PROPOSAL", proposalId }
+//       -> approve debits the treasury (provider_topup) and marks the proposal approved in ONE database transaction
+//          (approve_topup_proposal); reject only marks it. GET also returns the pending proposals.
 //   { action: "MANUAL_ADJUSTMENT", amount (signed), description, idempotencyKey }
 //       -> books a manual_adjustment through process_treasury_transaction (row lock, no negative balance, audit entry
 //          written in the same transaction). Re-sending the same idempotencyKey books it once.
@@ -64,6 +67,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json({ success: true, transaction: publicTx(data as Record<string, unknown>) })
     }
 
+    if (parsed.action === 'APPROVE_PROPOSAL' || parsed.action === 'REJECT_PROPOSAL') {
+      const fn = parsed.action === 'APPROVE_PROPOSAL' ? 'approve_topup_proposal' : 'reject_topup_proposal'
+      const { data, error } = await db.rpc(fn, { p_proposal_id: parsed.proposalId, p_actor: userId })
+      if (error) {
+        const m = mapTreasuryError(error.message)
+        if (m.status === 500) throw new Error(`${fn}: ${error.message}`)
+        return fail(m.status, m.error, m.message)
+      }
+      return json({ success: true, result: data })
+    }
+
     // GET: balance + one page (fetch one extra row to know whether there is a next page).
     const { data: state, error: stateError } = await db.from('treasury_state').select('balance, updated_at').eq('id', 1).single()
     if (stateError) throw new Error(`treasury state: ${stateError.message}`)
@@ -71,6 +85,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (parsed.beforeSeq !== null) q = q.lt('seq', parsed.beforeSeq)
     const { data: rows, error: rowsError } = await q
     if (rowsError) throw new Error(`treasury transactions: ${rowsError.message}`)
+    const { data: pending, error: pendingError } = await db
+      .from('topup_proposals')
+      .select('id, provider_id, amount, currency, created_at, provider:providers(name)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
+    if (pendingError) throw new Error(`pending proposals: ${pendingError.message}`)
+    const proposals = (pending ?? []).map((r: Record<string, unknown>) => ({
+      id: String(r.id), providerId: String(r.provider_id), providerName: String((r.provider as { name?: string } | null)?.name ?? 'Provider'),
+      amount: Number(r.amount), currency: String(r.currency), createdAt: String(r.created_at),
+    }))
     const page = (rows ?? []).slice(0, parsed.limit).map(publicTx)
     const hasMore = (rows ?? []).length > parsed.limit
     return json({
@@ -78,6 +102,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       balance: Number(state.balance),
       updatedAt: String(state.updated_at),
       transactions: page,
+      proposals,
       nextBefore: hasMore ? page[page.length - 1].seq : null,
     })
   } catch (e) {

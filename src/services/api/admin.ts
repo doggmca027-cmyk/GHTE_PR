@@ -1,9 +1,11 @@
 import type { AuthSession } from '@/services/api/auth'
-import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderStatus, ReconciliationOrder, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
+import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderStatus, ReconciliationOrder, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
 import { createMockPricing } from './mock-pricing'
 import { createMockProviders } from './mock-providers'
 import { createMockTreasury } from './mock-treasury'
 import { metricsFromRpc } from '../../../supabase/functions/_shared/admin-metrics.ts'
+import { analyticsFromRpc } from '../../../supabase/functions/_shared/admin-analytics.ts'
+import { analyticsRequest, type AnalyticsRangeKey } from '@/lib/admin-view'
 import { AdminApiError, createMockAdmin } from './mock-admin'
 import type { OrderStatus } from '@/types'
 
@@ -254,7 +256,7 @@ export async function getTreasury(session: AuthSession, beforeSeq: number | null
     return mockTreasury().page(beforeSeq)
   }
   const r = await callTreasury<TreasuryPage>(session, { action: 'GET', ...(beforeSeq !== null ? { beforeSeq } : {}) })
-  return { balance: num(r.balance), updatedAt: String(r.updatedAt), transactions: r.transactions as TreasuryTx[], nextBefore: r.nextBefore ?? null }
+  return { balance: num(r.balance), updatedAt: String(r.updatedAt), transactions: r.transactions as TreasuryTx[], proposals: (r.proposals ?? []) as TopupProposal[], nextBefore: r.nextBefore ?? null }
 }
 
 export async function adjustTreasury(session: AuthSession, input: TreasuryAdjustment): Promise<void> {
@@ -264,4 +266,40 @@ export async function adjustTreasury(session: AuthSession, input: TreasuryAdjust
     return
   }
   await callTreasury(session, { action: 'MANUAL_ADJUSTMENT', ...input })
+}
+
+export async function decideTopupProposal(session: AuthSession, proposalId: string, decision: 'approve' | 'reject'): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    mockTreasury().decide(proposalId, decision)
+    return
+  }
+  await callTreasury(session, { action: decision === 'approve' ? 'APPROVE_PROPOSAL' : 'REJECT_PROPOSAL', proposalId })
+}
+
+// ---- Profit analytics (admin-analytics Edge Function) -----------------------------------------------
+
+export async function getProfitAnalytics(session: AuthSession, range: AnalyticsRangeKey): Promise<ProfitAnalytics> {
+  const body = analyticsRequest(range)
+  if (session.isMock) {
+    guardMock(session)
+    return mockAdmin().getAnalytics({ start: body.startDate, end: 'endDate' in body ? null : new Date().toISOString() })
+  }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new AdminApiError('server', 'Backend is not configured.')
+  let res: Response
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/admin-analytics`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+  } catch {
+    throw new AdminApiError('network', 'Connection lost. Please try again.')
+  }
+  const data = (await res.json().catch(() => null)) as { success?: boolean; analytics?: Record<string, unknown>; message?: string } | null
+  if (res.ok && data?.success && data.analytics) return analyticsFromRpc(data.analytics)
+  if (res.status === 401 || res.status === 403) throw new AdminApiError('forbidden', 'Admin access required.')
+  if (res.status === 400) throw new AdminApiError('invalid_input', data?.message ?? 'Invalid input.')
+  throw new AdminApiError('server', 'Something went wrong. Please try again.')
 }
