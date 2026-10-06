@@ -1,0 +1,22 @@
+# dependencies / build output
+node_modules
+dist
+.vercel
+coverage
+
+# secrets: real env files never go to git; the *.example files are the templates
+.env
+.env.*
+!.env.example
+!.env.production
+*.local
+supabase/functions/.env
+supabase/functions/.env.*
+!supabase/functions/.env.example
+supabase/.temp
+supabase/.branches
+smoke.env
+
+# OS / editor
+.DS_Store
+Thumbs.db

@@ -1,0 +1,28 @@
+project_id = "smm-mini-app"
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+# Called before the client has a JWT; the function authenticates via signed initData.
+[functions.telegram-auth]
+verify_jwt = false
+
+# Not callable by clients: authenticates itself with CRON_SECRET or the service role key.
+[functions.sync-catalog]
+verify_jwt = false
+
+# Authenticates itself by verifying the telegram-auth JWT (HS256, JWT_SECRET).
+[functions.place-order]
+verify_jwt = false
+
+# Both authenticate by verifying the telegram-auth JWT (HS256, JWT_SECRET).
+[functions.create-deposit]
+verify_jwt = false
+
+[functions.verify-deposit]
+verify_jwt = false
+
+# Scheduler-only: authenticates itself with CRON_SECRET or the service role key.
+[functions.sync-order-status]
+verify_jwt = false

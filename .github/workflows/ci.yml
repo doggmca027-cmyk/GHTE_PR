@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Test, audit and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # No hard-coded secrets, env files ignored, bundle-leak rules.
+      - name: Secret scan
+        run: npm run scan:secrets
+
+      # Applies every migration to a fresh Postgres and checks RLS / grants / function exposure,
+      # and that every Edge Function is configured in supabase/config.toml.
+      - name: Supabase audit
+        run: npm run check:supabase
+
+      - name: Tests
+        run: npm test
+
+      # Runs verify-env (prebuild) and the bundle secret scan (postbuild). Dummy PUBLIC values only:
+      # this build is never deployed, Vercel builds the real one.
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://abcdefghijklmnopqrst.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable_ci_placeholder_not_a_real_key

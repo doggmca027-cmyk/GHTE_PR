@@ -1,0 +1,49 @@
+{
+  "name": "smm-mini-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "prebuild": "node --disable-warning=ExperimentalWarning scripts/verify-env.ts",
+    "build": "tsc --noEmit && vite build",
+    "postbuild": "node --disable-warning=ExperimentalWarning scripts/postbuild.ts",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:env": "node --disable-warning=ExperimentalWarning scripts/verify-env.ts",
+    "verify:secrets": "node --disable-warning=ExperimentalWarning scripts/verify-secrets.ts",
+    "scan:secrets": "node --disable-warning=ExperimentalWarning scripts/scan-secrets.ts",
+    "check:supabase": "node --disable-warning=ExperimentalWarning scripts/check-supabase.ts",
+    "smoke": "node --disable-warning=ExperimentalWarning scripts/smoke-test.ts",
+    "check": "npm run scan:secrets && npm run check:supabase && npm test && npm run build",
+    "secrets:push": "node --disable-warning=ExperimentalWarning scripts/push-secrets.ts"
+  },
+  "dependencies": {
+    "@tonconnect/ui-react": "^3.0.2",
+    "@twa-dev/sdk": "^8.0.2",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.52.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@ton/core": "^0.63.1",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.29",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

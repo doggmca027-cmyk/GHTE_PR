@@ -1,0 +1,101 @@
+import { useState } from 'react'
+import { Check, Copy } from 'lucide-react'
+import { PlatformIcon } from '@/components/services/PlatformIcon'
+import { haptic } from '@/lib/haptics'
+import { formatInt, formatUnits, toUnits } from '@/lib/order-calc'
+import { deliveredRatio, formatOrderDate, isActiveStatus, truncateUrl } from '@/lib/order-view'
+import type { IOrderView } from '@/types/orders'
+import { StatusBadge } from './StatusBadge'
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    try {
+      const el = document.createElement('textarea')
+      el.value = text
+      el.style.position = 'fixed'
+      el.style.opacity = '0'
+      document.body.appendChild(el)
+      el.select()
+      const ok = document.execCommand('copy')
+      el.remove()
+      return ok
+    } catch {
+      return false
+    }
+  }
+}
+
+export function OrderCard({ order }: { order: IOrderView }) {
+  const [copied, setCopied] = useState(false)
+  const ratio = deliveredRatio(order.quantity, order.remains)
+  const showProgress = ratio !== null && isActiveStatus(order.status)
+
+  async function handleCopy() {
+    if (await copyText(order.targetUrl)) {
+      haptic.success()
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } else {
+      haptic.error()
+    }
+  }
+
+  return (
+    <article className="rounded-3xl border border-blue-100/70 bg-white p-4 shadow-card">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-light text-brand">
+          <PlatformIcon platform={order.platform} size={20} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-content-primary">{order.serviceName}</h3>
+            <StatusBadge status={order.status} />
+          </div>
+          <p className="mt-0.5 text-xs text-content-muted">{formatOrderDate(order.createdAt)}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center gap-2 rounded-2xl bg-surface-sub px-3 py-2">
+        <p className="min-w-0 flex-1 truncate text-[13px] font-medium text-content-secondary" title={order.targetUrl}>
+          {truncateUrl(order.targetUrl)}
+        </p>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label={copied ? 'Link copied' : 'Copy link'}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-content-secondary shadow-sm active:scale-90"
+        >
+          {copied ? <Check size={14} strokeWidth={2} className="text-emerald-500" /> : <Copy size={14} strokeWidth={1.75} />}
+        </button>
+      </div>
+
+      {showProgress && order.remains !== null && (
+        <div className="mt-3">
+          <div className="mb-1 flex justify-between text-xs font-medium text-content-secondary">
+            <span>Remaining</span>
+            <span>{formatInt(order.remains)} / {formatInt(order.quantity)}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-blue-100/70" role="progressbar" aria-valuenow={Math.round((ratio ?? 0) * 100)} aria-valuemin={0} aria-valuemax={100}>
+            <div className="h-full rounded-full bg-brand transition-all duration-500" style={{ width: `${(ratio ?? 0) * 100}%` }} />
+          </div>
+        </div>
+      )}
+
+      {order.refundedAmount > 0 && (
+        <p className="mt-3 rounded-2xl bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-700">
+          {order.status === 'partial' && order.remains !== null
+            ? `Partially completed: ${formatInt(order.remains)} undelivered. ${formatUnits(toUnits(order.refundedAmount))} refunded to your balance.`
+            : `${formatUnits(toUnits(order.refundedAmount))} refunded to your balance.`}
+        </p>
+      )}
+
+      <div className="mt-3 flex items-end justify-between border-t border-blue-100/60 pt-3">
+        <p className="text-xs font-medium text-content-secondary">Qty <span className="font-bold text-content-primary">{formatInt(order.quantity)}</span></p>
+        <p className="text-lg font-extrabold leading-none text-content-primary">{formatUnits(toUnits(order.chargeAmount))}</p>
+      </div>
+    </article>
+  )
+}
