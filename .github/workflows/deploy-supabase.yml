@@ -8,6 +8,7 @@ name: Deploy Supabase (migrations + Edge Functions)
 # "production" environment): SUPABASE_ACCESS_TOKEN (account token, starts with sbp_) and SUPABASE_DB_PASSWORD.
 # The project ref is not a secret; it defaults to this project and can be overridden with a repository
 # VARIABLE named SUPABASE_PROJECT_ID. Without the two secrets the deploy is skipped with a warning (not a red failure).
+# Applying migrations is a no-op when none are pending, and deploying functions is idempotent, so re-running is always safe.
 
 on:
   push:
