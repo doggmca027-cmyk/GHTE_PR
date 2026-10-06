@@ -5,7 +5,7 @@
 import { computeAdminMetrics, inReconciliationQueue, type AdminMetrics, type MetricOrder } from '../../../supabase/functions/_shared/admin-metrics.ts'
 import type { OrderStatus } from '@/types'
 import { computeProfitAnalytics, type DateRange } from '../../../supabase/functions/_shared/admin-analytics.ts'
-import type { PriceRuleView, ProfitAnalytics, ProviderStatus, ReconciliationOrder } from '@/types/admin'
+import type { PriceRuleView, ProfitAnalytics, ProviderStatus, ReconCase, ReconciliationOrder } from '@/types/admin'
 import { mockBackend, type KeyValueStorage } from './mock-orders'
 
 export class AdminApiError extends Error {
@@ -128,6 +128,41 @@ export function createMockAdmin(storage: KeyValueStorage, now: () => number = Da
           providerOrderId: o.providerOrderId, errorMessage: o.error_message, createdAt: o.created_at, serviceName: o.serviceName,
           username: o.username, telegramId: o.telegramId,
         }))
+    },
+
+    /** Cases are derived from the queue here (the server stores them); the case id is "case-<order id>". */
+    getCases(): ReconCase[] {
+      const t = now()
+      return load().orders
+        .filter((o) => inReconciliationQueue(o, t))
+        .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+        .map((o) => ({
+          id: `case-${o.id}`, entityType: 'order' as const, entityId: o.id,
+          reason: o.error_message ?? 'Stuck in processing without a confirmation from the provider', createdAt: o.created_at,
+          order: {
+            status: o.status, chargeAmount: o.charge_amount, quantity: o.quantity, targetUrl: o.targetUrl, providerOrderId: o.providerOrderId,
+            errorMessage: o.error_message, createdAt: o.created_at, serviceName: o.serviceName, username: o.username, telegramId: o.telegramId,
+            canRetry: o.status === 'processing' && !o.providerOrderId,
+          },
+        }))
+    },
+
+    resolveCaseRefund(caseId: string): void {
+      this.forceRefund(caseId.replace(/^case-/, ''))
+    },
+
+    retryCase(caseId: string): void {
+      const s = load()
+      const o = find(s, caseId.replace(/^case-/, ''))
+      if (o.status !== 'processing' || o.providerOrderId) throw new AdminApiError('conflict', 'This order cannot be retried. Refund it or mark it resolved.')
+      o.providerOrderId = `MOCK-${o.id.slice(-4)}`
+      o.status = 'submitted'
+      o.error_message = null
+      save(s)
+    },
+
+    resolveCaseManual(caseId: string, input: { note?: string; providerOrderId?: string }): void {
+      this.markResolved(caseId.replace(/^case-/, ''), input)
     },
 
     forceRefund(orderId: string): void {

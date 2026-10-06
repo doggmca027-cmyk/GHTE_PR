@@ -1,5 +1,5 @@
 import type { AuthSession } from '@/services/api/auth'
-import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, PlatformSettingsView, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
+import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, PlatformSettingsView, ReconCase, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
 import { createMockPricing } from './mock-pricing'
 import { createMockProviders } from './mock-providers'
 import { createMockSettings } from './mock-settings'
@@ -344,4 +344,61 @@ export async function updatePlatformSettings(session: AuthSession, patch: Platfo
     return mockSettings().update(patch)
   }
   return callSettings(session, { action: 'UPDATE', ...patch })
+}
+
+// ---- Reconciliation Center (admin-reconciliation Edge Function) ------------------------------------
+
+async function callRecon<T>(session: AuthSession, body: Record<string, unknown>): Promise<T> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new AdminApiError('server', 'Backend is not configured.')
+  let res: Response
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/admin-reconciliation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000), // a retry waits for the provider
+    })
+  } catch {
+    throw new AdminApiError('network', 'Connection lost. Check the case list before trying again: the action may have gone through.')
+  }
+  const data = (await res.json().catch(() => null)) as (T & { success?: boolean; message?: string }) | null
+  if (res.ok && data?.success) return data
+  if (res.status === 401 || res.status === 403) throw new AdminApiError('forbidden', 'Admin access required.')
+  if (res.status === 404) throw new AdminApiError('not_found', data?.message ?? 'Case not found.')
+  if (res.status === 400) throw new AdminApiError('invalid_input', data?.message ?? 'Invalid input.')
+  // 409 (already decided / not retryable), 422 (provider refused), 202 (outcome unknown): the server's words are the useful ones.
+  if (data?.message && [202, 409, 422, 503].includes(res.status)) throw new AdminApiError('conflict', data.message)
+  throw new AdminApiError('server', 'Something went wrong. Please try again.')
+}
+
+export async function getReconCases(session: AuthSession): Promise<ReconCase[]> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockAdmin().getCases()
+  }
+  return (await callRecon<{ cases: ReconCase[] }>(session, { action: 'GET_CASES' })).cases
+}
+
+export async function resolveCaseRefund(session: AuthSession, caseId: string, reason?: string): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockAdmin().resolveCaseRefund(caseId)
+  }
+  await callRecon(session, { action: 'RESOLVE_REFUND', caseId, reason: reason ?? null })
+}
+
+export async function retryCase(session: AuthSession, caseId: string): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockAdmin().retryCase(caseId)
+  }
+  await callRecon(session, { action: 'RESOLVE_RETRY', caseId })
+}
+
+export async function resolveCaseManual(session: AuthSession, caseId: string, input: { note?: string; providerOrderId?: string }): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockAdmin().resolveCaseManual(caseId, input)
+  }
+  await callRecon(session, { action: 'MARK_RESOLVED', caseId, note: input.note ?? null, providerOrderId: input.providerOrderId ?? null })
 }

@@ -141,3 +141,28 @@ export interface PlatformSettingsPatch {
   paymentsEnabled?: boolean
   maintenanceMode?: boolean
 }
+
+/** An open reconciliation case (admin-reconciliation). Today only orders are detected. */
+export interface ReconCaseOrder {
+  status: OrderStatus
+  chargeAmount: number
+  quantity: number
+  targetUrl: string
+  providerOrderId: string | null
+  errorMessage: string | null
+  createdAt: string
+  serviceName: string
+  username: string | null
+  telegramId: number
+  /** A held order (processing, no provider id) that still has its routing snapshot can be re-submitted. */
+  canRetry: boolean
+}
+
+export interface ReconCase {
+  id: string
+  entityType: 'order' | 'deposit' | 'provider_payment'
+  entityId: string
+  reason: string
+  createdAt: string
+  order: ReconCaseOrder | null
+}
