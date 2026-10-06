@@ -208,6 +208,7 @@ export async function listProviderConfigs(session: AuthSession): Promise<Provide
     lastHealthCheck: (r.last_health_check as string | null) ?? null, balance: num(r.provider_balance), currency: String(r.currency ?? 'USD'),
     lastBalanceSync: (r.last_balance_sync as string | null) ?? null, lowBalanceThreshold: num(r.low_balance_threshold),
     targetTopupBalance: num(r.target_topup_balance), lowBalanceAlerted: r.balance_alert_sent === true,
+    reliabilityPenalty: r.reliability_penalty_multiplier == null ? 1 : num(r.reliability_penalty_multiplier),
   }))
 }
 
@@ -222,6 +223,7 @@ export async function updateProviderConfig(session: AuthSession, id: string, pat
     p_low_balance_threshold: patch.lowBalanceThreshold ?? null,
     p_target_topup_balance: patch.targetTopupBalance ?? null,
     p_routing_enabled: patch.routingEnabled ?? null,
+    p_reliability_penalty: patch.reliabilityPenalty ?? null,
   })
 }
 

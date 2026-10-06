@@ -16,7 +16,10 @@ import { deriveIdempotencyKey, parsePlaceOrderBody, validateQuantity } from '../
 import {
   IN_FLIGHT_NOTE,
   PlaceOrderDbError,
+  PreSendRejection,
   executePlaceOrder,
+  firstAcceptingOffer,
+  isPreSendRejection,
   mapDbError,
   type OrderRecord,
   type PlaceOrderPorts,
@@ -27,6 +30,7 @@ import {
   ServiceUnavailableError,
   buildCandidates,
   costForQuantity,
+  rankOffers,
   resolveOffer,
   type OfferRow,
 } from '../_shared/routing.ts'
@@ -106,6 +110,10 @@ function buildPorts(db: Db): PlaceOrderPorts {
     async refund(orderId, comment) {
       return one(await db.rpc('refund_order', { p_order_id: orderId, p_amount: null, p_comment: comment }), 'refund_order')
     },
+    async releaseReservation(orderId) {
+      const { error } = await db.rpc('release_provider_reservation', { p_order_id: orderId })
+      if (error) throw new PlaceOrderDbError(error.message, error.code)
+    },
   }
 }
 
@@ -181,53 +189,61 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
   const candidates = buildCandidates((offerRows ?? []) as unknown as OfferRow[])
 
-  // Refuse BEFORE charging anything if no healthy provider can fulfil the order.
-  let offer: IProviderServiceOffer
+  // Refuse BEFORE charging anything if no healthy provider can fulfil the order. A replay of an existing order keeps
+  // its pinned offer (never re-routed); a new order gets every eligible offer, best first.
+  let offers: IProviderServiceOffer[]
   try {
-    offer = resolveOffer(candidates.offers, candidates.providers, { quantity: input.quantity, pinnedOfferId: existing?.provider_offer_id })
+    offers = existing?.provider_offer_id
+      ? [resolveOffer(candidates.offers, candidates.providers, { quantity: input.quantity, pinnedOfferId: existing.provider_offer_id })]
+      : rankOffers(candidates.offers, candidates.providers, { quantity: input.quantity })
   } catch (e) {
     if (e instanceof ServiceUnavailableError) return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
     throw e
   }
-  const details = candidates.details.get(offer.id)!
-  const provider = candidates.providers.find((p) => p.id === offer.providerId)!
-
-  let apiKey = ''
-  try {
-    apiKey = await resolveProviderApiKey({ name: details.providerName, api_key_encrypted: details.apiKeyEncrypted }, Deno.env)
-  } catch (e) {
-    console.error('place-order: provider key could not be decrypted', e)
-  }
+  if (offers.length === 0) return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
   const mockMode = Deno.env.get('MOCK_MODE') === 'true'
-  if (!apiKey && !mockMode) {
-    return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
-  }
 
-  const adapter = createSMMv2Adapter(
-    { id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey },
-    { MOCK_MODE: Deno.env.get('MOCK_MODE') },
-  )
-
-  // 4. Execute.
+  // 4. Execute. Failover to the next offer happens ONLY on a refusal before anything was sent or charged (no API key,
+  //    provider balance cannot cover the cost). Once a request reached a provider, its outcome is final for this call:
+  //    an unknown outcome is held for reconciliation, never re-sent elsewhere.
   let result: PlaceOrderResult
   try {
-    result = await executePlaceOrder(
-      {
-        userId,
-        serviceId: input.serviceId,
-        targetUrl: input.targetUrl,
-        quantity: input.quantity,
-        idempotencyKey,
-        providerOfferId: offer.id,
-        providerId: offer.providerId,
-        providerServiceId: offer.providerServiceId,
-        costAmount: costForQuantity(offer.costPer1000, input.quantity),
-        externalServiceId: details.externalServiceId,
-      },
-      buildPorts(db),
-      adapter,
-    )
+    result = await firstAcceptingOffer(offers, async (offer) => {
+      const details = candidates.details.get(offer.id)!
+      const provider = candidates.providers.find((p) => p.id === offer.providerId)!
+      let apiKey = ''
+      try {
+        apiKey = await resolveProviderApiKey({ name: details.providerName, api_key_encrypted: details.apiKeyEncrypted }, Deno.env)
+      } catch (e) {
+        console.error('place-order: provider key could not be decrypted', e)
+      }
+      if (!apiKey && !mockMode) throw new PreSendRejection(`no API key for provider ${provider.name}`)
+      const adapter = createSMMv2Adapter(
+        { id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey },
+        { MOCK_MODE: Deno.env.get('MOCK_MODE') },
+      )
+      return executePlaceOrder(
+        {
+          userId,
+          serviceId: input.serviceId,
+          targetUrl: input.targetUrl,
+          quantity: input.quantity,
+          idempotencyKey,
+          providerOfferId: offer.id,
+          providerId: offer.providerId,
+          providerServiceId: offer.providerServiceId,
+          costAmount: costForQuantity(offer.costPer1000, input.quantity),
+          externalServiceId: details.externalServiceId,
+        },
+        buildPorts(db),
+        adapter,
+      )
+    })
   } catch (e) {
+    if (isPreSendRejection(e)) {
+      console.warn('place-order: no offer could take the order before sending', e instanceof Error ? e.message : e)
+      return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
+    }
     const message = e instanceof Error ? e.message : String(e)
     const mapped = mapDbError(message)
     if (mapped.httpStatus >= 500) console.error('place-order: unexpected failure', e)

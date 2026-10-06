@@ -1,10 +1,10 @@
 // Provider routing: pick which provider offer fulfils an order. Pure functions, no I/O.
 //
-// Mode BALANCED:
+// Mode EFFECTIVE_COST (Phase 2):
 //   1. only active offers whose provider is active, routing-enabled and healthy
 //      (degraded / unavailable / disabled providers never receive new orders)
-//   2. highest routingScore first
-//   3. equal score: cheapest costPer1000 first
+//   2. lowest EFFECTIVE cost first: costPer1000 x the provider's reliability penalty (1 = fully reliable)
+//   3. equal effective cost: highest routingScore first
 //   4. still equal: lowest offer id, so the choice is deterministic
 // The caller refuses the order BEFORE charging when nothing qualifies.
 
@@ -17,7 +17,16 @@ export class ServiceUnavailableError extends Error {
   }
 }
 
-export const ROUTING_MODE = 'BALANCED'
+export const ROUTING_MODE = 'EFFECTIVE_COST'
+
+/** What an offer really costs us once the provider's unreliability is priced in. Ranking only: never charged or recorded. */
+export function effectiveCost(offer: Pick<IProviderServiceOffer, 'costPer1000'>, provider?: Pick<IProvider, 'reliabilityPenalty'>): number {
+  const penalty = provider?.reliabilityPenalty ?? 1
+  return offer.costPer1000 * (Number.isFinite(penalty) && penalty >= 1 ? penalty : 1)
+}
+
+// compared at 1e-8 so float noise (0.1 * 3) never decides between two offers
+const ec = (offer: IProviderServiceOffer, providers: Map<string, IProvider>) => Math.round(effectiveCost(offer, providers.get(offer.providerId)) * 1e8)
 
 const round4 = (n: number) => Math.round(n * 10_000) / 10_000
 
@@ -39,7 +48,7 @@ export function rankOffers(offers: IProviderServiceOffer[], providers: IProvider
   return offers
     .filter((o) => o.isActive && eligible.has(o.providerId))
     .filter((o) => opts.quantity === undefined || (opts.quantity >= o.minQuantity && opts.quantity <= o.maxQuantity))
-    .sort((a, b) => b.routingScore - a.routingScore || a.costPer1000 - b.costPer1000 || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .sort((a, b) => ec(a, eligible) - ec(b, eligible) || b.routingScore - a.routingScore || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
 export function selectBestOffer(offers: IProviderServiceOffer[], providers: IProvider[], opts: SelectOptions = {}): IProviderServiceOffer {
@@ -101,6 +110,7 @@ export interface OfferRow {
     provider_balance: number | string
     currency: string
     priority: number
+    reliability_penalty_multiplier?: number | string
   } | null
 }
 
@@ -108,7 +118,7 @@ export interface OfferRow {
 export const OFFER_SELECT =
   'id, service_id, provider_id, provider_service_id, cost_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, is_active, routing_score, created_at, updated_at, ' +
   'provider_service:provider_services(external_service_id, is_active), ' +
-  'provider:providers(id, name, api_url, api_key_encrypted, api_version, is_active, routing_enabled, health_status, last_health_check, last_balance_sync, provider_balance, currency, priority)'
+  'provider:providers(id, name, api_url, api_key_encrypted, api_version, is_active, routing_enabled, health_status, last_health_check, last_balance_sync, provider_balance, currency, priority, reliability_penalty_multiplier)'
 
 export interface RoutingCandidates {
   offers: IProviderServiceOffer[]
@@ -159,6 +169,7 @@ export function buildCandidates(rows: OfferRow[]): RoutingCandidates {
       providerBalance: Number(p.provider_balance),
       currency: p.currency,
       priority: p.priority,
+      reliabilityPenalty: p.reliability_penalty_multiplier == null ? 1 : Number(p.reliability_penalty_multiplier),
     })
   }
   return { offers, providers: [...providers.values()], details }

@@ -3,8 +3,9 @@
 // sync-order-status Edge Function wires the ports to Supabase and the SMM adapter.
 //
 // Money rules:
-//   * Refund only on a definitive provider answer (Canceled / Fail / Partial), or when an order
-//     held in `processing` was never confirmed by the provider for RECONCILE_AFTER.
+//   * Refund only on a definitive provider answer (Canceled / Fail / Partial). An order held in `processing` with an
+//     unknown outcome is NEVER refunded here, however old it is: the provider may have created it. It waits in the
+//     Reconciliation Center (sync_reconciliation_cases) for a human decision.
 //   * "Order not found at the provider" and unparseable answers NEVER trigger a refund.
 //   * Refunds are idempotent in the database (refund_order / apply_partial_refund), so a
 //     retried or overlapping run cannot pay twice.
@@ -13,7 +14,6 @@ import { isValidOrderTransition } from './order-transitions.ts'
 import type { BatchStatusEntry, ISMMProviderAdapter, OrderStatus } from './types.ts'
 
 export const STATUS_QUERY_CHUNK = 50
-export const RECONCILE_AFTER_MS = 60 * 60 * 1000
 export const NEEDS_REFUND = 'needs_refund'
 
 // ---------------------------------------------------------------------------
@@ -126,7 +126,8 @@ export interface SyncStats {
   partial: number
   /** Total partial refunds, in 1e-4 currency units. */
   partialRefundedUnits: number
-  reconciledRefunded: number
+  /** Held orders with an unknown provider outcome, left for the Reconciliation Center. */
+  heldForReconciliation: number
   idsRecovered: number
   retriedRefunds: number
   providerLost: number
@@ -137,7 +138,7 @@ export interface SyncStats {
 
 export const emptySyncStats = (): SyncStats => ({
   checked: 0, completed: 0, progressed: 0, canceledRefunded: 0, partial: 0, partialRefundedUnits: 0,
-  reconciledRefunded: 0, idsRecovered: 0, retriedRefunds: 0, providerLost: 0, unchanged: 0, conflicts: 0, errors: [],
+  heldForReconciliation: 0, idsRecovered: 0, retriedRefunds: 0, providerLost: 0, unchanged: 0, conflicts: 0, errors: [],
 })
 
 export function mergeSyncStats(into: SyncStats, from: SyncStats): SyncStats {
@@ -154,8 +155,8 @@ interface Logger {
 }
 
 export interface SyncOptions {
+  /** Clock (tests). Kept for callers; since Phase 2 no decision depends on an order's age. */
   now?: number
-  reconcileAfterMs?: number
   chunkSize?: number
 }
 
@@ -169,8 +170,6 @@ export async function syncProviderOrders(
   options: SyncOptions = {},
   log: Logger = console,
 ): Promise<SyncStats> {
-  const now = options.now ?? Date.now()
-  const reconcileAfterMs = options.reconcileAfterMs ?? RECONCILE_AFTER_MS
   const stats = emptySyncStats()
   const lookup: SyncOrder[] = []
 
@@ -225,15 +224,9 @@ export async function syncProviderOrders(
           lookup.push({ ...order, provider_order_id: recovered })
           return
         }
-        if (now - Date.parse(order.created_at) > reconcileAfterMs) {
-          // Never confirmed by the provider within the window: release the user's money.
-          log.warn(`order-sync: order ${order.id} unconfirmed for > ${Math.round(reconcileAfterMs / 60000)} min, refunding`)
-          const minutes = Math.round(reconcileAfterMs / 60000)
-          if (await failAndRefund(order, 'failed', `not confirmed by provider after ${minutes} min`, 'Order not confirmed by provider')) {
-            stats.reconciledRefunded++
-          }
-          return
-        }
+        // Outcome unknown: no automatic refund (the provider may have the order). Left as is for the Reconciliation
+        // Center, where an admin refunds, retries or resolves it after checking the provider.
+        stats.heldForReconciliation++
         stats.unchanged++
         await ports.touch(order.id)
         return

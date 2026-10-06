@@ -162,10 +162,10 @@ describe('get_admin_pricing_view', () => {
     await mkService('inactive', a6, 1.2, false)
   }, 120_000)
 
-  it('picks the highest routing score, then the lowest cost, among healthy providers', async () => {
+  it('Phase 2: picks the lowest effective cost among healthy providers (routing score only breaks ties)', async () => {
     const rows = await view()
-    expect(Number(byName(rows, 'score').best_offer_cost)).toBe(0.5)
-    expect(Number(byName(rows, 'score').margin_absolute)).toBe(0.5)
+    expect(Number(byName(rows, 'score').best_offer_cost)).toBe(0.2) // cheaper B wins over A's higher score
+    expect(Number(byName(rows, 'score').margin_absolute)).toBe(0.8)
     expect(Number(byName(rows, 'tie').best_offer_cost)).toBe(0.3)
     expect(Number(byName(rows, 'unhealthy').best_offer_cost)).toBe(0.6)
   })

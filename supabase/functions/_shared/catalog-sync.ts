@@ -204,6 +204,81 @@ export function diffProviderServices(
 }
 
 // ---------------------------------------------------------------------------
+// Poisoned catalog protection
+// ---------------------------------------------------------------------------
+
+/** A price move larger than this (either way) is not applied automatically. */
+export const MAX_PRICE_CHANGE = 0.3
+
+export interface CatalogAnomaly {
+  externalServiceId: string
+  /** provider_services.id of the service we already know. */
+  providerServiceId: string
+  reason: string
+  /** What the provider reported and we refused to apply (null when its data could not be read at all). */
+  observed: { rate: number; min: number; max: number } | null
+}
+
+const INVALID_REASONS = new Set(['invalid rate', 'invalid min', 'invalid max'])
+
+/**
+ * Services we already sell whose new data must not be applied:
+ *   * the price moved more than MAX_PRICE_CHANGE (30%) up or down from what we have, or
+ *   * the provider now reports impossible data (negative / non-numeric price, min <= 0, max < min).
+ * New services are not checked here: invalid ones are already dropped by normalizeProviderServices, and a brand-new
+ * price has nothing to be compared with.
+ */
+export function detectCatalogAnomalies(
+  existing: ExistingProviderService[],
+  valid: IProviderService[],
+  skipped: SkippedService[],
+  maxChange: number = MAX_PRICE_CHANGE,
+): CatalogAnomaly[] {
+  const byExt = new Map(existing.map((e) => [e.external_service_id, e]))
+  const out: CatalogAnomaly[] = []
+  for (const s of valid) {
+    const prev = byExt.get(s.externalServiceId)
+    if (!prev) continue
+    const old = Number(prev.rate_per_1000)
+    if (!(old > 0)) continue
+    const change = (s.ratePer1000 - old) / old
+    // compared in whole basis points, so exactly 30% is not pushed over the limit by float error (1.3 / 1 - 1 = 0.30000000000000004)
+    if (Math.abs(Math.round(change * 10_000)) > Math.round(maxChange * 10_000)) {
+      out.push({
+        externalServiceId: s.externalServiceId,
+        providerServiceId: prev.id,
+        reason: `price ${change > 0 ? 'up' : 'down'} ${Math.round(Math.abs(change) * 100)}% (${old} -> ${s.ratePer1000} per 1000), above the ${Math.round(maxChange * 100)}% limit`,
+        observed: { rate: s.ratePer1000, min: s.minQuantity, max: s.maxQuantity },
+      })
+    }
+  }
+  for (const k of skipped) {
+    const prev = byExt.get(k.externalServiceId)
+    if (prev && INVALID_REASONS.has(k.reason)) {
+      out.push({ externalServiceId: k.externalServiceId, providerServiceId: prev.id, reason: `provider reports ${k.reason}`, observed: null })
+    }
+  }
+  return out
+}
+
+/**
+ * Takes anomalous services out of this sync run: their provider_services row is not overwritten (the bridge trigger
+ * would carry the bad price to every offer), they are not re-priced, and they are not treated as "missing" either.
+ */
+export function withoutAnomalies(diff: ProviderServiceDiff, valid: IProviderService[], anomalies: CatalogAnomaly[]) {
+  const ext = new Set(anomalies.map((a) => a.externalServiceId))
+  return {
+    diff: {
+      ...diff,
+      rows: diff.rows.filter((r) => !ext.has(r.external_service_id)),
+      updated: diff.updated.filter((id) => !ext.has(id)),
+      missing: diff.missing.filter((m) => !ext.has(m.external_service_id)),
+    },
+    valid: valid.filter((s) => !ext.has(s.externalServiceId)),
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public service planning
 // ---------------------------------------------------------------------------
 
@@ -330,6 +405,8 @@ export function planService(input: PlanServiceInput): ServicePlan {
 // ---------------------------------------------------------------------------
 
 export interface ProviderSyncReport {
+  /** Services held back because of a suspicious price move or impossible data (their offers are suspended). */
+  anomalies?: number
   provider: string
   status: 'ok' | 'skipped' | 'failed'
   error?: string

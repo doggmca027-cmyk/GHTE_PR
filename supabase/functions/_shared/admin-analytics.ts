@@ -17,6 +17,11 @@ export interface ProfitAnalytics {
   providerCost: number
   grossProfit: number
   treasuryFees: number
+  /** Blockchain network fees the platform paid (treasury entries of type network_fee). */
+  networkFees: number
+  /** Money returned to customers (full + partial refunds) for the period's orders. Shown for transparency: not revenue. */
+  refundCost: number
+  /** gross revenue - provider cost - treasury fees - network fees */
   netProfit: number
   /** Percent with 2 decimals, or null when there is no revenue. */
   marginPct: number | null
@@ -69,6 +74,8 @@ export function analyticsFromRpc(raw: Record<string, unknown>): ProfitAnalytics 
     providerCost: n('provider_cost'),
     grossProfit: n('gross_profit'),
     treasuryFees: n('treasury_fees'),
+    networkFees: n('network_fees'),
+    refundCost: n('refund_cost'),
     netProfit: n('net_profit'),
     marginPct: raw.margin_pct === null || raw.margin_pct === undefined ? null : Number(raw.margin_pct),
   }
@@ -79,6 +86,12 @@ export function computeProfitAnalytics(
   orders: MetricOrder[],
   fees: { amount: number; created_at: string }[],
   range: DateRange,
+  extra: {
+    /** treasury network_fee entries */
+    networkFees?: { amount: number; created_at: string }[]
+    /** customer refund ledger entries, dated by the ORDER they refund (same cohort as revenue) */
+    refunds?: { amount: number; order_created_at: string }[]
+  } = {},
 ): ProfitAnalytics {
   const from = range.start === null ? -Infinity : Date.parse(range.start)
   const to = range.end === null ? Infinity : Date.parse(range.end)
@@ -102,6 +115,8 @@ export function computeProfitAnalytics(
     }
   }
   const feeSum = Math.abs(fees.filter((f) => within(f.created_at)).reduce((s, f) => s + units(f.amount), 0))
+  const networkSum = Math.abs((extra.networkFees ?? []).filter((f) => within(f.created_at)).reduce((s, f) => s + units(f.amount), 0))
+  const refundSum = (extra.refunds ?? []).filter((r) => within(r.order_created_at)).reduce((s, r) => s + units(r.amount), 0)
   const profit = revenue - cost
   return {
     periodStart: range.start,
@@ -113,7 +128,9 @@ export function computeProfitAnalytics(
     providerCost: cost / U,
     grossProfit: profit / U,
     treasuryFees: feeSum / U,
-    netProfit: (profit - feeSum) / U,
+    networkFees: networkSum / U,
+    refundCost: refundSum / U,
+    netProfit: (profit - feeSum - networkSum) / U,
     marginPct: revenue > 0 ? Math.round((profit / revenue) * 10_000) / 100 : null,
   }
 }

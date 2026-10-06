@@ -78,15 +78,18 @@ export interface ProviderConfigView {
   targetTopupBalance: number
   /** A low-balance alert is outstanding (the balance has not been above the threshold since). */
   lowBalanceAlerted: boolean
+  /** Routing penalty, 1..10: offers of this provider are ranked as if they cost this many times more. */
+  reliabilityPenalty: number
 }
 
 export interface ProviderConfigPatch {
   lowBalanceThreshold?: number
   targetTopupBalance?: number
   routingEnabled?: boolean
+  reliabilityPenalty?: number
 }
 
-export type TreasuryTxType = 'deposit' | 'withdrawal' | 'provider_topup' | 'fee' | 'manual_adjustment'
+export type TreasuryTxType = 'deposit' | 'withdrawal' | 'provider_topup' | 'fee' | 'network_fee' | 'manual_adjustment'
 
 export interface TreasuryTx {
   id: string

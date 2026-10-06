@@ -111,6 +111,10 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
                 <dt className="text-xs text-content-secondary">Low-balance threshold</dt>
                 <dd className="font-bold text-content-primary">{usd(p.lowBalanceThreshold)}</dd>
               </div>
+              <div>
+                <dt className="text-xs text-content-secondary">Reliability penalty</dt>
+                <dd className={cn('font-bold', p.reliabilityPenalty > 1 ? 'text-amber-600' : 'text-content-primary')}>x{p.reliabilityPenalty}</dd>
+              </div>
             </dl>
             {state === 'low' && <p role="alert" className="mt-2 text-xs font-semibold text-amber-600">Balance is at or below the threshold. Top up to about {usd(p.targetTopupBalance)}.</p>}
             <div className="mt-3 flex items-center justify-between">
@@ -141,13 +145,16 @@ function ConfigModal({ provider, onClose, onSave }: { provider: ProviderConfigVi
   const [low, setLow] = useState(String(provider.lowBalanceThreshold))
   const [target, setTarget] = useState(String(provider.targetTopupBalance))
   const [routing, setRouting] = useState(provider.routingEnabled)
+  const [penalty, setPenalty] = useState(String(provider.reliabilityPenalty))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   const lowN = parseAmount(low)
   const targetN = parseAmount(target)
   const orderOk = lowN !== null && targetN !== null && targetN >= lowN
-  const valid = orderOk && (routing === provider.routingEnabled || provider.isActive)
+  const penaltyN = /^\d{1,2}(\.\d{1,3})?$/.test(penalty.trim()) ? Number(penalty) : null
+  const penaltyOk = penaltyN !== null && penaltyN >= 1 && penaltyN <= 10
+  const valid = orderOk && penaltyOk && (routing === provider.routingEnabled || provider.isActive)
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Edit configuration of ${provider.name}`} className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
@@ -156,6 +163,8 @@ function ConfigModal({ provider, onClose, onSave }: { provider: ProviderConfigVi
         <AmountField label="Low-balance threshold (alert at or below)" value={low} onChange={setLow} invalid={lowN === null} />
         <AmountField label="Target top-up balance" value={target} onChange={setTarget} invalid={targetN === null} />
         {lowN !== null && targetN !== null && targetN < lowN && <p role="alert" className="text-xs font-semibold text-rose-600">The top-up target cannot be below the threshold.</p>}
+        <AmountField label="Reliability penalty (1 = reliable, up to 10)" value={penalty} onChange={setPenalty} invalid={!penaltyOk} />
+        <p className="-mt-1 text-xs text-content-secondary">Routing compares cost x penalty: at x1.5 this provider must be a third cheaper to win. Prices charged are not affected.</p>
         <label className="flex items-center justify-between gap-3 rounded-2xl bg-surface-sub px-3.5 py-3 text-sm font-semibold text-content-primary">
           Routing enabled
           <input type="checkbox" checked={routing} disabled={!provider.isActive && !provider.routingEnabled} onChange={(e) => setRouting(e.target.checked)} className="h-5 w-5 accent-[var(--color-brand,#2563eb)]" />
@@ -167,7 +176,7 @@ function ConfigModal({ provider, onClose, onSave }: { provider: ProviderConfigVi
               if (lowN === null || targetN === null) return
               setBusy(true); setErr(null)
               try {
-                await onSave({ lowBalanceThreshold: lowN, targetTopupBalance: targetN, ...(routing !== provider.routingEnabled ? { routingEnabled: routing } : {}) })
+                await onSave({ lowBalanceThreshold: lowN, targetTopupBalance: targetN, ...(penaltyN !== null && penaltyN !== provider.reliabilityPenalty ? { reliabilityPenalty: penaltyN } : {}), ...(routing !== provider.routingEnabled ? { routingEnabled: routing } : {}) })
               } catch (e) {
                 setErr(e instanceof Error ? e.message : 'Could not save.')
                 setBusy(false)

@@ -7,13 +7,12 @@
 //
 // Auth: header `x-cron-secret: $CRON_SECRET` or `Authorization: Bearer <service role key>`.
 // Secrets: CRON_SECRET, PROVIDER_KEY_SECRET / PROVIDER_<NAME>_API_KEY, MOCK_MODE (dev only),
-//          SYNC_BATCH_SIZE (default 50), RECONCILE_AFTER_MINUTES (default 60).
+//          SYNC_BATCH_SIZE (default 50). (RECONCILE_AFTER_MINUTES is no longer used: held orders are never auto-refunded.)
 // Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { isAuthorized } from '../_shared/catalog-sync.ts'
 import {
-  RECONCILE_AFTER_MS,
   emptySyncStats,
   mergeSyncStats,
   syncProviderOrders,
@@ -122,7 +121,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const started = Date.now()
   const batchSize = Math.min(200, Math.max(1, Number(Deno.env.get('SYNC_BATCH_SIZE')) || DEFAULT_BATCH))
-  const reconcileMs = (Number(Deno.env.get('RECONCILE_AFTER_MINUTES')) || RECONCILE_AFTER_MS / 60_000) * 60_000
   const mockMode = Deno.env.get('MOCK_MODE') === 'true'
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
@@ -191,7 +189,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey },
         { MOCK_MODE: Deno.env.get('MOCK_MODE') },
       )
-      mergeSyncStats(stats, await syncProviderOrders(batch, adapter, ports, { reconcileAfterMs: reconcileMs }))
+      mergeSyncStats(stats, await syncProviderOrders(batch, adapter, ports))
     }
   }
 
@@ -203,7 +201,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   console.log(
     `sync-order-status: checked=${stats.checked} completed=${stats.completed} progressed=${stats.progressed} ` +
-      `canceled=${stats.canceledRefunded} partial=${stats.partial} reconciled=${stats.reconciledRefunded} errors=${stats.errors.length}`,
+      `canceled=${stats.canceledRefunded} partial=${stats.partial} held=${stats.heldForReconciliation} errors=${stats.errors.length}`,
   )
   return json({ ...stats, notifications: notified, partialRefunded: stats.partialRefundedUnits / 10_000, skippedProviders, durationMs: Date.now() - started })
 })

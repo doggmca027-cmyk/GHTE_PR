@@ -211,6 +211,7 @@ async function routeNow(db: PGlite): Promise<IProviderServiceOffer> {
   const providers = (await db.query<Record<string, unknown>>(`select * from providers`)).rows.map((p): IProvider => ({
     id: String(p.id), name: String(p.name), apiUrl: String(p.api_url), apiVersion: 'v2', isActive: p.is_active === true, routingEnabled: p.routing_enabled === true,
     healthStatus: p.health_status as HealthStatus, lastHealthCheck: null, lastBalanceSync: null, providerBalance: 0, currency: 'USD', priority: 0,
+    reliabilityPenalty: Number(p.reliability_penalty_multiplier),
   }))
   return selectBestOffer(offers, providers, { quantity: 1000 })
 }
@@ -485,6 +486,8 @@ describe('provider-health-monitor core', () => {
 
   describe('automatic failover', () => {
     it('routes to the best provider while healthy, then to the fallback as soon as it is marked down', async () => {
+      // B is cheaper (0.07 vs 0.10) but carries a 2x reliability penalty (effective 0.14), so A is the best while healthy
+      await db.exec(`update providers set reliability_penalty_multiplier = 2 where id = '${B}'`)
       expect((await routeNow(db)).providerId).toBe(A)
 
       const script = { down: new Set([A]) }

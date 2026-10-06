@@ -65,12 +65,14 @@ export function ProfitPanel({ session, refreshKey }: { session: AuthSession; ref
             hint={data.marginPct === null ? 'No revenue yet' : `${data.marginPct.toFixed(1)}% margin`}
           />
           <MetricCard label="Treasury fees" value={usd(data.treasuryFees)} hint="Operational costs" />
+          <MetricCard label="Network fees" value={usd(data.networkFees)} hint="Blockchain fees we paid" />
+          <MetricCard label="Refunds" value={usd(data.refundCost)} hint="Returned to customers; not revenue" />
           <div className="col-span-2">
             <MetricCard
               label="Net profit"
               value={`${data.netProfit < 0 ? '-' : ''}${usd(Math.abs(data.netProfit))}`}
               tone={data.netProfit < 0 ? 'danger' : 'success'}
-              hint={data.netProfit < 0 ? 'Loss in this period: costs exceed profit' : 'Gross profit minus treasury fees'}
+              hint={data.netProfit < 0 ? 'Loss in this period: costs exceed profit' : 'Gross profit minus treasury and network fees'}
             />
           </div>
           {data.netProfit < 0 && <p role="alert" className="col-span-2 rounded-2xl bg-rose-50 px-3.5 py-2.5 text-[13px] font-semibold text-rose-700">Net profit is negative for this period.</p>}

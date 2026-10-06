@@ -66,7 +66,7 @@ export function parseAmount(text: string): number | null {
 }
 
 const TREASURY_LABELS: Record<string, string> = {
-  deposit: 'Deposit', withdrawal: 'Withdrawal', provider_topup: 'Provider top-up', fee: 'Fee', manual_adjustment: 'Manual adjustment',
+  deposit: 'Deposit', withdrawal: 'Withdrawal', provider_topup: 'Provider top-up', fee: 'Fee', network_fee: 'Network fee', manual_adjustment: 'Manual adjustment',
 }
 export const treasuryTypeLabel = (type: string): string => TREASURY_LABELS[type] ?? type
 

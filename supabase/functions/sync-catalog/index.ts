@@ -13,7 +13,9 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createSMMv2Adapter } from '../_shared/smm-v2-adapter.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
 import {
+  detectCatalogAnomalies,
   diffProviderServices,
+  withoutAnomalies,
   emptyProviderReport,
   isAuthorized,
   normalizeProviderServices,
@@ -87,7 +89,9 @@ async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[]): 
   )
 
   // 1. Fetch. Any failure here aborts this provider BEFORE anything is written or deactivated.
-  const { valid, skipped } = normalizeProviderServices(await adapter.getServices())
+  const normalized = normalizeProviderServices(await adapter.getServices())
+  const { skipped } = normalized
+  let valid = normalized.valid
   report.skippedInvalid = skipped.length
   if (valid.length === 0) {
     report.status = 'skipped'
@@ -112,7 +116,19 @@ async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[]): 
     'load provider_services',
   )
   const nowIso = new Date().toISOString()
-  const diff = diffProviderServices(provider.id, existingPS, valid, nowIso)
+  let diff = diffProviderServices(provider.id, existingPS, valid, nowIso)
+
+  // 2b. Poisoned catalog protection: a service we already sell whose price jumped more than 30%, or whose data became
+  //     impossible, is held back (nothing of it is written or re-priced) and its offers are suspended for an admin.
+  const anomalies = detectCatalogAnomalies(existingPS, valid, skipped)
+  if (anomalies.length > 0) {
+    ;({ diff, valid } = withoutAnomalies(diff, valid, anomalies))
+    for (const a of anomalies) {
+      must(await db.rpc('flag_catalog_anomaly', { p_provider_service_id: a.providerServiceId, p_reason: a.reason, p_observed: a.observed }), 'flag catalog anomaly')
+    }
+    report.anomalies = anomalies.length
+    console.warn(`sync-catalog: ${provider.name}: ${anomalies.length} service(s) held back as anomalies`)
+  }
 
   const activeBefore = existingPS.filter((e) => e.is_active).length
   const deactivationBlocked =

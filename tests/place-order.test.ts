@@ -220,11 +220,11 @@ describe('routing -> executePlaceOrder: the chosen offer reaches place_order and
     const { result, seen, calls } = await placeVia([
       row('cheap-unhealthy', 'p-down', { cost: 0.01, score: 500, health: 'unavailable' }),
       row('cheap-degraded', 'p-slow', { cost: 0.02, score: 400, health: 'degraded' }),
-      row('best', 'p-good', { cost: 0.07, score: 50, ext: '9001' }),
-      row('worse', 'p-ok', { cost: 0.05, score: 10 }),
+      row('best', 'p-good', { cost: 0.05, score: 50, ext: '9001' }),
+      row('worse', 'p-ok', { cost: 0.07, score: 10 }),
     ])
     expect(result.kind).toBe('submitted')
-    expect(seen).toEqual({ offerId: 'best', providerId: 'p-good', providerServiceId: 'ps-best', costAmount: 0.07 })
+    expect(seen).toEqual({ offerId: 'best', providerId: 'p-good', providerServiceId: 'ps-best', costAmount: 0.05 })
     expect(calls).toEqual([{ provider: 'p-good', serviceId: '9001' }])
   })
 

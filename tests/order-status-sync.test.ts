@@ -481,7 +481,7 @@ const st = (status: IProviderOrderStatus['status'], rest: Partial<IProviderOrder
 })
 const adapterReturning = (map: Record<string, BatchStatusEntry>) => ({ getOrdersStatus: vi.fn(async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, map[id]]).filter(([, v]) => v))) })
 const quiet = { error: vi.fn(), warn: vi.fn() }
-const run = (w: ReturnType<typeof world>, adapter: ReturnType<typeof adapterReturning>, o: { reconcileAfterMs?: number } = {}) =>
+const run = (w: ReturnType<typeof world>, adapter: ReturnType<typeof adapterReturning>, o: { now?: number } = {}) =>
   syncProviderOrders([...w.orders.values()], adapter, w.ports, { now: NOW, ...o }, quiet)
 
 describe('sync worker: completion and progress', () => {
@@ -617,20 +617,21 @@ describe('sync worker: reconciliation of orders held in processing', () => {
     expect(stats.unchanged).toBe(1)
   })
 
-  it('refunds and fails an order the provider never confirmed after the window', async () => {
+  it('never auto-refunds a held order, however old: it waits in the Reconciliation Center (Phase 2)', async () => {
     const w = world([{ status: 'processing', provider_order_id: null, error_message: HELD, created_at: new Date(NOW - 61 * 60_000).toISOString() }])
     const stats = await run(w, adapterReturning({}))
-    expect(w.orders.get('o1')).toMatchObject({ status: 'refunded', error_message: null })
-    expect(w.credits).toEqual([{ orderId: 'o1', amount: 5.4, kind: 'refund' }])
-    expect(w.calls.updates[0]).toMatchObject({ patch: { status: 'failed' } })
-    expect(w.calls.refund[0].comment).toBe('Order not confirmed by provider')
-    expect(stats.reconciledRefunded).toBe(1)
+    expect(w.orders.get('o1')).toMatchObject({ status: 'processing', error_message: HELD })
+    expect(w.credits).toEqual([])
+    expect(w.calls.refund).toEqual([])
+    expect(w.calls.updates).toEqual([])
+    expect(stats).toMatchObject({ heldForReconciliation: 1, unchanged: 1 })
   })
 
-  it('honours a configurable window', async () => {
-    const w = world([{ status: 'processing', provider_order_id: null, error_message: HELD, created_at: new Date(NOW - 20 * 60_000).toISOString() }])
-    await run(w, adapterReturning({}), { reconcileAfterMs: 15 * 60_000 })
-    expect(w.orders.get('o1')!.status).toBe('refunded')
+  it('even days later nothing is refunded or changed by the worker (no hidden time window any more)', async () => {
+    const w = world([{ status: 'processing', provider_order_id: null, error_message: HELD, created_at: new Date(NOW - 3 * 24 * 3600_000).toISOString() }])
+    await run(w, adapterReturning({}))
+    expect(w.orders.get('o1')!.status).toBe('processing')
+    expect(w.credits).toEqual([])
   })
 
   it('recovers the provider order id from the note and follows the provider instead of refunding', async () => {

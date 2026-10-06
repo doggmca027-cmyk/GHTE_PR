@@ -68,6 +68,11 @@ export interface PlaceOrderPorts {
   update(orderId: string, patch: OrderPatch): Promise<OrderRecord>
   /** DB function refund_order(): credits the wallet once and moves the order to `refunded`. */
   refund(orderId: string, comment: string): Promise<OrderRecord>
+  /**
+   * DB function release_provider_reservation(): gives the provider-balance reservation back after a CLEAN rejection
+   * (the provider did not create the order). Idempotent. Optional so older callers keep working.
+   */
+  releaseReservation?(orderId: string): Promise<void>
 }
 
 export type PlaceOrderResult =
@@ -165,6 +170,9 @@ export async function executePlaceOrder(
     // Definitive rejection: mark failed (keeps the reason in history), then refund.
     log.warn(`place-order: order ${claimed.id} rejected by provider: ${cls.reason}`)
     const failed = await ports.update(claimed.id, { status: 'failed', error_message: cls.reason })
+    // The provider did not create it, so it did not spend our money there either: release the reservation. Best effort:
+    // a failure here only leaves the cached balance low until the health monitor re-reads the real one.
+    await ports.releaseReservation?.(failed.id).catch((e) => log.warn(`place-order: reservation of ${failed.id} not released`, e))
     try {
       const refunded = await ports.refund(failed.id, 'Provider rejected order')
       return { kind: 'rejected', order: refunded, message: cls.userMessage }
@@ -212,6 +220,9 @@ export function mapDbError(message: string): MappedError {
     const required = Number(funds[2])
     return { httpStatus: 402, error: 'insufficient_funds', message: 'Insufficient balance.', shortfall: round4(Math.max(0, required - available)) }
   }
+  if (/insufficient_provider_balance/.test(message)) {
+    return { httpStatus: 503, error: 'service_unavailable', message: 'This service is temporarily unavailable. You were not charged.' }
+  }
   if (/user is banned/.test(message)) return { httpStatus: 403, error: 'banned', message: 'Your account is suspended.' }
   if (/service not found or inactive/.test(message)) return { httpStatus: 404, error: 'service_unavailable', message: 'This service is no longer available.' }
   if (/provider offer not found|quantity is outside the limits of the selected provider offer|cost does not match/.test(message)) {
@@ -223,4 +234,44 @@ export function mapDbError(message: string): MappedError {
     return { httpStatus: 409, error: 'idempotency_conflict', message: 'This request key was already used for a different order.' }
   }
   return { httpStatus: 500, error: 'internal_error', message: 'Something went wrong. You were not charged.' }
+}
+
+// ---------------------------------------------------------------------------
+// Failover: ONLY before anything was sent or charged
+// ---------------------------------------------------------------------------
+
+/** Thrown by an attempt that stopped before charging the customer or calling the provider (e.g. no API key). */
+export class PreSendRejection extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PreSendRejection'
+  }
+}
+
+/**
+ * True only for refusals that happen BEFORE the provider call, with the customer's charge rolled back:
+ * the provider's cached balance cannot cover the cost (place_order refused the reservation, its whole transaction
+ * rolled back), or the attempt could not start. Never true for anything that happened after the request was sent.
+ */
+export function isPreSendRejection(e: unknown): boolean {
+  if (e instanceof PreSendRejection) return true
+  return e instanceof PlaceOrderDbError && /insufficient_provider_balance/.test(e.message)
+}
+
+/**
+ * Tries offers best-first and moves to the next one ONLY on a pre-send refusal. Any other outcome (submitted,
+ * pending/unknown, rejected after sending, a database error) is returned or thrown as is: an order whose request
+ * reached a provider is never re-sent to another one.
+ */
+export async function firstAcceptingOffer<O, R>(offers: O[], attempt: (offer: O) => Promise<R>): Promise<R> {
+  let last: unknown = new PreSendRejection('no offer available')
+  for (const offer of offers) {
+    try {
+      return await attempt(offer)
+    } catch (e) {
+      if (!isPreSendRejection(e)) throw e
+      last = e
+    }
+  }
+  throw last
 }

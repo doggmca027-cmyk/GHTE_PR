@@ -38,9 +38,9 @@ describe('selectBestOffer', () => {
     expect(best.id).toBe('b')
   })
 
-  it('score beats price: a more expensive offer with a higher score wins', () => {
+  it('Phase 2: price beats score: the lower effective cost wins even against a higher routing score', () => {
     const best = selectBestOffer([offer('cheap', 'pa', { routingScore: 1, costPer1000: 0.01 }), offer('pricey', 'pb', { routingScore: 2, costPer1000: 9 })], [provider('pa'), provider('pb')])
-    expect(best.id).toBe('pricey')
+    expect(best.id).toBe('cheap')
   })
 
   it('ties on score and cost resolve deterministically (lowest id), whatever the input order', () => {

@@ -68,6 +68,11 @@ export interface IProvider {
   /** ISO 4217-style code of providerBalance, e.g. "USD". */
   currency: string
   priority: number
+  /**
+   * Reliability penalty (1..10, default 1): routing ranks offers by cost x penalty, so an unreliable provider has to be
+   * that much cheaper to win. Never changes what an order is charged or what its snapshot records.
+   */
+  reliabilityPenalty?: number
 }
 
 /**
