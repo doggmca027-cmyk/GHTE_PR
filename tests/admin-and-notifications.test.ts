@@ -923,28 +923,47 @@ describe('admin view helpers', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 9. The Admin tab is only rendered for admins
+// 9. The header: logo, settings for everyone, the Admin button only for admins
 // ---------------------------------------------------------------------------
 
-describe('Admin tab visibility', () => {
-  const render = async (isAdmin: boolean) => {
+describe('Header: logo, settings and the admin button', () => {
+  const render = async (isAdmin: boolean, activeTab: 'home' | 'settings' | 'admin' = 'home') => {
     const { createElement } = await import('react')
     const { renderToStaticMarkup } = await import('react-dom/server')
     const { Layout } = await import('../src/components/layout/Layout')
     return renderToStaticMarkup(
-      createElement(Layout, { activeTab: 'home', onTabChange: () => {}, userName: 'x', balance: 1, currency: 'USD', isAdmin, children: createElement('div') }),
+      createElement(Layout, { activeTab, onTabChange: () => {}, balance: 1, currency: 'USD', isAdmin, children: createElement('div') }),
     )
   }
 
-  it('shows the Admin tab to admins', async () => {
+  it('shows the Admin button next to Settings to admins', async () => {
     const html = await render(true)
-    expect(html).toContain('>Admin<')
-    expect(html.match(/<li /g)).toHaveLength(5)
+    expect(html).toContain('aria-label="Admin"')
+    expect(html).toContain('aria-label="Settings"')
+    expect(html.indexOf('aria-label="Settings"')).toBeLessThan(html.indexOf('aria-label="Admin"'))
   })
 
-  it('does not render it at all for regular users', async () => {
+  it('does not render the Admin button (or the word Admin) at all for regular users', async () => {
     const html = await render(false)
     expect(html).not.toContain('Admin')
-    expect(html.match(/<li /g)).toHaveLength(4)
+    expect(html).toContain('aria-label="Settings"')
+  })
+
+  it('shows the logo to everyone', async () => {
+    for (const isAdmin of [true, false]) {
+      const html = await render(isAdmin)
+      expect(html).toContain('GRAM Hub')
+      expect(html).toContain('TON Ecosystem')
+    }
+  })
+
+  it('keeps the tab bar to the four customer tabs (Admin is no longer a tab)', async () => {
+    for (const isAdmin of [true, false]) expect((await render(isAdmin)).match(/<li /g)).toHaveLength(4)
+  })
+
+  it('highlights the open header screen', async () => {
+    expect(await render(true, 'settings')).toContain('aria-label="Settings" aria-pressed="true"')
+    expect(await render(true, 'admin')).toContain('aria-label="Admin" aria-pressed="true"')
+    expect(await render(true, 'home')).toContain('aria-label="Admin" aria-pressed="false"')
   })
 })

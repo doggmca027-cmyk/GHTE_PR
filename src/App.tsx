@@ -8,6 +8,7 @@ import { NAV_ITEMS, type TabId } from '@/constants/navigation'
 import { WalletScreen, type DepositRequest } from '@/components/wallet/WalletScreen'
 import { OrdersScreen } from '@/components/orders/OrdersScreen'
 import { ServicesScreen } from '@/components/services/ServicesScreen'
+import { SettingsScreen } from '@/components/settings/SettingsScreen'
 import { useAuth } from '@/context/AuthContext'
 
 // Admin code is split into its own chunk: regular users never download it.
@@ -63,7 +64,6 @@ export default function App() {
     <Layout
       activeTab={tab}
       onTabChange={setTab}
-      userName={user.firstName ?? user.username ?? 'Guest'}
       balance={wallet.balance}
       currency={wallet.currency}
       onTopUp={() => topUp()}
@@ -77,6 +77,8 @@ export default function App() {
         <Suspense fallback={<Loader2 size={28} strokeWidth={2} className="mx-auto mt-16 animate-spin text-brand" aria-label="Loading" />}>
           <AdminScreen session={state.session} />
         </Suspense>
+      ) : tab === 'settings' ? (
+        <SettingsScreen session={state.session} />
       ) : tab === 'orders' ? (
         <OrdersScreen session={state.session} onBrowse={() => setTab('services')} />
       ) : (
