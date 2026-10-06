@@ -37,3 +37,25 @@ export interface PriceRuleView {
   /** "Global", "Platform: telegram", "Category: ...", "Service: ..." */
   scope: string
 }
+
+/** One row of the admin pricing grid (get_admin_pricing_view). Costs are never exposed to customers. */
+export interface PricingRow {
+  serviceId: string
+  name: string
+  category: string
+  platform: string
+  /** Retail price per 1,000. */
+  customerRate: number
+  /** Cost of the offer routing would pick now; null when no healthy offer exists. */
+  bestCost: number | null
+  /** customerRate - bestCost; null when bestCost is null. */
+  marginAbsolute: number | null
+  /** marginAbsolute / customerRate * 100; null when unknown. */
+  marginPercent: number | null
+}
+
+export interface MarginRuleInput {
+  serviceId: string
+  type: 'fixed' | 'percentage'
+  value: number
+}

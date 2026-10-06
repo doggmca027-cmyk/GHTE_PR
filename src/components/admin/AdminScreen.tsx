@@ -4,9 +4,10 @@ import { haptic } from '@/lib/haptics'
 import type { AuthSession } from '@/services/api/auth'
 import { OverviewTab } from './OverviewTab'
 import { PriceRulesTab } from './PriceRulesTab'
+import { PricingTab } from './PricingTab'
 import { ReconciliationTab } from './ReconciliationTab'
 
-type AdminTab = 'overview' | 'queue' | 'prices'
+type AdminTab = 'overview' | 'queue' | 'prices' | 'pricing'
 
 export function AdminScreen({ session }: { session: AuthSession }) {
   const [tab, setTab] = useState<AdminTab>('overview')
@@ -17,6 +18,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
     { id: 'overview', label: 'Overview' },
     { id: 'queue', label: 'Reconciliation', badge: problems },
     { id: 'prices', label: 'Price rules' },
+    { id: 'pricing', label: 'Pricing & Margins' },
   ]
 
   return (
@@ -47,6 +49,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
       {tab === 'overview' && <OverviewTab session={session} onOpenQueue={() => setTab('queue')} onProblemCount={onProblemCount} />}
       {tab === 'queue' && <ReconciliationTab session={session} onProblemCount={onProblemCount} />}
       {tab === 'prices' && <PriceRulesTab session={session} />}
+      {tab === 'pricing' && <PricingTab session={session} />}
     </>
   )
 }

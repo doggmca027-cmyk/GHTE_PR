@@ -2,7 +2,8 @@
 //   Authorization: Bearer <JWT issued by telegram-auth>
 //   Body: { serviceId, targetUrl, quantity, idempotencyKey? }   (any price/rate/user fields are ignored)
 //
-// Flow: verify JWT -> validate -> read service/provider from DB -> place_order() (atomic debit)
+// Flow: verify JWT -> validate -> load the service's provider offers -> route (selectBestOffer, see
+//       _shared/routing.ts) -> place_order() (validates + snapshots the offer, atomic debit)
 //       -> claim -> provider.createOrder -> submitted | refund | hold for reconciliation.
 // See _shared/place-order-flow.ts for the money-safety rules.
 //
@@ -21,8 +22,17 @@ import {
   type PlaceOrderPorts,
   type PlaceOrderResult,
 } from '../_shared/place-order-flow.ts'
+import {
+  OFFER_SELECT,
+  ServiceUnavailableError,
+  buildCandidates,
+  costForQuantity,
+  resolveOffer,
+  type OfferRow,
+} from '../_shared/routing.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
 import { createSMMv2Adapter } from '../_shared/smm-v2-adapter.ts'
+import type { IProviderServiceOffer } from '../_shared/types.ts'
 
 const MAX_BODY_BYTES = 4096
 
@@ -65,6 +75,10 @@ function buildPorts(db: Db): PlaceOrderPorts {
           p_service_id: a.serviceId,
           p_target_url: a.targetUrl,
           p_quantity: a.quantity,
+          p_provider_offer_id: a.providerOfferId,
+          p_provider_id: a.providerId,
+          p_provider_service_id: a.providerServiceId,
+          p_cost_amount: a.costAmount,
           p_idempotency_key: a.idempotencyKey,
         }),
         'place_order',
@@ -135,7 +149,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 3. Everything that determines price and routing comes from the database.
   const { data: service, error: serviceError } = await db
     .from('services')
-    .select('id, is_active, min_quantity, max_quantity, primary_provider_service_id')
+    .select('id, is_active, min_quantity, max_quantity')
     .eq('id', input.serviceId)
     .maybeSingle()
   if (serviceError) {
@@ -147,28 +161,42 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const qty = validateQuantity(String(input.quantity), service.min_quantity, service.max_quantity)
   if (!qty.ok) return fail(400, 'invalid_input', qty.error)
 
-  const { data: ps } = await db
-    .from('provider_services')
-    .select('external_service_id, is_active, provider:providers(id, name, api_url, api_key_encrypted, is_active)')
-    .eq('id', service.primary_provider_service_id)
-    .maybeSingle()
-  // deno-lint-ignore no-explicit-any
-  const provider = (ps as any)?.provider as { id: string; name: string; api_url: string; api_key_encrypted: string | null; is_active: boolean } | undefined
+  const idempotencyKey = deriveIdempotencyKey(userId, input.clientKey)
 
-  // Refuse BEFORE charging anything if we already know we cannot fulfil the order.
+  // A retry of an order that already exists keeps going to the provider it was charged for.
+  const { data: existing } = await db.from('orders').select('provider_offer_id').eq('idempotency_key', idempotencyKey).maybeSingle()
+
+  const { data: offerRows, error: offersError } = await db.from('provider_service_offers').select(OFFER_SELECT).eq('service_id', input.serviceId)
+  if (offersError) {
+    console.error('place-order: offer lookup failed', offersError)
+    return fail(500, 'internal_error', 'Something went wrong. You were not charged.')
+  }
+  const candidates = buildCandidates((offerRows ?? []) as unknown as OfferRow[])
+
+  // Refuse BEFORE charging anything if no healthy provider can fulfil the order.
+  let offer: IProviderServiceOffer
+  try {
+    offer = resolveOffer(candidates.offers, candidates.providers, { quantity: input.quantity, pinnedOfferId: existing?.provider_offer_id })
+  } catch (e) {
+    if (e instanceof ServiceUnavailableError) return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
+    throw e
+  }
+  const details = candidates.details.get(offer.id)!
+  const provider = candidates.providers.find((p) => p.id === offer.providerId)!
+
   let apiKey = ''
   try {
-    apiKey = provider ? await resolveProviderApiKey(provider, Deno.env) : ''
+    apiKey = await resolveProviderApiKey({ name: details.providerName, api_key_encrypted: details.apiKeyEncrypted }, Deno.env)
   } catch (e) {
     console.error('place-order: provider key could not be decrypted', e)
   }
   const mockMode = Deno.env.get('MOCK_MODE') === 'true'
-  if (!ps?.is_active || !provider?.is_active || (!apiKey && !mockMode)) {
+  if (!apiKey && !mockMode) {
     return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
   }
 
   const adapter = createSMMv2Adapter(
-    { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey },
+    { id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey },
     { MOCK_MODE: Deno.env.get('MOCK_MODE') },
   )
 
@@ -181,8 +209,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
         serviceId: input.serviceId,
         targetUrl: input.targetUrl,
         quantity: input.quantity,
-        idempotencyKey: deriveIdempotencyKey(userId, input.clientKey),
-        externalServiceId: ps.external_service_id,
+        idempotencyKey,
+        providerOfferId: offer.id,
+        providerId: offer.providerId,
+        providerServiceId: offer.providerServiceId,
+        costAmount: costForQuantity(offer.costPer1000, input.quantity),
+        externalServiceId: details.externalServiceId,
       },
       buildPorts(db),
       adapter,

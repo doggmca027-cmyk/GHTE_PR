@@ -1,5 +1,6 @@
 import type { AuthSession } from '@/services/api/auth'
-import type { AdminMetrics, PriceRuleView, ProviderStatus, ReconciliationOrder } from '@/types/admin'
+import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderStatus, ReconciliationOrder } from '@/types/admin'
+import { createMockPricing } from './mock-pricing'
 import { metricsFromRpc } from '../../../supabase/functions/_shared/admin-metrics.ts'
 import { AdminApiError, createMockAdmin } from './mock-admin'
 import type { OrderStatus } from '@/types'
@@ -130,4 +131,55 @@ export async function updatePriceRule(session: AuthSession, id: string, patch: {
     return
   }
   await rpc(session, 'admin_update_price_rule', { p_rule_id: id, p_value: patch.value ?? null, p_is_active: patch.isActive ?? null })
+}
+
+// ---- Pricing & margins (admin-pricing Edge Function) -------------------------------------------------
+
+let mockPricingStore: ReturnType<typeof createMockPricing> | undefined
+const mockPricing = () => (mockPricingStore ??= createMockPricing())
+
+async function callPricing<T>(session: AuthSession, body: Record<string, unknown>): Promise<T> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new AdminApiError('server', 'Backend is not configured.')
+  let res: Response
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/admin-pricing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+  } catch {
+    throw new AdminApiError('network', 'Connection lost. Please try again.')
+  }
+  const data = (await res.json().catch(() => null)) as (T & { success?: boolean; message?: string }) | null
+  if (res.ok && data?.success) return data
+  if (res.status === 401 || res.status === 403) throw new AdminApiError('forbidden', 'Admin access required.')
+  if (res.status === 400) throw new AdminApiError('invalid_input', data?.message ?? 'Invalid input.')
+  throw new AdminApiError('server', 'Something went wrong. Please try again.')
+}
+
+export async function getPricing(session: AuthSession): Promise<PricingRow[]> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockPricing().list()
+  }
+  const { services } = await callPricing<{ services: Record<string, unknown>[] }>(session, { action: 'GET' })
+  return services.map((r) => {
+    const rate = num(r.customer_rate_per_1000)
+    const cost = r.best_offer_cost == null ? null : num(r.best_offer_cost)
+    const margin = cost === null ? null : rate - cost
+    return {
+      serviceId: String(r.service_id), name: String(r.name), category: String(r.category ?? ''), platform: String(r.platform ?? ''),
+      customerRate: rate, bestCost: cost, marginAbsolute: margin, marginPercent: margin !== null && rate > 0 ? (margin / rate) * 100 : null,
+    }
+  })
+}
+
+export async function setServiceMargin(session: AuthSession, input: MarginRuleInput): Promise<{ repriced: number }> {
+  if (session.isMock) {
+    guardMock(session)
+    mockPricing().setMargin(input)
+    return { repriced: 1 }
+  }
+  return callPricing<{ repriced: number }>(session, { action: 'UPDATE_RULE', serviceId: input.serviceId, type: input.type, value: input.value })
 }

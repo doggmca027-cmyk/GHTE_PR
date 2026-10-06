@@ -195,7 +195,7 @@ describe('access: provider configuration is service-role only', () => {
 })
 
 describe('nothing that exists today changed behaviour', () => {
-  it('place_order still pays and creates an order against a provider with the new defaults', async () => {
+  it('place_order (now offer-driven) still pays and creates an order against a provider with the new defaults', async () => {
     const db = await fullDb()
     await db.exec(`
       insert into providers(name, api_url) values ('p','u');
@@ -208,7 +208,8 @@ describe('nothing that exists today changed behaviour', () => {
     const user = (await db.query<{ id: string }>(`select id from users`)).rows[0].id
     const svc = (await db.query<{ id: string }>(`select id from services`)).rows[0].id
     await db.query(`select process_wallet_transaction($1::uuid,'deposit',100,null,'fund','fund-1')`, [user])
-    const o = (await db.query<{ status: string; charge_amount: string }>(`select * from place_order($1::uuid,$2::uuid,'https://t.me/x',1000,'key-1')`, [user, svc])).rows[0]
+    const offer = (await db.query<{ id: string; provider_id: string; provider_service_id: string }>(`select id, provider_id, provider_service_id from provider_service_offers where service_id = $1`, [svc])).rows[0]
+    const o = (await db.query<{ status: string; charge_amount: string }>(`select * from place_order($1::uuid,$2::uuid,'https://t.me/x',1000,$3::uuid,$4::uuid,$5::uuid,1.0000,'key-1')`, [user, svc, offer.id, offer.provider_id, offer.provider_service_id])).rows[0]
     expect(o).toMatchObject({ status: 'paid', charge_amount: '2.5000' })
     expect(Number((await db.query<{ b: string }>(`select balance::text b from wallets`)).rows[0].b)).toBe(97.5)
   }, 120_000)

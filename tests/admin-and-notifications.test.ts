@@ -455,6 +455,7 @@ describe('admin security boundary', () => {
     ['admin_force_refund', `select admin_force_refund(gen_random_uuid())`],
     ['admin_mark_resolved', `select admin_mark_resolved(gen_random_uuid(), 'x', 'n')`],
     ['admin_update_price_rule', `select admin_update_price_rule(gen_random_uuid(), 1)`],
+    ['get_admin_pricing_view', `select get_admin_pricing_view()`],
   ]
 
   beforeAll(async () => {

@@ -25,6 +25,9 @@ export interface OrderRecord {
   status: OrderStatus
   provider_order_id: string | null
   error_message: string | null
+  /** Routing snapshot written by place_order (null only on orders created before Phase 1C). */
+  provider_offer_id?: string | null
+  provider_id?: string | null
 }
 
 export class PlaceOrderDbError extends Error {
@@ -42,9 +45,23 @@ export interface OrderPatch {
   error_message?: string | null
 }
 
+/** What place_order receives: the request plus the routing decision. */
+export interface PlaceOrderArgs {
+  userId: string
+  serviceId: string
+  targetUrl: string
+  quantity: number
+  idempotencyKey: string
+  providerOfferId: string
+  providerId: string
+  providerServiceId: string
+  /** Provider cost of this order: round(offer.costPer1000 * quantity / 1000, 4). */
+  costAmount: number
+}
+
 export interface PlaceOrderPorts {
-  /** DB function place_order(): creates + pays the order atomically (idempotent per key). */
-  placeOrder(args: { userId: string; serviceId: string; targetUrl: string; quantity: number; idempotencyKey: string }): Promise<OrderRecord>
+  /** DB function place_order(): validates the chosen offer, snapshots it, creates + pays the order atomically (idempotent per key). */
+  placeOrder(args: PlaceOrderArgs): Promise<OrderRecord>
   /** Atomic `paid -> processing` (+ in-flight note). Resolves null if someone else already claimed it. */
   claim(orderId: string): Promise<OrderRecord | null>
   get(orderId: string): Promise<OrderRecord>
@@ -100,6 +117,11 @@ export interface PlaceOrderRequest {
   targetUrl: string
   quantity: number
   idempotencyKey: string
+  /** Routing decision (selectBestOffer), taken from the database, never from the client. */
+  providerOfferId: string
+  providerId: string
+  providerServiceId: string
+  costAmount: number
   /** The provider's own id for the service, read from the database (never from the client). */
   externalServiceId: string
 }
@@ -116,7 +138,8 @@ export async function executePlaceOrder(
   log: Logger = console,
 ): Promise<PlaceOrderResult> {
   // 1. Atomic debit + order creation (idempotent: a replay returns the existing order).
-  const order = await ports.placeOrder(req)
+  const { externalServiceId: _external, ...placeArgs } = req
+  const order = await ports.placeOrder(placeArgs)
   if (order.status !== 'paid') return { kind: 'replayed', order }
 
   // 2. Exactly one caller wins the right to talk to the provider.
@@ -191,6 +214,9 @@ export function mapDbError(message: string): MappedError {
   }
   if (/user is banned/.test(message)) return { httpStatus: 403, error: 'banned', message: 'Your account is suspended.' }
   if (/service not found or inactive/.test(message)) return { httpStatus: 404, error: 'service_unavailable', message: 'This service is no longer available.' }
+  if (/provider offer not found|quantity is outside the limits of the selected provider offer|cost does not match/.test(message)) {
+    return { httpStatus: 503, error: 'service_unavailable', message: 'This service is temporarily unavailable. You were not charged.' }
+  }
   if (/quantity must be between/.test(message)) return { httpStatus: 400, error: 'invalid_input', message: message.replace(/^quantity/, 'Quantity') }
   if (/order total is too small/.test(message)) return { httpStatus: 400, error: 'invalid_input', message: 'Order total is too small.' }
   if (/idempotency key .* different parameters/.test(message)) {

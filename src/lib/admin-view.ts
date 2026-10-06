@@ -10,6 +10,15 @@ export function formatRuleValue(type: 'percentage' | 'fixed' | 'tier', value: nu
   return type === 'fixed' ? `+${usd(value)} / 1k` : `+${value}%`
 }
 
+/** Below this margin percentage (or any loss) a pricing row is highlighted. */
+export const LOW_MARGIN_PERCENT = 10
+
+export function pricingHealth(row: { marginAbsolute: number | null; marginPercent: number | null }): 'loss' | 'low' | 'ok' | 'unknown' {
+  if (row.marginAbsolute === null || row.marginPercent === null) return 'unknown'
+  if (row.marginAbsolute < 0) return 'loss'
+  return row.marginPercent < LOW_MARGIN_PERCENT ? 'low' : 'ok'
+}
+
 export interface NoteDescription {
   title: string
   detail: string

@@ -188,6 +188,18 @@ curl -sS -X POST "https://<PROJECT_REF>.supabase.co/functions/v1/sync-catalog" \
   -H "x-cron-secret: <CRON_SECRET>" -H "Content-Type: application/json" -d '{}'
 ```
 
+**Switch routing on for the provider.** Orders are routed through `provider_service_offers` and only to providers that are
+`routing_enabled` **and** `health_status = 'healthy'`. A new provider starts as `routing_enabled = false`, `health_status = 'disabled'`
+(nothing sets health automatically yet), so until you run this every order answers "temporarily unavailable" and nobody is charged:
+
+```sql
+update providers set routing_enabled = true, health_status = 'healthy' where name = 'Secsers';
+-- take a provider out of rotation again: update providers set routing_enabled = false where name = 'Secsers';
+```
+
+The catalogue sync creates a service's offer automatically and keeps its cost in step with the provider's price.
+Each order stores which offer served it (`orders.provider_offer_id`, `cost_amount`, `profit_amount`, `routing_score_snapshot`).
+
 You get `{"added":N,"updated":0,"deactivated":0,"providers":[…]}`. A provider with `"status":"skipped"` and
 `no API key configured` means the secret name does not match the rule in 1.4.
 Review prices in the app's **Admin → Price rules** and the services in the SQL editor

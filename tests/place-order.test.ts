@@ -14,6 +14,7 @@ import {
   type PlaceOrderRequest,
 } from '../supabase/functions/_shared/place-order-flow.ts'
 import { SMMProviderError } from '../supabase/functions/_shared/smm-v2-adapter.ts'
+import { buildCandidates, costForQuantity, resolveOffer, type OfferRow } from '../supabase/functions/_shared/routing.ts'
 import { MOCK_CATALOG } from '../src/constants/dev'
 import { createMockBackend, MOCK_COMPLETED_MS, MOCK_SUBMITTED_MS } from '../src/services/api/mock-orders'
 import { OrderApiError } from '../src/services/api/order-errors'
@@ -181,9 +182,62 @@ function fakeWorld(opts: { failUpdates?: (patch: OrderPatch, n: number) => boole
 const silent = { error: vi.fn(), warn: vi.fn() }
 const request = (over: Partial<PlaceOrderRequest> = {}): PlaceOrderRequest => ({
   userId: USER, serviceId: SERVICE, targetUrl: 'https://t.me/channel', quantity: 1000,
-  idempotencyKey: `po:${USER}:abcdef12`, externalServiceId: '2001', ...over,
+  idempotencyKey: `po:${USER}:abcdef12`, externalServiceId: '2001',
+  providerOfferId: 'offer-1', providerId: 'prov-1', providerServiceId: 'ps-1', costAmount: 0.5, ...over,
 })
 const adapterThat = (impl: () => Promise<{ orderId: string }>) => ({ createOrder: vi.fn(impl) })
+
+describe('routing -> executePlaceOrder: the chosen offer reaches place_order and the right provider', () => {
+  const row = (id: string, provider: string, over: Partial<OfferRow> & { health?: string; routing?: boolean; cost?: number; score?: number; ext?: string } = {}): OfferRow => ({
+    id, service_id: SERVICE, provider_id: provider, provider_service_id: `ps-${id}`, cost_per_1000: over.cost ?? 1, min_quantity: 10, max_quantity: 100_000,
+    refill_supported: false, cancel_supported: false, is_active: true, routing_score: over.score ?? 0, created_at: 't', updated_at: 't',
+    provider_service: { external_service_id: over.ext ?? `ext-${id}`, is_active: true },
+    provider: {
+      id: provider, name: provider, api_url: `https://${provider}`, api_key_encrypted: null, api_version: 'v2', is_active: true,
+      routing_enabled: over.routing ?? true, health_status: (over.health ?? 'healthy') as 'healthy', last_health_check: null, last_balance_sync: null,
+      provider_balance: 0, currency: 'USD', priority: 0,
+    },
+    ...over,
+  })
+
+  async function placeVia(rows: OfferRow[], quantity = 1000) {
+    const w = fakeWorld()
+    const seen: { offerId?: string; providerId?: string; providerServiceId?: string; costAmount?: number } = {}
+    const place = w.ports.placeOrder
+    w.ports.placeOrder = async (a) => { Object.assign(seen, { offerId: a.providerOfferId, providerId: a.providerId, providerServiceId: a.providerServiceId, costAmount: a.costAmount }); return place(a) }
+    const c = buildCandidates(rows)
+    const offer = resolveOffer(c.offers, c.providers, { quantity })
+    const calls: Array<{ provider: string; serviceId: string }> = []
+    const adapter = { createOrder: vi.fn(async (p: { serviceId: string }) => { calls.push({ provider: offer.providerId, serviceId: p.serviceId }); return { orderId: 'P-1' } }) }
+    const result = await executePlaceOrder(
+      request({ quantity, providerOfferId: offer.id, providerId: offer.providerId, providerServiceId: offer.providerServiceId, costAmount: costForQuantity(offer.costPer1000, quantity), externalServiceId: c.details.get(offer.id)!.externalServiceId }),
+      w.ports, adapter, silent,
+    )
+    return { result, seen, calls }
+  }
+
+  it('the best healthy offer is snapshotted and its provider service id is what the adapter receives', async () => {
+    const { result, seen, calls } = await placeVia([
+      row('cheap-unhealthy', 'p-down', { cost: 0.01, score: 500, health: 'unavailable' }),
+      row('cheap-degraded', 'p-slow', { cost: 0.02, score: 400, health: 'degraded' }),
+      row('best', 'p-good', { cost: 0.07, score: 50, ext: '9001' }),
+      row('worse', 'p-ok', { cost: 0.05, score: 10 }),
+    ])
+    expect(result.kind).toBe('submitted')
+    expect(seen).toEqual({ offerId: 'best', providerId: 'p-good', providerServiceId: 'ps-best', costAmount: 0.07 })
+    expect(calls).toEqual([{ provider: 'p-good', serviceId: '9001' }])
+  })
+
+  it('on equal scores the cheaper offer wins, and the cost is computed from that offer', async () => {
+    const { seen } = await placeVia([row('a', 'pa', { cost: 0.3, score: 5 }), row('b', 'pb', { cost: 0.1234, score: 5 })], 1500)
+    expect(seen).toMatchObject({ offerId: 'b', providerId: 'pb', costAmount: 0.1851 })
+  })
+
+  it('with only unhealthy / disabled providers nothing is routed (the caller refuses before charging)', () => {
+    const c = buildCandidates([row('a', 'pa', { health: 'degraded' }), row('b', 'pb', { routing: false })])
+    expect(() => resolveOffer(c.offers, c.providers, { quantity: 1000 })).toThrow(/No provider can fulfil/)
+  })
+})
 
 describe('executePlaceOrder: replay and concurrency', () => {
   it('a repeated key returns the same order and never contacts the provider twice', async () => {

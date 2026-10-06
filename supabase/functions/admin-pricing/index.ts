@@ -1,0 +1,124 @@
+// Supabase Edge Function (Deno): POST /admin-pricing   (admins only)
+//   Authorization: Bearer <JWT issued by telegram-auth>
+//   { action: "GET" }
+//       -> { success, services: [...] }  via get_admin_pricing_view() (best active offer cost vs retail price)
+//   { action: "UPDATE_RULE", serviceId? | categoryId? | platform?, type: "fixed" | "percentage", value }
+//       -> upserts the price rule for that scope, then re-prices every affected service right away with
+//          _shared/price-engine.ts (the same math sync-catalog uses) and writes services.customer_rate_per_1000.
+//
+// Auth: JWT verified here, then users.is_admin is re-checked in the database; the pricing view RPC checks it
+// again with the caller's own token (require_admin()).
+// Secrets: JWT_SECRET. Auto-injected: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
+
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { authenticate, corsHeaders, fail, json, readJson } from '../_shared/http.ts'
+import { affectedServices, parsePricingRequest, repriceServices, type RepriceService } from '../_shared/admin-pricing.ts'
+import type { Platform, PriceRule } from '../_shared/types.ts'
+
+// deno-lint-ignore no-explicit-any
+type Db = SupabaseClient<any, 'public', any>
+
+const RULE_COLUMNS = 'id, type, value, platform, category_id, service_id, min_rate, max_rate, priority, is_active'
+const WRITE_BATCH = 20
+
+function must<T>(res: { data: T | null; error: { message: string } | null }, what: string): T {
+  if (res.error) throw new Error(`${what}: ${res.error.message}`)
+  return res.data as T
+}
+
+const toRule = (r: Record<string, unknown>): PriceRule => ({
+  ...(r as unknown as PriceRule),
+  value: Number(r.value),
+  min_rate: r.min_rate == null ? null : Number(r.min_rate),
+  max_rate: r.max_rate == null ? null : Number(r.max_rate),
+})
+
+Deno.serve(async (req: Request): Promise<Response> => {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
+  if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Use POST.')
+
+  const jwtSecret = Deno.env.get('JWT_SECRET')
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!jwtSecret || !supabaseUrl || !anonKey || !serviceKey) {
+    console.error('admin-pricing: missing configuration')
+    return fail(500, 'server_misconfigured', 'Server is not configured.')
+  }
+
+  const userId = await authenticate(req, jwtSecret)
+  if (!userId) return fail(401, 'unauthorized', 'Sign in again.')
+
+  const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
+  try {
+    const admin = must(await db.from('users').select('id').eq('id', userId).eq('is_admin', true).eq('is_banned', false).maybeSingle(), 'admin check')
+    if (!admin) return fail(403, 'forbidden', 'Admin access required.')
+
+    const parsed = parsePricingRequest(await readJson(req))
+    if ('error' in parsed) return fail(400, 'invalid_input', parsed.error)
+
+    if (parsed.action === 'GET') {
+      // The caller's own token, so the RPC's require_admin() (auth.uid()) is the second gate.
+      const asUser: Db = createClient(supabaseUrl, anonKey, {
+        auth: { persistSession: false },
+        global: { headers: { Authorization: req.headers.get('authorization') ?? '' } },
+      })
+      return json({ success: true, services: must(await asUser.rpc('get_admin_pricing_view'), 'pricing view') })
+    }
+
+    // ---- UPDATE_RULE ---------------------------------------------------------------------------------
+    const { serviceId, categoryId, platform, type, value } = parsed
+
+    // Upsert: one flat (non-tier) rule per scope.
+    // deno-lint-ignore no-explicit-any
+    let q: any = db.from('price_rules').select('id').neq('type', 'tier').is('min_rate', null)
+    q = serviceId ? q.eq('service_id', serviceId) : q.is('service_id', null)
+    q = categoryId ? q.eq('category_id', categoryId) : q.is('category_id', null)
+    q = platform ? q.eq('platform', platform) : q.is('platform', null)
+    const existing = must(await q.order('priority', { ascending: false }).order('created_at', { ascending: true }).limit(1), 'load rule') as { id: string }[]
+
+    let ruleId: string
+    if (existing[0]) {
+      ruleId = existing[0].id
+      must(await db.from('price_rules').update({ type, value, is_active: true }).eq('id', ruleId).select('id').single(), 'update rule')
+    } else {
+      const scopeName = serviceId ? 'Service' : categoryId ? 'Category' : platform ? `Platform ${platform}` : 'Global'
+      ruleId = (must(
+        await db.from('price_rules').insert({
+          name: `Admin margin: ${scopeName}`, type, value, service_id: serviceId, category_id: categoryId, platform, priority: 0, is_active: true,
+        }).select('id').single(),
+        'insert rule',
+      ) as { id: string }).id
+    }
+
+    // Re-price immediately with the shared engine, from the same basis as sync-catalog (primary provider rate).
+    const rules = (must(await db.from('price_rules').select(RULE_COLUMNS).eq('is_active', true), 'load price_rules') as Record<string, unknown>[]).map(toRule)
+    const rows = must(
+      await db.from('services')
+        .select('id, category_id, customer_rate_per_1000, category:categories!inner(platform), primary:provider_services!primary_provider_service_id(rate_per_1000)')
+        .eq('is_active', true),
+      'load services',
+    ) as unknown as {
+      id: string; category_id: string; customer_rate_per_1000: number
+      category: { platform: Platform }; primary: { rate_per_1000: number } | null
+    }[]
+    const services: RepriceService[] = rows.flatMap((r) =>
+      r.primary ? [{ id: r.id, category_id: r.category_id, platform: r.category.platform, customer_rate_per_1000: Number(r.customer_rate_per_1000), provider_rate: Number(r.primary.rate_per_1000) }] : [],
+    )
+    const changes = repriceServices(affectedServices(services, parsed), rules)
+    for (let i = 0; i < changes.length; i += WRITE_BATCH) {
+      await Promise.all(changes.slice(i, i + WRITE_BATCH).map(async (c) =>
+        must(await db.from('services').update({ customer_rate_per_1000: c.rate }).eq('id', c.id).select('id').single(), 'update service price')))
+    }
+
+    must(await db.from('admin_audit_log').insert({
+      admin_id: userId, action: 'set_margin_rule', target_id: ruleId,
+      details: { scope: { serviceId, categoryId, platform }, type, value, repriced: changes.length },
+    }), 'audit log')
+
+    return json({ success: true, ruleId, repriced: changes.length })
+  } catch (e) {
+    console.error('admin-pricing failed', e)
+    return fail(500, 'server_error', 'Something went wrong. Please try again.')
+  }
+})

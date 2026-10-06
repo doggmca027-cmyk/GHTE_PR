@@ -63,3 +63,19 @@ join public.categories c          on c.slug = v.slug
 where not exists (
   select 1 from public.services s where s.primary_provider_service_id = ps.id
 );
+
+-- Provider offers (the routing engine reads these, not services.primary_provider_service_id). The bridge trigger
+-- creates them when the services above are inserted; this only covers a re-run on an existing database.
+insert into public.provider_service_offers
+  (service_id, provider_id, provider_service_id, cost_per_1000, min_quantity, max_quantity,
+   refill_supported, cancel_supported, is_active, routing_score)
+select s.id, ps.provider_id, ps.id, ps.rate_per_1000, ps.min_quantity, ps.max_quantity,
+       ps.refill_supported, ps.cancel_supported, true, 100
+  from public.services s
+  join public.provider_services ps on ps.id = s.primary_provider_service_id
+on conflict (service_id, provider_id, provider_service_id) do nothing;
+
+-- Routing only sends orders to providers that are routing-enabled AND healthy. Nothing sets health yet
+-- (health checks come later), so the dev mock provider is switched on here by hand.
+update public.providers set routing_enabled = true, health_status = 'healthy'
+ where name = 'Secsers Mock' and is_active;
