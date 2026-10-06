@@ -1,4 +1,4 @@
-import WebApp from '@twa-dev/sdk'
+import { WebApp } from '@/lib/webapp'
 import { MOCK_SESSION } from '@/constants/dev'
 import { mockBackend } from '@/services/api/mock-orders'
 import type { IUser, IWallet } from '@/types'

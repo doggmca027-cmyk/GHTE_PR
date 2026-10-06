@@ -1,4 +1,4 @@
-import WebApp from '@twa-dev/sdk'
+import { WebApp } from '@/lib/webapp'
 
 /** Signal readiness to Telegram and expand the viewport. Safe outside Telegram. */
 export function initTelegram(): void {

@@ -274,7 +274,7 @@ Wallet approvals use the TON Connect deep link and return through `VITE_TWA_RETU
 | Install Command | `npm ci` |
 | Build Command | `npm run build` |
 | Output Directory | `dist` |
-| Node.js Version | 22.x or 24.x |
+| Node.js Version | 24.x (must match `engines.node` in `package.json`; otherwise Vercel ignores the setting and warns) |
 | *Automatically expose System Environment Variables* | **on** (default) |
 
 ### 3.2 Environment variables

@@ -1,4 +1,4 @@
-import WebApp from '@twa-dev/sdk'
+import { WebApp } from '@/lib/webapp'
 
 // Telegram.WebApp.HapticFeedback wrapper. Silent no-op outside Telegram / on unsupported clients.
 function run(fn: (h: typeof WebApp.HapticFeedback) => void): void {
