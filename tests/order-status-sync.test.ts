@@ -332,8 +332,12 @@ describe('apply_partial_refund (atomic, single execution)', () => {
     const db = await freshDb()
     const held = await paidOrder(db, { quantity: 100, charge: '1.0000', status: 'processing' })
     await db.query(`select * from apply_partial_refund($1,40)`, [held.id])
-    const path = (await db.query<{ new_status: string }>(`select new_status from order_status_history where order_id=$1 order by created_at, id`, [held.id])).rows.map((r) => r.new_status)
-    expect(path.slice(-3)).toEqual(['processing', 'submitted', 'partial'])
+    // Both steps are written in ONE transaction, so they share created_at (now()) and their random ids give no order:
+    // check the transitions themselves (old -> new), which say the same thing deterministically.
+    const steps = (await db.query<{ step: string }>(`select old_status || ' -> ' || new_status as step from order_status_history where order_id=$1 and old_status is not null`, [held.id])).rows.map((r) => r.step)
+    expect(steps).toContain('processing -> submitted')
+    expect(steps).toContain('submitted -> partial')
+    expect(steps).not.toContain('processing -> partial')
 
     const o = await paidOrder(db, { quantity: 100, charge: '1.0000' })
     await expect(db.query(`select * from apply_partial_refund($1,101)`, [o.id])).rejects.toThrow(/remains must be between/)
