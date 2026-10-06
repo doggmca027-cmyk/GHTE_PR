@@ -72,3 +72,8 @@ jobs:
 
       - name: Concurrency races
         run: npm run test:concurrency
+
+      # TON deposit verification against the same real PostgreSQL: valid deposit, replay, wrong amount,
+      # wrong/missing memo, wrong network, late payment and concurrent verification (scripts/ton-e2e.ts).
+      - name: TON deposit verification races
+        run: npm run test:ton

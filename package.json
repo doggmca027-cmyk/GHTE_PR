@@ -20,7 +20,8 @@
     "check": "npm run scan:secrets && npm run check:supabase && npm test && npm run build",
     "secrets:push": "node --disable-warning=ExperimentalWarning scripts/push-secrets.ts",
     "test:concurrency": "node --disable-warning=ExperimentalWarning scripts/concurrency-test.ts",
-    "e2e:provider": "node --disable-warning=ExperimentalWarning scripts/provider-e2e.ts"
+    "e2e:provider": "node --disable-warning=ExperimentalWarning scripts/provider-e2e.ts",
+    "test:ton": "node --disable-warning=ExperimentalWarning scripts/ton-e2e.ts"
   },
   "dependencies": {
     "@tonconnect/ui-react": "^3.0.2",
