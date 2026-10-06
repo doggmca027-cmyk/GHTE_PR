@@ -2,6 +2,7 @@ export { DEFAULT_SMM_V2_CAPABILITIES, HEALTH_STATUSES } from '../../supabase/fun
 export type {
   HealthStatus,
   IProvider,
+  IProviderServiceOffer,
   ProviderCapabilities,
   IProviderService,
   IProviderBalance,

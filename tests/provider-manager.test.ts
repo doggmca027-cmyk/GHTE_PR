@@ -31,8 +31,8 @@ async function fullDb() {
 type Row = Record<string, unknown>
 
 describe('migration 20261012: the new provider columns', () => {
-  it('is the newest migration and applies on top of the full history', async () => {
-    expect(files().at(-1)).toBe(NEW_MIGRATION)
+  it('is part of the history and applies on top of the full history', async () => {
+    expect(files()).toContain(NEW_MIGRATION)
     await expect(fullDb()).resolves.toBeDefined()
   }, 120_000)
 

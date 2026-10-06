@@ -70,6 +70,32 @@ export interface IProvider {
   priority: number
 }
 
+/**
+ * One way to fulfil a normalized service: a provider's own service with its cost and limits (maps to
+ * provider_service_offers). Server-side only: RLS is on with no client policies, so customers never see
+ * provider ids or costs.
+ */
+export interface IProviderServiceOffer {
+  id: string
+  /** The normalized, customer-facing service (services.id). */
+  serviceId: string
+  providerId: string
+  /** The provider's service this offer uses (provider_services.id). */
+  providerServiceId: string
+  /** What the provider charges us per 1000 units, in the provider's currency. */
+  costPer1000: number
+  minQuantity: number
+  maxQuantity: number
+  refillSupported: boolean
+  cancelSupported: boolean
+  isActive: boolean
+  /** Higher is preferred by the (future) routing engine. */
+  routingScore: number
+  /** ISO timestamps. */
+  createdAt: string
+  updatedAt: string
+}
+
 /** A service as listed by an external panel (maps to the provider_services table). */
 export interface IProviderService {
   externalServiceId: string
