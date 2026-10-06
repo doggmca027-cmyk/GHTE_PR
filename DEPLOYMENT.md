@@ -418,7 +418,8 @@ Add these **GitHub → Settings → Secrets and variables → Actions → Reposi
 |---------------|-------|
 | `SUPABASE_ACCESS_TOKEN` | personal access token: <https://supabase.com/dashboard/account/tokens> |
 | `SUPABASE_DB_PASSWORD` | the database password |
-| `SUPABASE_PROJECT_ID` | `<PROJECT_REF>` |
+
+The project ref is not a secret: the workflow uses this project’s ref by default (override it with a repository *variable* `SUPABASE_PROJECT_ID`). Until both secrets exist the deploy job skips itself with a warning instead of failing.
 
 Optional but wise: GitHub → Settings → Environments → create **`production`** and add *required reviewers*, so a person approves every backend deploy.
 In Vercel enable *Settings → Git → Protected previews* if previews should not be public.
@@ -513,4 +514,4 @@ A backend change that needs a new secret must set the secret **before** merging.
 **Vercel variables**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (required) · `VITE_TWA_RETURN_URL` (recommended) ·
 `APP_URL` (custom domain), `TERMS_URL`, `PRIVACY_URL` (optional).
 
-**GitHub secrets**: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_ID`.
+**GitHub secrets**: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD` (optional variable: `SUPABASE_PROJECT_ID`).
