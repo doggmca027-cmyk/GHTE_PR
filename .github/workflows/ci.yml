@@ -46,3 +46,29 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://abcdefghijklmnopqrst.supabase.co
           VITE_SUPABASE_ANON_KEY: sb_publishable_ci_placeholder_not_a_real_key
+
+  # PGlite (used by `npm test`) runs on one connection and cannot prove row locking. This job starts a real
+  # PostgreSQL 17, applies every migration and fires 100 concurrent place_order transactions per scenario
+  # (wallet race, provider reservation race, idempotency race). See scripts/concurrency-test.ts.
+  concurrency:
+    name: Real PostgreSQL concurrency races
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # The Linux PostgreSQL binaries ship their shared-library symlinks as a list; restore them explicitly
+      # (idempotent), whatever npm's policy on dependency install scripts is.
+      - name: Prepare PostgreSQL binaries
+        working-directory: node_modules/@embedded-postgres/linux-x64
+        run: node scripts/hydrate-symlinks.js
+
+      - name: Concurrency races
+        run: npm run test:concurrency

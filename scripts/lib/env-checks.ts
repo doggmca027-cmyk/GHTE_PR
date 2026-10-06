@@ -276,7 +276,8 @@ export function checkFunctionSecrets(env: Env): Finding[] {
     out.push(warn('PROVIDER_*_API_KEY', `No provider API key configured (PROVIDER_<NAME>_API_KEY). Catalog sync, order placement and order sync refuse to run for a provider without a key${present(env.PROVIDER_KEY_SECRET) ? ' (PROVIDER_KEY_SECRET is set, which only works if providers.api_key_encrypted is filled in the database)' : ''}.`))
   }
   for (const k of Object.keys(env)) {
-    if (k.startsWith('PROVIDER_') && k !== 'PROVIDER_KEY_SECRET' && !/^PROVIDER_.+_API_KEY$/.test(k)) {
+    // PROVIDER_TEST_URL / PROVIDER_TEST_KEY belong to the local E2E script (npm run e2e:provider), not to a function
+    if (k.startsWith('PROVIDER_') && k !== 'PROVIDER_KEY_SECRET' && k !== 'PROVIDER_TEST_URL' && k !== 'PROVIDER_TEST_KEY' && !/^PROVIDER_.+_API_KEY$/.test(k)) {
       out.push(warn(k, `${k} is not read by any function. Provider keys must be named PROVIDER_<NAME>_API_KEY.`))
     }
   }
