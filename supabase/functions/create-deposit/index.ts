@@ -10,6 +10,8 @@
 //          MOCK_MODE (dev only: allows a fixed fallback rate), TON_USD_FALLBACK_RATE (dev only).
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { ServiceUnavailableError } from '../_shared/routing.ts'
+import { assertSwitchOn, loadPlatformSettings } from '../_shared/platform-settings.ts'
 import { authenticate, corsHeaders, fail, json, readJson } from '../_shared/http.ts'
 import {
   DEPOSIT_VALIDITY_SECONDS,
@@ -80,7 +82,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // USDT needs a jetton transfer payload and jetton-transfer verification; not shipped yet.
   if (asset === 'USDT') return fail(400, 'asset_unavailable', 'USDT deposits are not available yet. Please use TON.')
 
-  const rate = await getTonUsdRate()
+  // Kill switch: no quote and no deposit intent while payments are paused. Read in parallel with the rate fetch (no added
+  // latency) and checked before anything is written. Fails closed. verify-deposit is NOT gated: paid deposits must be credited.
+  const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
+  const [settings, rate] = await Promise.all([loadPlatformSettings(db), getTonUsdRate()])
+  try {
+    assertSwitchOn(settings, 'payments')
+  } catch (e) {
+    if (e instanceof ServiceUnavailableError) return fail(503, 'deposits_unavailable', e.message)
+    throw e
+  }
   if (!rate) return fail(503, 'rate_unavailable', 'Could not get a live exchange rate. Please try again in a minute.')
   const quote = quoteDeposit(amount.value / 100, rate, asset)
 
@@ -93,8 +104,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
     network,
   }
   if (body.quoteOnly === true) return json({ success: true, quote: quotePayload })
-
-  const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
   const { data: user } = await db.from('users').select('is_banned').eq('id', userId).maybeSingle()
   if (!user) return fail(401, 'unauthorized', 'Please reopen the app and try again.')

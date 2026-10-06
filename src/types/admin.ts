@@ -127,3 +127,17 @@ export interface TreasuryAdjustment {
   /** One key per form submission; re-sending it books the movement once. */
   idempotencyKey: string
 }
+
+/** The global emergency switches (admin-settings). Maintenance mode blocks orders AND deposits regardless of the other two. */
+export interface PlatformSettingsView {
+  globalOrdersEnabled: boolean
+  globalPaymentsEnabled: boolean
+  maintenanceMode: boolean
+  updatedAt: string | null
+}
+
+export interface PlatformSettingsPatch {
+  ordersEnabled?: boolean
+  paymentsEnabled?: boolean
+  maintenanceMode?: boolean
+}

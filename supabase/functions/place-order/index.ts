@@ -30,6 +30,7 @@ import {
   resolveOffer,
   type OfferRow,
 } from '../_shared/routing.ts'
+import { assertSwitchOn, loadPlatformSettings } from '../_shared/platform-settings.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
 import { createSMMv2Adapter } from '../_shared/smm-v2-adapter.ts'
 import type { IProviderServiceOffer } from '../_shared/types.ts'
@@ -146,12 +147,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
-  // 3. Everything that determines price and routing comes from the database.
-  const { data: service, error: serviceError } = await db
-    .from('services')
-    .select('id, is_active, min_quantity, max_quantity')
-    .eq('id', input.serviceId)
-    .maybeSingle()
+  // 3a. Kill switch, BEFORE anything that could charge or route. Read in parallel with the service lookup below, so it
+  //     adds no latency. Fails closed: an unreadable settings row pauses ordering.
+  // 3b. Everything that determines price and routing comes from the database.
+  const [settings, { data: service, error: serviceError }] = await Promise.all([
+    loadPlatformSettings(db),
+    db.from('services').select('id, is_active, min_quantity, max_quantity').eq('id', input.serviceId).maybeSingle(),
+  ])
+  try {
+    assertSwitchOn(settings, 'orders')
+  } catch (e) {
+    if (e instanceof ServiceUnavailableError) return fail(503, 'service_unavailable', e.message)
+    throw e
+  }
   if (serviceError) {
     console.error('place-order: service lookup failed', serviceError)
     return fail(500, 'internal_error', 'Something went wrong. You were not charged.')

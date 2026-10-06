@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { haptic } from '@/lib/haptics'
 import type { AuthSession } from '@/services/api/auth'
+import { ControlCenterTab } from './ControlCenterTab'
 import { OverviewTab } from './OverviewTab'
 import { PriceRulesTab } from './PriceRulesTab'
 import { PricingTab } from './PricingTab'
@@ -9,7 +10,7 @@ import { ProvidersTab } from './ProvidersTab'
 import { ReconciliationTab } from './ReconciliationTab'
 import { TreasuryTab } from './TreasuryTab'
 
-type AdminTab = 'overview' | 'queue' | 'prices' | 'pricing' | 'providers' | 'treasury'
+type AdminTab = 'overview' | 'queue' | 'prices' | 'pricing' | 'providers' | 'treasury' | 'controls'
 
 export function AdminScreen({ session }: { session: AuthSession }) {
   const [tab, setTab] = useState<AdminTab>('overview')
@@ -23,6 +24,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
     { id: 'pricing', label: 'Pricing & Margins' },
     { id: 'providers', label: 'Providers' },
     { id: 'treasury', label: 'Treasury' },
+    { id: 'controls', label: 'Controls' },
   ]
 
   return (
@@ -56,6 +58,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
       {tab === 'pricing' && <PricingTab session={session} />}
       {tab === 'providers' && <ProvidersTab session={session} />}
       {tab === 'treasury' && <TreasuryTab session={session} />}
+      {tab === 'controls' && <ControlCenterTab session={session} />}
     </>
   )
 }

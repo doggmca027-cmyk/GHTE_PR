@@ -1,7 +1,8 @@
 import type { AuthSession } from '@/services/api/auth'
-import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderStatus, ReconciliationOrder, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
+import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, PlatformSettingsView, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
 import { createMockPricing } from './mock-pricing'
 import { createMockProviders } from './mock-providers'
+import { createMockSettings } from './mock-settings'
 import { createMockTreasury } from './mock-treasury'
 import { metricsFromRpc } from '../../../supabase/functions/_shared/admin-metrics.ts'
 import { analyticsFromRpc } from '../../../supabase/functions/_shared/admin-analytics.ts'
@@ -302,4 +303,45 @@ export async function getProfitAnalytics(session: AuthSession, range: AnalyticsR
   if (res.status === 401 || res.status === 403) throw new AdminApiError('forbidden', 'Admin access required.')
   if (res.status === 400) throw new AdminApiError('invalid_input', data?.message ?? 'Invalid input.')
   throw new AdminApiError('server', 'Something went wrong. Please try again.')
+}
+
+// ---- Emergency controls (admin-settings Edge Function) ----------------------------------------------
+
+let mockSettingsStore: ReturnType<typeof createMockSettings> | undefined
+const mockSettings = () => (mockSettingsStore ??= createMockSettings())
+
+async function callSettings(session: AuthSession, body: Record<string, unknown>): Promise<PlatformSettingsView> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new AdminApiError('server', 'Backend is not configured.')
+  let res: Response
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/admin-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+  } catch {
+    throw new AdminApiError('network', 'Connection lost. Please try again.')
+  }
+  const data = (await res.json().catch(() => null)) as { success?: boolean; settings?: PlatformSettingsView; message?: string } | null
+  if (res.ok && data?.success && data.settings) return data.settings
+  if (res.status === 401 || res.status === 403) throw new AdminApiError('forbidden', 'Admin access required.')
+  if (res.status === 400) throw new AdminApiError('invalid_input', data?.message ?? 'Invalid input.')
+  throw new AdminApiError('server', 'Something went wrong. Please try again.')
+}
+
+export async function getPlatformSettings(session: AuthSession): Promise<PlatformSettingsView> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockSettings().get()
+  }
+  return callSettings(session, { action: 'GET' })
+}
+
+export async function updatePlatformSettings(session: AuthSession, patch: PlatformSettingsPatch): Promise<PlatformSettingsView> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockSettings().update(patch)
+  }
+  return callSettings(session, { action: 'UPDATE', ...patch })
 }

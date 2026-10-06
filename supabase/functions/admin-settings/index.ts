@@ -1,0 +1,72 @@
+// Supabase Edge Function (Deno): POST /admin-settings   (admins only)
+//   Authorization: Bearer <JWT issued by telegram-auth>
+//   { action: "GET" }
+//       -> { success, settings: { globalOrdersEnabled, globalPaymentsEnabled, maintenanceMode, updatedAt } }
+//   { action: "UPDATE", ordersEnabled?, paymentsEnabled?, maintenanceMode? }   (booleans; absent = unchanged)
+//       -> same payload after the change. Audited in admin_audit_log.
+//
+// The switches take effect immediately: place-order and create-deposit read platform_settings on every call.
+//
+// Auth: JWT verified here, then users.is_admin re-checked in the database; the update RPC checks it again with the
+// caller's own token (require_admin()).
+// Secrets: JWT_SECRET. Auto-injected: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
+
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { authenticate, corsHeaders, fail, json } from '../_shared/http.ts'
+import { loadPlatformSettings, parseSettingsRequest } from '../_shared/platform-settings.ts'
+
+// deno-lint-ignore no-explicit-any
+type Db = SupabaseClient<any, 'public', any>
+
+Deno.serve(async (req: Request): Promise<Response> => {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
+  if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Use POST.')
+
+  const jwtSecret = Deno.env.get('JWT_SECRET')
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!jwtSecret || !supabaseUrl || !anonKey || !serviceKey) {
+    console.error('admin-settings: missing configuration')
+    return fail(500, 'server_misconfigured', 'Server is not configured.')
+  }
+
+  const userId = await authenticate(req, jwtSecret)
+  if (!userId) return fail(401, 'unauthorized', 'Sign in again.')
+
+  try {
+    const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
+    const { data: admin, error: adminError } = await db.from('users').select('id').eq('id', userId).eq('is_admin', true).eq('is_banned', false).maybeSingle()
+    if (adminError) throw new Error(`admin check: ${adminError.message}`)
+    if (!admin) return fail(403, 'forbidden', 'Admin access required.')
+
+    const raw = await req.text()
+    let body: unknown = null
+    if (raw.trim() !== '') {
+      if (raw.length > 2048) return fail(400, 'invalid_input', 'Request too large.')
+      try { body = JSON.parse(raw) } catch { return fail(400, 'invalid_input', 'Body must be valid JSON.') }
+    }
+    const parsed = parseSettingsRequest(body)
+    if ('error' in parsed) return fail(400, 'invalid_input', parsed.error)
+
+    if (parsed.action === 'UPDATE') {
+      const asUser: Db = createClient(supabaseUrl, anonKey, {
+        auth: { persistSession: false },
+        global: { headers: { Authorization: req.headers.get('authorization') ?? '' } },
+      })
+      const { error } = await asUser.rpc('update_platform_settings', {
+        p_orders_enabled: parsed.ordersEnabled,
+        p_payments_enabled: parsed.paymentsEnabled,
+        p_maintenance_mode: parsed.maintenanceMode,
+      })
+      if (error) throw new Error(`update_platform_settings: ${error.message}`)
+    }
+
+    const settings = await loadPlatformSettings(db)
+    if (!settings) throw new Error('platform_settings could not be read')
+    return json({ success: true, settings })
+  } catch (e) {
+    console.error('admin-settings failed', e instanceof Error ? e.message : 'unknown')
+    return fail(500, 'server_error', 'Something went wrong. Please try again.')
+  }
+})
