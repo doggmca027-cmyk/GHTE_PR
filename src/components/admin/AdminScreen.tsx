@@ -5,9 +5,11 @@ import type { AuthSession } from '@/services/api/auth'
 import { OverviewTab } from './OverviewTab'
 import { PriceRulesTab } from './PriceRulesTab'
 import { PricingTab } from './PricingTab'
+import { ProvidersTab } from './ProvidersTab'
 import { ReconciliationTab } from './ReconciliationTab'
+import { TreasuryTab } from './TreasuryTab'
 
-type AdminTab = 'overview' | 'queue' | 'prices' | 'pricing'
+type AdminTab = 'overview' | 'queue' | 'prices' | 'pricing' | 'providers' | 'treasury'
 
 export function AdminScreen({ session }: { session: AuthSession }) {
   const [tab, setTab] = useState<AdminTab>('overview')
@@ -19,6 +21,8 @@ export function AdminScreen({ session }: { session: AuthSession }) {
     { id: 'queue', label: 'Reconciliation', badge: problems },
     { id: 'prices', label: 'Price rules' },
     { id: 'pricing', label: 'Pricing & Margins' },
+    { id: 'providers', label: 'Providers' },
+    { id: 'treasury', label: 'Treasury' },
   ]
 
   return (
@@ -50,6 +54,8 @@ export function AdminScreen({ session }: { session: AuthSession }) {
       {tab === 'queue' && <ReconciliationTab session={session} onProblemCount={onProblemCount} />}
       {tab === 'prices' && <PriceRulesTab session={session} />}
       {tab === 'pricing' && <PricingTab session={session} />}
+      {tab === 'providers' && <ProvidersTab session={session} />}
+      {tab === 'treasury' && <TreasuryTab session={session} />}
     </>
   )
 }

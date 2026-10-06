@@ -50,3 +50,27 @@ export function describeNote(note: string | null): NoteDescription {
   }
   return { title: 'Needs attention', detail: text || 'Stuck in processing without a confirmation from the provider.', refundOwed: false }
 }
+
+/** Balance relative to the alert threshold: 'low' at or below it (same rule as the monitor), 'ok' above, 'unknown' if never read. */
+export function balanceState(balance: number, threshold: number, lastSync: string | null): 'low' | 'ok' | 'unknown' {
+  if (lastSync === null) return 'unknown'
+  return balance <= threshold ? 'low' : 'ok'
+}
+
+/** Parses a non-negative amount with up to 4 decimals; null when invalid. */
+export function parseAmount(text: string): number | null {
+  const t = text.trim()
+  if (!/^\d{1,10}(\.\d{1,4})?$/.test(t)) return null
+  const n = Number(t)
+  return n <= 1_000_000_000 ? n : null
+}
+
+const TREASURY_LABELS: Record<string, string> = {
+  deposit: 'Deposit', withdrawal: 'Withdrawal', provider_topup: 'Provider top-up', fee: 'Fee', manual_adjustment: 'Manual adjustment',
+}
+export const treasuryTypeLabel = (type: string): string => TREASURY_LABELS[type] ?? type
+
+/** "+$5.00" / "-$5.00": the signed amount of a ledger row. */
+export function signedUsd(amount: number): string {
+  return `${amount < 0 ? '-' : '+'}${usd(Math.abs(amount))}`
+}

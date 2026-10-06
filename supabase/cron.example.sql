@@ -43,6 +43,24 @@ select cron.schedule(
   $$
 );
 
+-- Every minute: ping routing-enabled providers, update health_status, alert admins on Telegram when one
+-- goes down or recovers (the routing engine skips providers that are not 'healthy').
+select cron.schedule(
+  'provider-health-monitor',
+  '* * * * *',
+  $$
+  select net.http_post(
+    url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/provider-health-monitor',
+    headers := jsonb_build_object(
+                 'Content-Type', 'application/json',
+                 'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'cron_secret')
+               ),
+    body    := '{}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+
 -- Inspect / pause / remove:
 --   select * from cron.job;
 --   select * from cron.job_run_details order by start_time desc limit 20;

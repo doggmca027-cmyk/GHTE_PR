@@ -14,6 +14,10 @@ export type NotifyEvent =
   | { type: 'order_completed'; orderId: string; serviceName: string; quantity: number }
   | { type: 'order_canceled'; orderId: string; serviceName: string; quantity: number; refundAmount: number }
   | { type: 'order_partial'; orderId: string; serviceName: string; quantity: number; remains: number; refundAmount: number }
+  /** Admin alert from provider-health-monitor: a provider went down ('unavailable') or came back ('healthy'). */
+  | { type: 'provider_health'; providerName: string; status: 'unavailable' | 'healthy' }
+  /** Admin alert from provider-health-monitor: a provider's balance fell to or below its threshold. */
+  | { type: 'provider_low_balance'; providerName: string; balance: number; currency: string }
 
 /** Ukrainian for uk-*, English for everything else. */
 export function resolveLang(languageCode: string | null | undefined): NotifyLang {
@@ -37,6 +41,8 @@ export function formatUsd(amount: number): string {
   return `${units < 0 ? '-' : ''}$${whole.toLocaleString('en-US')}.${frac}`
 }
 
+/** 5.40 / -0.0054 / 1,234.50 (formatUsd without the currency symbol; the currency is printed separately). */
+const plainAmount = (n: number) => `${n < 0 ? '-' : ''}${formatUsd(Math.abs(n)).slice(1)}`
 const int = (n: number) => n.toLocaleString('en-US')
 const shortId = (id: string) => escapeHtml(id.replace(/^mock-/, '').slice(0, 8))
 const name = (n: string) => escapeHtml(clip(n.trim() || '—', 80))
@@ -53,6 +59,12 @@ const EN: { [K in NotifyEvent['type']]: Template<Extract<NotifyEvent, { type: K 
     `⚠️ <b>Order canceled</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nThe provider could not complete it. <b>${formatUsd(e.refundAmount)}</b> was refunded to your balance.`,
   order_partial: (e) =>
     `ℹ️ <b>Order partially completed</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\n${int(e.quantity - e.remains)} of ${int(e.quantity)} delivered, ${int(e.remains)} not delivered.\n<b>${formatUsd(e.refundAmount)}</b> was refunded to your balance.`,
+  provider_health: (e) =>
+    e.status === 'unavailable'
+      ? `🚨 <b>Provider ${name(e.providerName)} is UNAVAILABLE</b>\nTraffic is routed to fallback.`
+      : `✅ <b>Provider ${name(e.providerName)} is back ONLINE</b>\nRouting restored.`,
+  provider_low_balance: (e) =>
+    `⚠️ <b>Provider ${name(e.providerName)} balance is critically low:</b> ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`,
 }
 
 const UK: typeof EN = {
@@ -64,6 +76,12 @@ const UK: typeof EN = {
     `⚠️ <b>Замовлення скасовано</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nПостачальник не зміг його виконати. <b>${formatUsd(e.refundAmount)}</b> повернено на ваш баланс.`,
   order_partial: (e) =>
     `ℹ️ <b>Замовлення виконано частково</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nДоставлено ${int(e.quantity - e.remains)} з ${int(e.quantity)}, не доставлено ${int(e.remains)}.\n<b>${formatUsd(e.refundAmount)}</b> повернено на ваш баланс.`,
+  provider_health: (e) =>
+    e.status === 'unavailable'
+      ? `🚨 <b>Провайдер ${name(e.providerName)} НЕДОСТУПНИЙ</b>\nТрафік переведено на резервного.`
+      : `✅ <b>Провайдер ${name(e.providerName)} знову ONLINE</b>\nМаршрутизацію відновлено.`,
+  provider_low_balance: (e) =>
+    `⚠️ <b>Баланс провайдера ${name(e.providerName)} критично низький:</b> ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`,
 }
 
 const TEMPLATES: Record<NotifyLang, typeof EN> = { en: EN, uk: UK }

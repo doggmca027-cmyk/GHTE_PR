@@ -1,6 +1,8 @@
 import type { AuthSession } from '@/services/api/auth'
-import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderStatus, ReconciliationOrder } from '@/types/admin'
+import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderStatus, ReconciliationOrder, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
 import { createMockPricing } from './mock-pricing'
+import { createMockProviders } from './mock-providers'
+import { createMockTreasury } from './mock-treasury'
 import { metricsFromRpc } from '../../../supabase/functions/_shared/admin-metrics.ts'
 import { AdminApiError, createMockAdmin } from './mock-admin'
 import type { OrderStatus } from '@/types'
@@ -182,4 +184,84 @@ export async function setServiceMargin(session: AuthSession, input: MarginRuleIn
     return { repriced: 1 }
   }
   return callPricing<{ repriced: number }>(session, { action: 'UPDATE_RULE', serviceId: input.serviceId, type: input.type, value: input.value })
+}
+
+// ---- Provider management (admin_list_providers / admin_update_provider_config) ------------------------
+
+let mockProvidersStore: ReturnType<typeof createMockProviders> | undefined
+const mockProviders = () => (mockProvidersStore ??= createMockProviders())
+
+const HEALTH: readonly ProviderHealth[] = ['healthy', 'degraded', 'unavailable', 'disabled']
+
+export async function listProviderConfigs(session: AuthSession): Promise<ProviderConfigView[]> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockProviders().list()
+  }
+  const rows = await rpc<Record<string, unknown>[]>(session, 'admin_list_providers')
+  return rows.map((r) => ({
+    id: String(r.id), name: String(r.name), isActive: r.is_active === true, routingEnabled: r.routing_enabled === true,
+    health: HEALTH.includes(r.health_status as ProviderHealth) ? (r.health_status as ProviderHealth) : 'disabled',
+    lastHealthCheck: (r.last_health_check as string | null) ?? null, balance: num(r.provider_balance), currency: String(r.currency ?? 'USD'),
+    lastBalanceSync: (r.last_balance_sync as string | null) ?? null, lowBalanceThreshold: num(r.low_balance_threshold),
+    targetTopupBalance: num(r.target_topup_balance), lowBalanceAlerted: r.balance_alert_sent === true,
+  }))
+}
+
+export async function updateProviderConfig(session: AuthSession, id: string, patch: ProviderConfigPatch): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    mockProviders().update(id, patch)
+    return
+  }
+  await rpc(session, 'admin_update_provider_config', {
+    p_provider_id: id,
+    p_low_balance_threshold: patch.lowBalanceThreshold ?? null,
+    p_target_topup_balance: patch.targetTopupBalance ?? null,
+    p_routing_enabled: patch.routingEnabled ?? null,
+  })
+}
+
+// ---- Treasury (admin-treasury Edge Function) ---------------------------------------------------------
+
+let mockTreasuryStore: ReturnType<typeof createMockTreasury> | undefined
+const mockTreasury = () => (mockTreasuryStore ??= createMockTreasury())
+
+async function callTreasury<T>(session: AuthSession, body: Record<string, unknown>): Promise<T> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new AdminApiError('server', 'Backend is not configured.')
+  let res: Response
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/admin-treasury`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+  } catch {
+    throw new AdminApiError('network', 'Connection lost. Please try again.')
+  }
+  const data = (await res.json().catch(() => null)) as (T & { success?: boolean; message?: string }) | null
+  if (res.ok && data?.success) return data
+  if (res.status === 401 || res.status === 403) throw new AdminApiError('forbidden', 'Admin access required.')
+  if (res.status === 400) throw new AdminApiError('invalid_input', data?.message ?? 'Invalid input.')
+  if (res.status === 409) throw new AdminApiError('conflict', data?.message ?? 'Conflict.')
+  throw new AdminApiError('server', 'Something went wrong. Please try again.')
+}
+
+export async function getTreasury(session: AuthSession, beforeSeq: number | null = null): Promise<TreasuryPage> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockTreasury().page(beforeSeq)
+  }
+  const r = await callTreasury<TreasuryPage>(session, { action: 'GET', ...(beforeSeq !== null ? { beforeSeq } : {}) })
+  return { balance: num(r.balance), updatedAt: String(r.updatedAt), transactions: r.transactions as TreasuryTx[], nextBefore: r.nextBefore ?? null }
+}
+
+export async function adjustTreasury(session: AuthSession, input: TreasuryAdjustment): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    mockTreasury().adjust(input)
+    return
+  }
+  await callTreasury(session, { action: 'MANUAL_ADJUSTMENT', ...input })
 }

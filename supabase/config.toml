@@ -30,3 +30,11 @@ verify_jwt = false
 # Admin-only: authenticates itself by verifying the telegram-auth JWT (HS256, JWT_SECRET) + users.is_admin.
 [functions.admin-pricing]
 verify_jwt = false
+
+# Scheduler-only: authenticates itself with CRON_SECRET or the service role key.
+[functions.provider-health-monitor]
+verify_jwt = false
+
+# Admin-only: authenticates itself by verifying the telegram-auth JWT (HS256, JWT_SECRET) + users.is_admin.
+[functions.admin-treasury]
+verify_jwt = false

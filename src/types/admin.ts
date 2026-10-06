@@ -59,3 +59,59 @@ export interface MarginRuleInput {
   type: 'fixed' | 'percentage'
   value: number
 }
+
+export type ProviderHealth = 'healthy' | 'degraded' | 'unavailable' | 'disabled'
+
+/** A provider as shown in Admin → Providers (admin_list_providers). Never includes the API key. */
+export interface ProviderConfigView {
+  id: string
+  name: string
+  isActive: boolean
+  routingEnabled: boolean
+  health: ProviderHealth
+  lastHealthCheck: string | null
+  balance: number
+  currency: string
+  lastBalanceSync: string | null
+  lowBalanceThreshold: number
+  targetTopupBalance: number
+  /** A low-balance alert is outstanding (the balance has not been above the threshold since). */
+  lowBalanceAlerted: boolean
+}
+
+export interface ProviderConfigPatch {
+  lowBalanceThreshold?: number
+  targetTopupBalance?: number
+  routingEnabled?: boolean
+}
+
+export type TreasuryTxType = 'deposit' | 'withdrawal' | 'provider_topup' | 'fee' | 'manual_adjustment'
+
+export interface TreasuryTx {
+  id: string
+  /** Ledger order and pagination cursor. */
+  seq: number
+  type: TreasuryTxType
+  /** Signed: credits are positive, debits negative. */
+  amount: number
+  balanceAfter: number
+  description: string | null
+  referenceId: string | null
+  createdAt: string
+}
+
+export interface TreasuryPage {
+  balance: number
+  updatedAt: string
+  transactions: TreasuryTx[]
+  /** Cursor (`beforeSeq`) for the next page, or null at the end of the ledger. */
+  nextBefore: number | null
+}
+
+export interface TreasuryAdjustment {
+  /** Signed: positive adds funds, negative removes them. */
+  amount: number
+  description: string
+  /** One key per form submission; re-sending it books the movement once. */
+  idempotencyKey: string
+}

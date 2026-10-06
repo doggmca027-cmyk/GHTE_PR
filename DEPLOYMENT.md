@@ -207,7 +207,8 @@ Review prices in the app's **Admin → Price rules** and the services in the SQL
 
 ### 1.7 Schedule the workers
 
-Two jobs must run on a timer: **`sync-order-status` every minute** (progress, refunds, partial refunds, stuck orders)
+Three jobs must run on a timer: **`sync-order-status` every minute** (progress, refunds, partial refunds, stuck orders),
+**`provider-health-monitor` every minute** (pings routing-enabled providers, flips `health_status`, alerts admins on Telegram; routing fails over automatically)
 and **`sync-catalog` every 6 hours** (prices, catalogue, cached provider balance).
 
 **Option A: inside Supabase (recommended).**
