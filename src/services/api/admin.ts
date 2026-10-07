@@ -1,6 +1,7 @@
 import type { AuthSession } from '@/services/api/auth'
-import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayment, ProviderPaymentAction, ProviderPayoutInput, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, PlatformSettingsView, ReconCase, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
+import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayment, ProviderPaymentAction, ProviderPayoutInput, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, SystemHealth, PlatformSettingsView, ReconCase, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
 import { createMockPricing } from './mock-pricing'
+import { createMockObservability } from './mock-observability'
 import { createMockProviders } from './mock-providers'
 import { createMockSettings } from './mock-settings'
 import { createMockTreasury } from './mock-treasury'
@@ -450,4 +451,34 @@ export async function resolveCaseManual(session: AuthSession, caseId: string, in
     return mockAdmin().resolveCaseManual(caseId, input)
   }
   await callRecon(session, { action: 'MARK_RESOLVED', caseId, note: input.note ?? null, providerOrderId: input.providerOrderId ?? null })
+}
+
+// ---- System Health (admin-observability Edge Function) ---------------------------------------------
+
+let mockObservabilityStore: ReturnType<typeof createMockObservability> | undefined
+const mockObservability = () => (mockObservabilityStore ??= createMockObservability())
+
+/** One read-only snapshot over the last `hours` (1..24): stuck orders, queues, reconciliation, provider API health, cron pulse, alerts. */
+export async function getSystemHealth(session: AuthSession, hours = 24): Promise<SystemHealth> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockObservability().get(hours)
+  }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new AdminApiError('server', 'Backend is not configured.')
+  let res: Response
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/admin-observability`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify({ action: 'GET', hours }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+  } catch {
+    throw new AdminApiError('network', 'Connection lost. Please try again.')
+  }
+  const data = (await res.json().catch(() => null)) as { success?: boolean; health?: SystemHealth; message?: string } | null
+  if (res.ok && data?.success && data.health) return data.health
+  if (res.status === 401 || res.status === 403) throw new AdminApiError('forbidden', 'Admin access required.')
+  if (res.status === 400) throw new AdminApiError('invalid_input', data?.message ?? 'Invalid input.')
+  throw new AdminApiError('server', 'Something went wrong. Please try again.')
 }

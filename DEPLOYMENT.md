@@ -122,7 +122,7 @@ npm run check:supabase     # applies every migration to a throw-away Postgres an
 | `ALLOWED_ORIGIN` | Your app origin, e.g. `https://your-app.vercel.app` (no path, no trailing slash). Without it the functions answer any website. |
 | `TONCENTER_API_KEY` | Free key from <https://t.me/tonapibot>. Without it Toncenter allows about 1 request/second and deposit verification can be throttled. |
 
-**Optional**: `SYNC_BATCH_SIZE` (default 50), `RECONCILE_AFTER_MINUTES` (default 60), `TONCENTER_URL`,
+**Optional**: `SYNC_BATCH_SIZE` (default 50), `LOG_LEVEL` (`info` default, `warn` or `error`), `TONCENTER_URL`,
 `PROVIDER_KEY_SECRET` (only if you store provider keys AES-encrypted in `providers.api_key_encrypted`).
 
 **Injected by Supabase, do not set:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (names starting with `SUPABASE_` are rejected).
@@ -454,10 +454,15 @@ A backend change that needs a new secret must set the secret **before** merging.
 
 ## 9. Operating it
 
-* **Logs**: Dashboard → Edge Functions → *function* → Logs. Worker output lines start with `sync-order-status:` / `sync-catalog:`.
+* **Logs**: Dashboard → Edge Functions → *function* → Logs. Every line is one JSON object (`ts`, `level`, `fn`, `msg`, `correlation_id`, and
+  `userId` / `orderId` / `providerId` / `error_code` where they apply). Secrets, tokens, wallets and transaction hashes never appear in them.
+  Every response carries an `x-correlation-id` header: search the logs for that id to follow one request through the function and the
+  SMM provider call (the provider receives the same header). A caller may send its own `x-correlation-id` (8-64 characters: letters, digits, `_ . : -`).
+* **System health**: Admin → *System Health* shows stuck orders, queue depths, open reconciliation cases, provider API error rates and latency,
+  and the pulse of the scheduled jobs (alerts when the reconciliation detector or the health monitor stops, or a worker keeps failing).
 * **Orders that need a human** appear in **Admin → Reconciliation** (held in `processing` for 10+ minutes, or a refund still owed).
-  *Force refund* returns the money; *Mark resolved* needs the provider order id from the provider's panel. The worker also
-  auto-refunds anything unconfirmed after `RECONCILE_AFTER_MINUTES` (60).
+  *Force refund* returns the money; *Mark resolved* needs the provider order id from the provider's panel. Nothing is refunded automatically
+  when the outcome at the provider is unknown: it waits there for you.
 * **Provider balance** is shown (cached) in Admin → Overview. Top it up before it runs dry: an empty provider means rejected orders and automatic refunds.
 * **Price changes**: edit in Admin → Price rules; they reach customers on the next catalogue sync (≤ 6 h), or trigger it now with the `curl` from 1.6.
 * **Rolling back**: Vercel → Deployments → *Promote* a previous build. Edge Functions: `git revert` and let CI redeploy.

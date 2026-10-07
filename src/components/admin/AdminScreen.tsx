@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { haptic } from '@/lib/haptics'
 import type { AuthSession } from '@/services/api/auth'
 import { ControlCenterTab } from './ControlCenterTab'
+import { ObservabilityTab } from './ObservabilityTab'
 import { OverviewTab } from './OverviewTab'
 import { PriceRulesTab } from './PriceRulesTab'
 import { PricingTab } from './PricingTab'
@@ -10,7 +11,7 @@ import { ProvidersTab } from './ProvidersTab'
 import { ReconciliationTab } from './ReconciliationTab'
 import { TreasuryTab } from './TreasuryTab'
 
-type AdminTab = 'overview' | 'queue' | 'prices' | 'pricing' | 'providers' | 'treasury' | 'controls'
+type AdminTab = 'overview' | 'health' | 'queue' | 'prices' | 'pricing' | 'providers' | 'treasury' | 'controls'
 
 export function AdminScreen({ session }: { session: AuthSession }) {
   const [tab, setTab] = useState<AdminTab>('overview')
@@ -19,6 +20,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
 
   const tabs: { id: AdminTab; label: string; badge?: number }[] = [
     { id: 'overview', label: 'Overview' },
+    { id: 'health', label: 'System Health' },
     { id: 'queue', label: 'Reconciliation', badge: problems },
     { id: 'prices', label: 'Price rules' },
     { id: 'pricing', label: 'Pricing & Margins' },
@@ -53,6 +55,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
       </div>
 
       {tab === 'overview' && <OverviewTab session={session} onOpenQueue={() => setTab('queue')} onProblemCount={onProblemCount} />}
+      {tab === 'health' && <ObservabilityTab session={session} />}
       {tab === 'queue' && <ReconciliationTab session={session} onProblemCount={onProblemCount} onOpenPayments={() => setTab('treasury')} />}
       {tab === 'prices' && <PriceRulesTab session={session} />}
       {tab === 'pricing' && <PricingTab session={session} />}

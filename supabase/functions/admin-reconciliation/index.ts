@@ -19,7 +19,8 @@
 // Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { authenticate, corsHeaders, fail, json } from '../_shared/http.ts'
+import { authenticate, corsHeaders, fail, instrument, json } from '../_shared/http.ts'
+import { registerSecret } from '../_shared/logger.ts'
 import { executeRetry, mapReconError, parseReconRequest } from '../_shared/reconciliation.ts'
 import { OFFER_SELECT, buildCandidates, type OfferRow } from '../_shared/routing.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
@@ -47,7 +48,7 @@ const publicCase = (c: Record<string, unknown>) => {
   }
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(instrument('admin-reconciliation', async (req: Request, { log, correlationId }): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
   if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Use POST.')
 
@@ -55,12 +56,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!jwtSecret || !supabaseUrl || !serviceKey) {
-    console.error('admin-reconciliation: missing configuration')
+    log.error('missing configuration', { error_code: 'server_misconfigured' })
     return fail(500, 'server_misconfigured', 'Server is not configured.')
   }
 
   const userId = await authenticate(req, jwtSecret)
   if (!userId) return fail(401, 'unauthorized', 'Sign in again.')
+  log.bind({ userId })
 
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
   try {
@@ -91,7 +93,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (parsed.action === 'GET_CASES') {
       // Catch orders that became stuck purely with time, then list.
       const synced = await db.rpc('sync_reconciliation_cases')
-      if (synced.error) console.error('admin-reconciliation: sync failed', synced.error.message)
+      if (synced.error) log.error('case sync failed', { err: synced.error, error_code: 'sync_failed' })
       const { data, error } = await db.rpc('list_reconciliation_cases')
       if (error) throw new Error(`list_reconciliation_cases: ${error.message}`)
       return json({ success: true, cases: ((data ?? []) as Record<string, unknown>[]).map(publicCase) })
@@ -114,7 +116,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const release = async (note: string) => {
       const { error } = await db.rpc('release_case_retry', { p_case_id: parsed.caseId, p_note: note })
-      if (error) console.error('admin-reconciliation: release failed', error.message)
+      if (error) log.error('release of the retry marker failed', { err: error, error_code: 'release_failed', caseId: parsed.caseId })
     }
 
     // The SAME offer the order was charged for: an order is never silently re-routed.
@@ -135,13 +137,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     try {
       apiKey = await resolveProviderApiKey({ name: details.providerName, api_key_encrypted: details.apiKeyEncrypted }, Deno.env)
     } catch (e) {
-      console.error('admin-reconciliation: provider key could not be decrypted', e)
+      log.error('provider key could not be decrypted', { err: e, error_code: 'key_decrypt_failed', providerId: provider.id })
     }
     if (!apiKey && Deno.env.get('MOCK_MODE') !== 'true') {
       await release('retry could not start: no provider API key configured')
       return fail(503, 'provider_unavailable', 'The provider is not configured, so the order cannot be retried right now.')
     }
-    const adapter = createSMMv2Adapter({ id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey }, { MOCK_MODE: Deno.env.get('MOCK_MODE') })
+    registerSecret(apiKey)
+    const adapter = createSMMv2Adapter({ id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey, correlationId, logger: log }, { MOCK_MODE: Deno.env.get('MOCK_MODE') })
 
     const outcome = await executeRetry(
       { externalServiceId: details.externalServiceId, link: job.target_url, quantity: job.quantity },
@@ -158,7 +161,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (outcome.kind === 'rejected') return fail(422, 'provider_rejected', outcome.message)
     return fail(202, 'outcome_unknown', outcome.message)
   } catch (e) {
-    console.error('admin-reconciliation failed', e instanceof Error ? e.message : 'unknown')
+    log.error('request failed', { err: e, error_code: 'server_error' })
     return fail(500, 'server_error', 'Something went wrong. Please try again.')
   }
-})
+}))

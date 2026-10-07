@@ -11,6 +11,7 @@ import type {
 } from './types.ts'
 import { DEFAULT_SMM_V2_CAPABILITIES, type ProviderCapabilities } from './types.ts'
 import type { BatchStatusEntry, OrderStatus } from './types.ts'
+import { CORRELATION_HEADER, isCorrelationId, type Logger } from './logger.ts'
 
 export type SMMErrorKind =
   | 'misconfigured'
@@ -71,6 +72,10 @@ export interface SMMv2AdapterConfig {
   now?: () => number
   /** Overrides for what this panel is known to support (defaults: DEFAULT_SMM_V2_CAPABILITIES). */
   capabilities?: Partial<ProviderCapabilities>
+  /** Sent to the panel as `x-correlation-id` on every call, so a request can be followed across systems. Malformed ids are not sent. */
+  correlationId?: string
+  /** Receives one warn line per failed provider call (provider, action, error kind/code, status, latency). Never the key or the body. */
+  logger?: Logger
 }
 
 /** Builds an adapter honouring MOCK_MODE from the given env map (e.g. Deno.env.toObject()). */
@@ -194,6 +199,8 @@ export class SMMv2Adapter implements ISMMProviderAdapter {
   private readonly fetchImpl: typeof fetch
   private readonly now: () => number
   private readonly capabilities: ProviderCapabilities
+  private readonly correlationId: string | undefined
+  private readonly logger: Logger | undefined
   private mockOrders = new Map<string, number>()
   private mockSeq = 100000
 
@@ -207,6 +214,8 @@ export class SMMv2Adapter implements ISMMProviderAdapter {
     this.now = config.now ?? Date.now
     this.capabilities = { ...DEFAULT_SMM_V2_CAPABILITIES, ...config.capabilities }
     this.isMock = config.mockMode === true || this.apiKey === ''
+    this.correlationId = isCorrelationId(config.correlationId) ? config.correlationId : undefined
+    this.logger = config.logger
   }
 
   /** Static: SMM v2 panels differ on refill / cancel / drip-feed, so those stay false unless the provider row says otherwise. */
@@ -285,8 +294,34 @@ export class SMMv2Adapter implements ISMMProviderAdapter {
     return parseBatchStatusResponse(await this.call('status', { orders: orderIds.join(',') }), orderIds)
   }
 
-  /** One POST to the panel. Normalises every failure into SMMProviderError. */
+  /** One POST to the panel; a failure is logged (sanitized, with the correlation id) and rethrown unchanged. */
   private async call(
+    action: string,
+    params: Record<string, string | number | undefined>,
+    stateChanging = false,
+  ): Promise<unknown> {
+    const started = this.now()
+    try {
+      return await this.rawCall(action, params, stateChanging)
+    } catch (e) {
+      if (e instanceof SMMProviderError) {
+        this.logger?.warn('provider call failed', {
+          providerId: this.id,
+          provider: this.name,
+          action,
+          error_kind: e.kind,
+          error_code: e.code,
+          http_status: e.httpStatus,
+          ambiguous: e.ambiguous,
+          duration_ms: this.now() - started,
+        })
+      }
+      throw e
+    }
+  }
+
+  /** One POST to the panel. Normalises every failure into SMMProviderError. */
+  private async rawCall(
     action: string,
     params: Record<string, string | number | undefined>,
     stateChanging = false,
@@ -303,7 +338,11 @@ export class SMMv2Adapter implements ISMMProviderAdapter {
     try {
       const res = await this.fetchImpl(this.apiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+          ...(this.correlationId ? { [CORRELATION_HEADER]: this.correlationId } : {}),
+        },
         body,
         signal: controller.signal,
       })

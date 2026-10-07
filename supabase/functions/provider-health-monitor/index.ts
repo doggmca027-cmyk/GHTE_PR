@@ -12,6 +12,9 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { isAuthorized } from '../_shared/catalog-sync.ts'
+import { recordHeartbeat } from '../_shared/heartbeat.ts'
+import { instrument } from '../_shared/http.ts'
+import { registerSecret } from '../_shared/logger.ts'
 import { PING_TIMEOUT_MS, isBalanceParseError, runHealthChecks, type MonitoredProvider } from '../_shared/health-monitor.ts'
 import { createNotifier } from '../_shared/notify-db.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
@@ -29,19 +32,20 @@ interface ProviderRow extends MonitoredProvider {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(instrument('provider-health-monitor', async (req: Request, { log, correlationId }): Promise<Response> => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !serviceKey) {
-    console.error('provider-health-monitor: missing Supabase configuration')
+    log.error('missing Supabase configuration', { error_code: 'server_misconfigured' })
     return json({ error: 'server_misconfigured' }, 500)
   }
   if (!isAuthorized(req.headers, { cronSecret: Deno.env.get('CRON_SECRET'), serviceRoleKey: serviceKey })) {
     return json({ error: 'unauthorized' }, 401)
   }
 
+  const started = Date.now()
   // service_role: bypasses RLS for the provider updates and the log.
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
   const notify = createNotifier(db, Deno.env)
@@ -66,8 +70,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const apiKey = await resolveProviderApiKey({ name: p.name, api_key_encrypted: p.apiKeyEncrypted }, Deno.env)
         // Without a key the adapter would silently run in mock mode and report "healthy": that is a lie in production.
         if (!apiKey && !mockMode) throw new SMMProviderError('misconfigured', 'no API key configured')
+        registerSecret(apiKey)
         const adapter = createSMMv2Adapter(
-          { id: p.id, name: p.name, apiUrl: p.apiUrl, apiKey, timeoutMs: PING_TIMEOUT_MS },
+          { id: p.id, name: p.name, apiUrl: p.apiUrl, apiKey, timeoutMs: PING_TIMEOUT_MS, correlationId, logger: log },
           { MOCK_MODE: Deno.env.get('MOCK_MODE') },
         )
         try {
@@ -148,9 +153,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
           notify(a.id, { type: 'provider_health', providerName: p.name, status }, `provider-health:${p.id}:${status}:${checkedAt}`)))
       },
     })
+    for (const p of report.providers) {
+      if (p.to !== p.from || p.errorKind) log.warn('provider health check', { providerId: p.providerId, provider: p.name, from: p.from, to: p.to, error_code: p.errorKind })
+    }
+    log.info('health run complete', { checked: report.checked, healthy: report.healthy, unavailable: report.unavailable, inconclusive: report.inconclusive, errors: report.errors, alerts: report.alerts })
+    await recordHeartbeat(db, 'provider-health-monitor', { ok: true, startedAt: started }, log)
     return json({ success: true, ...report, providers: report.providers.map(({ name, from, to, alert, balanceAlert, errorKind }) => ({ name, from, to, alert, balanceAlert, errorKind })) })
   } catch (e) {
-    console.error('provider-health-monitor failed', e instanceof Error ? e.message : 'unknown')
+    log.error('run failed', { err: e, error_code: 'run_failed' })
+    await recordHeartbeat(db, 'provider-health-monitor', { ok: false, startedAt: started, error: e }, log)
     return json({ error: 'server_error' }, 500)
   }
-})
+}))

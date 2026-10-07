@@ -6,7 +6,8 @@
 //
 //   Scenarios: A wallet race, B provider balance reservation race, C idempotency race,
 //              D provider payment daily limit race, E treasury minimum reserve race,
-//              F reconciliation detector race (pg_cron and admins running sync_reconciliation_cases at once).
+//              F reconciliation detector race (pg_cron and admins running sync_reconciliation_cases at once),
+//              G worker heartbeat race (overlapping worker runs reporting at once; no run may be lost).
 //
 //   CONCURRENCY_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres npm run test:concurrency
 //       Runs against a LOCAL Supabase instead (`npx supabase start`; migrations are applied there by the CLI).
@@ -375,6 +376,30 @@ async function main() {
     check('cases ever created for these payments', casesF.rows[0].total, 6)
     check('cases opened, summed over all 30 runs', rF.results.reduce((s, r) => s + r.payments.opened, 0), 6)
     check('Rule B (limbo) / Rule A (confirmed) reasons', [casesF.rows[0].limbo, casesF.rows[0].credit], [3, 3])
+
+    // ---- G. Worker heartbeat race ----------------------------------------------------------------
+    console.log('\nG. Heartbeat race: 40 overlapping worker runs (30 ok, 10 failed) report at once; the health snapshot is read meanwhile')
+    const worker = `race-worker-${randomUUID().slice(0, 8)}`
+    const clientsG = await Promise.all(Array.from({ length: 41 }, () => pool.connect()))
+    const settledG = await Promise.allSettled(clientsG.map(async (c, i) => {
+      try {
+        await c.query('begin')
+        if (i < 40) await c.query('select record_worker_heartbeat($1, $2, $3, $4)', [worker, i % 4 !== 0, i % 4 === 0 ? 'race failure' : null, 100 + i])
+        else await c.query('select get_system_health(24)') // a reader never blocks nor is blocked
+        await c.query('select pg_sleep($1)', [HOLD_MS / 1000])
+        await c.query('commit')
+      } catch (e) {
+        await c.query('rollback').catch(() => {})
+        throw e
+      }
+    }))
+    clientsG.forEach((c) => c.release())
+    const hb = await admin.query<{ runs: string; failures: string; ok: boolean; err: boolean }>(
+      `select runs::text, failures::text, last_success_at is not null ok, last_error_at is not null err from worker_heartbeats where worker = $1`, [worker])
+    check('heartbeat calls that failed (deadlock, unique violation)', settledG.filter((r) => r.status === 'rejected').length, 0)
+    check('runs counted, none lost', num(hb.rows[0].runs), 40)
+    check('failures counted', num(hb.rows[0].failures), 10)
+    check('last success and last error both kept', [hb.rows[0].ok, hb.rows[0].err], [true, true])
   } finally {
     await pool.end().catch(() => {})
     await sampler.end().catch(() => {})

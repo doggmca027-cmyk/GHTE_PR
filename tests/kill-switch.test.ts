@@ -143,8 +143,8 @@ describe('enforcement inside the Edge Functions (source order)', () => {
   })
 
   it('the settings are fetched in parallel with an existing lookup (no extra round trip)', () => {
-    expect(read('supabase/functions/place-order/index.ts')).toMatch(/Promise\.all\(\[\s*loadPlatformSettings\(db\),\s*db\.from\('services'\)/)
-    expect(read('supabase/functions/create-deposit/index.ts')).toMatch(/Promise\.all\(\[loadPlatformSettings\(db\), getTonUsdRate\(\)\]\)/)
+    expect(read('supabase/functions/place-order/index.ts')).toMatch(/Promise\.all\(\[\s*loadPlatformSettings\(db, log\),\s*db\.from\('services'\)/)
+    expect(read('supabase/functions/create-deposit/index.ts')).toMatch(/Promise\.all\(\[loadPlatformSettings\(db, log\), getTonUsdRate\(log\)\]\)/)
   })
 
   it('verify-deposit is deliberately NOT gated: paid deposits must still be credited', () => {

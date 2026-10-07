@@ -12,13 +12,13 @@
 // Secrets: JWT_SECRET. Auto-injected: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { authenticate, corsHeaders, fail, json } from '../_shared/http.ts'
+import { authenticate, corsHeaders, fail, instrument, json } from '../_shared/http.ts'
 import { loadPlatformSettings, parseSettingsRequest } from '../_shared/platform-settings.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = SupabaseClient<any, 'public', any>
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(instrument('admin-settings', async (req: Request, { log }): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
   if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Use POST.')
 
@@ -27,12 +27,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!jwtSecret || !supabaseUrl || !anonKey || !serviceKey) {
-    console.error('admin-settings: missing configuration')
+    log.error('missing configuration', { error_code: 'server_misconfigured' })
     return fail(500, 'server_misconfigured', 'Server is not configured.')
   }
 
   const userId = await authenticate(req, jwtSecret)
   if (!userId) return fail(401, 'unauthorized', 'Sign in again.')
+  log.bind({ userId })
 
   try {
     const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
@@ -66,7 +67,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (!settings) throw new Error('platform_settings could not be read')
     return json({ success: true, settings })
   } catch (e) {
-    console.error('admin-settings failed', e instanceof Error ? e.message : 'unknown')
+    log.error('request failed', { err: e, error_code: 'server_error' })
     return fail(500, 'server_error', 'Something went wrong. Please try again.')
   }
-})
+}))

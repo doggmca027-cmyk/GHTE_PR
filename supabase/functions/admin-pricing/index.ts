@@ -11,7 +11,7 @@
 // Secrets: JWT_SECRET. Auto-injected: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { authenticate, corsHeaders, fail, json, readJson } from '../_shared/http.ts'
+import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
 import { affectedServices, parsePricingRequest, repriceServices, type RepriceService } from '../_shared/admin-pricing.ts'
 import type { Platform, PriceRule } from '../_shared/types.ts'
 
@@ -33,7 +33,7 @@ const toRule = (r: Record<string, unknown>): PriceRule => ({
   max_rate: r.max_rate == null ? null : Number(r.max_rate),
 })
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(instrument('admin-pricing', async (req: Request, { log }): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
   if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Use POST.')
 
@@ -42,12 +42,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!jwtSecret || !supabaseUrl || !anonKey || !serviceKey) {
-    console.error('admin-pricing: missing configuration')
+    log.error('missing configuration', { error_code: 'server_misconfigured' })
     return fail(500, 'server_misconfigured', 'Server is not configured.')
   }
 
   const userId = await authenticate(req, jwtSecret)
   if (!userId) return fail(401, 'unauthorized', 'Sign in again.')
+  log.bind({ userId })
 
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
   try {
@@ -118,7 +119,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     return json({ success: true, ruleId, repriced: changes.length })
   } catch (e) {
-    console.error('admin-pricing failed', e)
+    log.error('request failed', { err: e, error_code: 'server_error' })
     return fail(500, 'server_error', 'Something went wrong. Please try again.')
   }
-})
+}))

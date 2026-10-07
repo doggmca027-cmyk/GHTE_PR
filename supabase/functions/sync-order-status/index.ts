@@ -20,6 +20,9 @@ import {
   type SyncOrder,
   type SyncPorts,
 } from '../_shared/order-sync.ts'
+import { recordHeartbeat } from '../_shared/heartbeat.ts'
+import { instrument } from '../_shared/http.ts'
+import { registerSecret, type Logger } from '../_shared/logger.ts'
 import { createNotifier } from '../_shared/notify-db.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
 import type { NotifyEvent } from '../_shared/telegram-notify.ts'
@@ -77,7 +80,7 @@ function buildPorts(db: Db, onEvent: (e: SyncEvent) => void): SyncPorts {
 }
 
 /** Turns sync events into Telegram messages. Best effort: nothing in here can throw. */
-async function deliverNotifications(db: Db, events: SyncEvent[], started: number): Promise<Record<string, number>> {
+async function deliverNotifications(db: Db, events: SyncEvent[], started: number, log: Logger): Promise<Record<string, number>> {
   const counts: Record<string, number> = {}
   if (events.length === 0) return counts
   try {
@@ -101,18 +104,18 @@ async function deliverNotifications(db: Db, events: SyncEvent[], started: number
       for (const r of results) counts[r] = (counts[r] ?? 0) + 1
     }
   } catch (e) {
-    console.warn('sync-order-status: notification delivery failed', e instanceof Error ? e.name : 'unknown')
+    log.warn('notification delivery failed', { err: e, error_code: 'notify_failed' })
   }
   return counts
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlationId }): Promise<Response> => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !serviceKey) {
-    console.error('sync-order-status: missing Supabase configuration')
+    log.error('missing Supabase configuration', { error_code: 'server_misconfigured' })
     return json({ error: 'server_misconfigured' }, 500)
   }
   if (!isAuthorized(req.headers, { cronSecret: Deno.env.get('CRON_SECRET'), serviceRoleKey: serviceKey })) {
@@ -137,7 +140,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     .order('updated_at', { ascending: true })
     .limit(batchSize)
   if (error) {
-    console.error('sync-order-status: batch query failed', error)
+    log.error('batch query failed', { err: error, error_code: 'batch_query_failed' })
+    await recordHeartbeat(db, 'sync-order-status', { ok: false, startedAt: started, error }, log)
     return json({ error: 'internal_error' }, 500)
   }
 
@@ -163,7 +167,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .select('id, name, api_url, api_key_encrypted')
       .in('id', [...byProvider.keys()])
     if (pErr) {
-      console.error('sync-order-status: provider query failed', pErr)
+      log.error('provider query failed', { err: pErr, error_code: 'provider_query_failed' })
+      await recordHeartbeat(db, 'sync-order-status', { ok: false, startedAt: started, error: pErr }, log)
       return json({ error: 'internal_error' }, 500)
     }
 
@@ -177,7 +182,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       try {
         apiKey = await resolveProviderApiKey(provider, Deno.env)
       } catch (e) {
-        console.error(`sync-order-status: cannot decrypt key for ${provider.name}`, e)
+        log.error('cannot decrypt the provider key', { err: e, providerId: provider.id, error_code: 'key_decrypt_failed' })
       }
       if (!apiKey && !mockMode) {
         // Rotate these to the back of the queue so one unconfigured panel cannot starve the others.
@@ -185,8 +190,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
         skippedProviders.push({ provider: provider.name, reason: 'no API key configured' })
         continue
       }
+      registerSecret(apiKey)
       const adapter = createSMMv2Adapter(
-        { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey },
+        { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log },
         { MOCK_MODE: Deno.env.get('MOCK_MODE') },
       )
       mergeSyncStats(stats, await syncProviderOrders(batch, adapter, ports))
@@ -197,11 +203,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
   for (const o of orders.filter((o) => !o.provider_id)) await ports.touch(o.id)
 
   // Telegram messages: strictly after the database work, never able to affect it.
-  const notified = await deliverNotifications(db, events, started)
+  const notified = await deliverNotifications(db, events, started, log)
 
-  console.log(
-    `sync-order-status: checked=${stats.checked} completed=${stats.completed} progressed=${stats.progressed} ` +
-      `canceled=${stats.canceledRefunded} partial=${stats.partial} held=${stats.heldForReconciliation} errors=${stats.errors.length}`,
-  )
+  log.info('order sync complete', {
+    checked: stats.checked, completed: stats.completed, progressed: stats.progressed, canceled: stats.canceledRefunded,
+    partial: stats.partial, held: stats.heldForReconciliation, errors: stats.errors.length, skippedProviders: skippedProviders.length,
+  })
+  await recordHeartbeat(db, 'sync-order-status', { ok: true, startedAt: started }, log)
   return json({ ...stats, notifications: notified, partialRefunded: stats.partialRefundedUnits / 10_000, skippedProviders, durationMs: Date.now() - started })
-})
+}))

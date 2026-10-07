@@ -10,7 +10,7 @@
 //          TON_NETWORK, TONCENTER_API_KEY (optional, higher rate limit), TONCENTER_URL (optional override).
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { authenticate, corsHeaders, fail, json, readJson } from '../_shared/http.ts'
+import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
 import { fireAndForget } from '../_shared/telegram-notify.ts'
 import { createNotifier } from '../_shared/notify-db.ts'
 import { fetchRecentTransfers } from '../_shared/ton.ts'
@@ -18,7 +18,7 @@ import { verifyDeposit } from '../_shared/deposit-verify.ts'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(instrument('verify-deposit', async (req: Request, { log }): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
   if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Method not allowed')
 
@@ -27,12 +27,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const recipient = Deno.env.get('TON_RECIPIENT_ADDRESS')
   if (!jwtSecret || !supabaseUrl || !serviceKey || !recipient) {
-    console.error('verify-deposit: missing environment configuration')
+    log.error('missing environment configuration', { error_code: 'server_misconfigured' })
     return fail(500, 'server_misconfigured', 'Server is not configured.')
   }
 
   const userId = await authenticate(req, jwtSecret)
   if (!userId) return fail(401, 'unauthorized', 'Please reopen the app and try again.')
+  log.bind({ userId })
 
   const body = (await readJson(req, 16_384)) as { depositId?: unknown; txHash?: unknown; boc?: unknown } | null
   if (!body || typeof body.depositId !== 'string' || !UUID_RE.test(body.depositId)) {
@@ -52,7 +53,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     .eq('user_id', userId)
     .maybeSingle()
   if (error) {
-    console.error('verify-deposit: lookup failed', error)
+    log.error('deposit lookup failed', { err: error, error_code: 'lookup_failed', depositId: body.depositId })
     return fail(500, 'internal_error', 'Something went wrong. Please try again.')
   }
   if (!deposit) return fail(404, 'not_found', 'Deposit not found.')
@@ -97,13 +98,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
         if (rpcError) throw new Error(rpcError.message)
       },
       async flagIssue(depositId, reason) {
-        console.warn(`verify-deposit: deposit ${depositId} flagged for reconciliation: ${reason}`)
+        log.warn('deposit flagged for reconciliation', { depositId, reason, error_code: 'deposit_flagged' })
         const { error: flagError } = await db.rpc('flag_deposit_issue', { p_deposit_id: depositId, p_reason: reason })
-        if (flagError) console.error('verify-deposit: could not flag deposit', flagError.message)
+        if (flagError) log.error('could not flag deposit', { err: flagError, error_code: 'flag_failed', depositId })
       },
     })
   } catch (e) {
-    console.error('verify-deposit: verification failed', e)
+    log.error('verification failed', { err: e, error_code: 'verification_failed', depositId: deposit.id })
     return fail(500, 'internal_error', 'Something went wrong. Please try again.')
   }
 
@@ -112,11 +113,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json({ success: true, status: 'pending', message: 'Waiting for the transaction to appear on the TON network.' }, 202)
   }
   if (outcome.kind === 'rejected') {
-    if (outcome.error === 'server_misconfigured') console.error('verify-deposit: deposit recipient does not match TON_RECIPIENT_ADDRESS', deposit.id)
+    if (outcome.error === 'server_misconfigured') log.error('deposit recipient does not match TON_RECIPIENT_ADDRESS', { depositId: deposit.id, error_code: 'recipient_mismatch' })
+    else log.info('deposit not credited', { depositId: deposit.id, error_code: outcome.error })
     return fail(outcome.httpStatus, outcome.error, outcome.message, outcome.extra ?? {})
   }
 
+  log.info('deposit credited', { depositId: deposit.id, asset: deposit.asset })
   const wallet = await walletOf()
   notifyCredited(wallet?.balance)
   return json({ success: true, status: 'completed', newBalance: wallet?.balance, wallet })
-})
+}))

@@ -10,6 +10,9 @@
 // Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { recordHeartbeat } from '../_shared/heartbeat.ts'
+import { instrument } from '../_shared/http.ts'
+import { registerSecret, type Logger } from '../_shared/logger.ts'
 import { createSMMv2Adapter } from '../_shared/smm-v2-adapter.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
 import {
@@ -73,7 +76,7 @@ async function fetchAll<T>(
   }
 }
 
-async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[]): Promise<ProviderSyncReport> {
+async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[], log: Logger, correlationId: string): Promise<ProviderSyncReport> {
   const report = emptyProviderReport(provider.name)
   const mockMode = Deno.env.get('MOCK_MODE') === 'true'
   const apiKey = await resolveProviderApiKey(provider, Deno.env)
@@ -83,8 +86,9 @@ async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[]): 
     return report
   }
 
+  registerSecret(apiKey)
   const adapter = createSMMv2Adapter(
-    { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey },
+    { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log },
     { MOCK_MODE: Deno.env.get('MOCK_MODE') },
   )
 
@@ -104,7 +108,7 @@ async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[]): 
     const { balance } = await adapter.getBalance()
     await db.from('providers').update({ balance, balance_updated_at: new Date().toISOString() }).eq('id', provider.id)
   } catch (e) {
-    console.warn(`sync-catalog: could not refresh balance for ${provider.name}`, e instanceof Error ? e.name : 'unknown')
+    log.warn('could not refresh the provider balance', { err: e, providerId: provider.id, error_code: 'balance_refresh_failed' })
   }
 
   // 2. Diff provider_services.
@@ -127,7 +131,7 @@ async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[]): 
       must(await db.rpc('flag_catalog_anomaly', { p_provider_service_id: a.providerServiceId, p_reason: a.reason, p_observed: a.observed }), 'flag catalog anomaly')
     }
     report.anomalies = anomalies.length
-    console.warn(`sync-catalog: ${provider.name}: ${anomalies.length} service(s) held back as anomalies`)
+    log.warn('services held back as catalog anomalies', { providerId: provider.id, count: anomalies.length, error_code: 'catalog_anomaly' })
   }
 
   const activeBefore = existingPS.filter((e) => e.is_active).length
@@ -234,13 +238,13 @@ async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[]): 
   return report
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId }): Promise<Response> => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !serviceKey) {
-    console.error('sync-catalog: missing Supabase configuration')
+    log.error('missing Supabase configuration', { error_code: 'server_misconfigured' })
     return json({ error: 'server_misconfigured' }, 500)
   }
   if (!isAuthorized(req.headers, { cronSecret: Deno.env.get('CRON_SECRET'), serviceRoleKey: serviceKey })) {
@@ -253,6 +257,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (typeof body?.providerId === 'string') onlyProvider = body.providerId
   } catch { /* empty body is fine */ }
 
+  const started = Date.now()
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
   const reports: ProviderSyncReport[] = []
   try {
@@ -272,9 +277,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     for (const provider of providers) {
       try {
-        reports.push(await syncProvider(db, provider, rules))
+        reports.push(await syncProvider(db, provider, rules, log, correlationId))
       } catch (e) {
-        console.error(`sync-catalog: provider ${provider.name} failed`, e)
+        log.error('provider sync failed', { err: e, providerId: provider.id, error_code: 'provider_sync_failed' })
         const failed = emptyProviderReport(provider.name)
         failed.status = 'failed'
         failed.error = e instanceof Error ? e.message : 'unknown error'
@@ -282,9 +287,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
   } catch (e) {
-    console.error('sync-catalog: aborted', e)
+    log.error('catalog sync aborted', { err: e, error_code: 'run_failed' })
+    await recordHeartbeat(db, 'sync-catalog', { ok: false, startedAt: started, error: e }, log)
     return json({ error: 'internal_error' }, 500)
   }
 
+  log.info('catalog sync complete', { providers: reports.length, failed: reports.filter((r) => r.status === 'failed').length })
+  await recordHeartbeat(db, 'sync-catalog', { ok: true, startedAt: started }, log)
   return json(summarize(reports))
-})
+}))

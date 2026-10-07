@@ -6,6 +6,8 @@
 //   * maintenance_mode blocks everything that starts new money flows (orders and deposits).
 //   * Fail closed: if the settings cannot be read (database error, missing or malformed row) the switch is treated as
 //     OFF. A health check on one tiny row failing means the database is not in a state to take money anyway.
+import { createLogger, newCorrelationId, type Logger } from './logger.ts'
+
 import { ServiceUnavailableError } from './routing.ts'
 
 export interface PlatformSettings {
@@ -43,7 +45,7 @@ export function assertSwitchOn(settings: PlatformSettings | null, which: KillSwi
 type DbLike = { from(table: string): any }
 
 /** One single-row read by primary key. Returns null on any failure (callers fail closed through assertSwitchOn). */
-export async function loadPlatformSettings(db: DbLike): Promise<PlatformSettings | null> {
+export async function loadPlatformSettings(db: DbLike, log: Pick<Logger, 'error'> = createLogger({ fn: 'platform-settings', correlationId: newCorrelationId() })): Promise<PlatformSettings | null> {
   try {
     const { data, error } = await db
       .from('platform_settings')
@@ -51,12 +53,12 @@ export async function loadPlatformSettings(db: DbLike): Promise<PlatformSettings
       .eq('id', 1)
       .maybeSingle()
     if (error) {
-      console.error('platform_settings read failed', error.message ?? error)
+      log.error('platform_settings read failed', { err: error, error_code: 'settings_unreadable' })
       return null
     }
     return settingsFromRow(data)
   } catch (e) {
-    console.error('platform_settings read failed', e instanceof Error ? e.message : 'unknown')
+    log.error('platform_settings read failed', { err: e, error_code: 'settings_unreadable' })
     return null
   }
 }

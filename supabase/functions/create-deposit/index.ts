@@ -10,9 +10,10 @@
 //          MOCK_MODE (dev only: allows a fixed fallback rate), TON_USD_FALLBACK_RATE (dev only).
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import type { Logger } from '../_shared/logger.ts'
 import { ServiceUnavailableError } from '../_shared/routing.ts'
 import { assertSwitchOn, loadPlatformSettings } from '../_shared/platform-settings.ts'
-import { authenticate, corsHeaders, fail, json, readJson } from '../_shared/http.ts'
+import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
 import {
   DEPOSIT_VALIDITY_SECONDS,
   MAX_PENDING_DEPOSITS,
@@ -29,7 +30,7 @@ const RATE_CACHE_MS = 60_000
 let cachedRate: { rate: number; at: number } | null = null
 
 /** Live TON/USD. Production never quotes from a constant: no fresh rate means no quote. */
-async function getTonUsdRate(): Promise<number | null> {
+async function getTonUsdRate(log: Logger): Promise<number | null> {
   if (cachedRate && Date.now() - cachedRate.at < RATE_CACHE_MS) return cachedRate.rate
   try {
     const res = await fetch(RATE_URL, { signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } })
@@ -41,14 +42,14 @@ async function getTonUsdRate(): Promise<number | null> {
       }
     }
   } catch (e) {
-    console.error('create-deposit: rate fetch failed', e)
+    log.error('TON rate fetch failed', { err: e, error_code: 'rate_fetch_failed' })
   }
   if (Deno.env.get('MOCK_MODE') === 'true') return Number(Deno.env.get('TON_USD_FALLBACK_RATE') ?? '5')
   // A recent (< 10 min) cached value is acceptable if the feed hiccups; anything older is not.
   return cachedRate && Date.now() - cachedRate.at < 10 * 60_000 ? cachedRate.rate : null
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(instrument('create-deposit', async (req: Request, { log }): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
   if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Method not allowed')
 
@@ -58,19 +59,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const recipient = Deno.env.get('TON_RECIPIENT_ADDRESS')
   const network = Deno.env.get('TON_NETWORK') === 'testnet' ? 'testnet' : 'mainnet'
   if (!jwtSecret || !supabaseUrl || !serviceKey) {
-    console.error('create-deposit: missing environment configuration')
+    log.error('missing environment configuration', { error_code: 'server_misconfigured' })
     return fail(500, 'server_misconfigured', 'Server is not configured.')
   }
   try {
     if (!recipient) throw new Error('missing')
     parseTonAddress(recipient)
   } catch {
-    console.error('create-deposit: TON_RECIPIENT_ADDRESS is missing or invalid')
+    log.error('TON_RECIPIENT_ADDRESS is missing or invalid', { error_code: 'deposits_unavailable' })
     return fail(503, 'deposits_unavailable', 'Deposits are temporarily unavailable.')
   }
 
   const userId = await authenticate(req, jwtSecret)
   if (!userId) return fail(401, 'unauthorized', 'Please reopen the app and try again.')
+  log.bind({ userId })
 
   const body = (await readJson(req)) as { amountUsd?: unknown; asset?: unknown; quoteOnly?: unknown } | null
   if (!body || typeof body !== 'object') return fail(400, 'invalid_input', 'Request body must be valid JSON.')
@@ -85,7 +87,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // Kill switch: no quote and no deposit intent while payments are paused. Read in parallel with the rate fetch (no added
   // latency) and checked before anything is written. Fails closed. verify-deposit is NOT gated: paid deposits must be credited.
   const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
-  const [settings, rate] = await Promise.all([loadPlatformSettings(db), getTonUsdRate()])
+  const [settings, rate] = await Promise.all([loadPlatformSettings(db, log), getTonUsdRate(log)])
   try {
     assertSwitchOn(settings, 'payments')
   } catch (e) {
@@ -141,7 +143,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .single()
     if (error?.code === '23505') continue // memo collision: astronomically unlikely, retry with a new one
     if (error || !data) {
-      console.error('create-deposit: insert failed', error)
+      log.error('deposit insert failed', { err: error, error_code: 'deposit_insert_failed' })
       return fail(500, 'internal_error', 'Something went wrong. Please try again.')
     }
     return json({
@@ -154,4 +156,4 @@ Deno.serve(async (req: Request): Promise<Response> => {
     })
   }
   return fail(500, 'internal_error', 'Something went wrong. Please try again.')
-})
+}))

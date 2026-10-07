@@ -3,6 +3,7 @@ import type { PaymentView } from '../../supabase/functions/_shared/admin-treasur
 
 export type { AdminMetrics } from '../../supabase/functions/_shared/admin-metrics.ts'
 export type { ProfitAnalytics } from '../../supabase/functions/_shared/admin-analytics.ts'
+export type { AlertSeverity, CronPulse, CronState, HealthAlert, OverallStatus, ProviderPulse, SystemHealth } from '../../supabase/functions/_shared/observability.ts'
 
 export interface ProviderStatus {
   id: string

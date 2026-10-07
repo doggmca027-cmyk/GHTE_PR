@@ -23,7 +23,7 @@
 // Secrets: JWT_SECRET. Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { authenticate, corsHeaders, fail, json, readJson } from '../_shared/http.ts'
+import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
 import { mapTreasuryError, parseTreasuryRequest, paymentView } from '../_shared/admin-treasury.ts'
 import { confirmProviderPayment, executeProviderPayment, mockBroadcastToBlockchain, type PaymentInstruction, type PaymentPorts } from '../_shared/provider-payment-flow.ts'
 
@@ -37,7 +37,7 @@ const publicTx = (r: Record<string, unknown>) => ({
   description: (r.description as string | null) ?? null, referenceId: (r.reference_id as string | null) ?? null, createdAt: String(r.created_at),
 })
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(instrument('admin-treasury', async (req: Request, { log }): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
   if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Use POST.')
 
@@ -45,12 +45,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!jwtSecret || !supabaseUrl || !serviceKey) {
-    console.error('admin-treasury: missing configuration')
+    log.error('missing configuration', { error_code: 'server_misconfigured' })
     return fail(500, 'server_misconfigured', 'Server is not configured.')
   }
 
   const userId = await authenticate(req, jwtSecret)
   if (!userId) return fail(401, 'unauthorized', 'Sign in again.')
+  log.bind({ userId })
 
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
   try {
@@ -154,6 +155,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
+    if (parsed.action !== 'GET') return fail(400, 'invalid_input', 'Unknown action.')
+
     // GET: balance + one page (fetch one extra row to know whether there is a next page).
     const { data: state, error: stateError } = await db.from('treasury_state').select('balance, updated_at').eq('id', 1).single()
     if (stateError) throw new Error(`treasury state: ${stateError.message}`)
@@ -190,7 +193,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       nextBefore: hasMore ? page[page.length - 1].seq : null,
     })
   } catch (e) {
-    console.error('admin-treasury failed', e instanceof Error ? e.message : 'unknown')
+    log.error('request failed', { err: e, error_code: 'server_error' })
     return fail(500, 'server_error', 'Something went wrong. Please try again.')
   }
-})
+}))

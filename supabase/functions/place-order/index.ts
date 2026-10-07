@@ -36,16 +36,12 @@ import {
 } from '../_shared/routing.ts'
 import { assertSwitchOn, loadPlatformSettings } from '../_shared/platform-settings.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
+import { corsHeaders, instrument } from '../_shared/http.ts'
+import { registerSecret } from '../_shared/logger.ts'
 import { createSMMv2Adapter } from '../_shared/smm-v2-adapter.ts'
 import type { IProviderServiceOffer } from '../_shared/types.ts'
 
 const MAX_BODY_BYTES = 4096
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -122,7 +118,7 @@ async function walletOf(db: Db, userId: string) {
   return data ? { balance: Number(data.balance), currency: data.currency as string } : undefined
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
   if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Method not allowed')
 
@@ -130,7 +126,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!jwtSecret || !supabaseUrl || !serviceKey) {
-    console.error('place-order: missing environment configuration')
+    log.error('missing environment configuration', { error_code: 'server_misconfigured' })
     return fail(500, 'server_misconfigured', 'Server is not configured.')
   }
 
@@ -139,6 +135,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const claims = token ? await verifyJwt(token, jwtSecret) : null
   if (!claims) return fail(401, 'unauthorized', 'Please reopen the app and try again.')
   const userId = claims.sub
+  log.bind({ userId })
 
   // 2. Validate input.
   const raw = await req.text()
@@ -159,7 +156,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   //     adds no latency. Fails closed: an unreadable settings row pauses ordering.
   // 3b. Everything that determines price and routing comes from the database.
   const [settings, { data: service, error: serviceError }] = await Promise.all([
-    loadPlatformSettings(db),
+    loadPlatformSettings(db, log),
     db.from('services').select('id, is_active, min_quantity, max_quantity').eq('id', input.serviceId).maybeSingle(),
   ])
   try {
@@ -169,7 +166,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     throw e
   }
   if (serviceError) {
-    console.error('place-order: service lookup failed', serviceError)
+    log.error('service lookup failed', { err: serviceError, error_code: 'service_lookup_failed', serviceId: input.serviceId })
     return fail(500, 'internal_error', 'Something went wrong. You were not charged.')
   }
   if (!service || !service.is_active) return fail(404, 'service_unavailable', 'This service is no longer available.')
@@ -184,7 +181,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const { data: offerRows, error: offersError } = await db.from('provider_service_offers').select(OFFER_SELECT).eq('service_id', input.serviceId)
   if (offersError) {
-    console.error('place-order: offer lookup failed', offersError)
+    log.error('offer lookup failed', { err: offersError, error_code: 'offer_lookup_failed', serviceId: input.serviceId })
     return fail(500, 'internal_error', 'Something went wrong. You were not charged.')
   }
   const candidates = buildCandidates((offerRows ?? []) as unknown as OfferRow[])
@@ -215,11 +212,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       try {
         apiKey = await resolveProviderApiKey({ name: details.providerName, api_key_encrypted: details.apiKeyEncrypted }, Deno.env)
       } catch (e) {
-        console.error('place-order: provider key could not be decrypted', e)
+        log.error('provider key could not be decrypted', { err: e, error_code: 'key_decrypt_failed', providerId: provider.id })
       }
       if (!apiKey && !mockMode) throw new PreSendRejection(`no API key for provider ${provider.name}`)
+      registerSecret(apiKey)
       const adapter = createSMMv2Adapter(
-        { id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey },
+        { id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey, correlationId, logger: log },
         { MOCK_MODE: Deno.env.get('MOCK_MODE') },
       )
       return executePlaceOrder(
@@ -241,15 +239,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
     })
   } catch (e) {
     if (isPreSendRejection(e)) {
-      console.warn('place-order: no offer could take the order before sending', e instanceof Error ? e.message : e)
+      log.warn('no offer could take the order before sending', { err: e, error_code: 'pre_send_rejection', serviceId: input.serviceId })
       return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
     }
     const message = e instanceof Error ? e.message : String(e)
     const mapped = mapDbError(message)
-    if (mapped.httpStatus >= 500) console.error('place-order: unexpected failure', e)
+    if (mapped.httpStatus >= 500) log.error('unexpected failure', { err: e, error_code: mapped.error })
+    else log.warn('order refused', { err: e, error_code: mapped.error, serviceId: input.serviceId })
     return fail(mapped.httpStatus, mapped.error, mapped.message, mapped.shortfall !== undefined ? { shortfall: mapped.shortfall } : {})
   }
 
+  log.info('order processed', { orderId: result.order.id, providerId: result.order.provider_id ?? undefined, serviceId: input.serviceId, outcome: result.kind, status: result.order.status })
   const wallet = await walletOf(db, userId)
   const order = publicOrder(result.order)
 
@@ -274,4 +274,4 @@ Deno.serve(async (req: Request): Promise<Response> => {
     case 'refund_failed':
       return fail(502, 'refund_pending', `${result.message} Your refund is being processed by support.`, { order, wallet })
   }
-})
+}))
