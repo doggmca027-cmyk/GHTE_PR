@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, CheckCircle2, RotateCw, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Landmark, RotateCw, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { StatusBadge } from '@/components/orders/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useLoader } from '@/hooks/useLoader'
-import { describeNote, recoverProviderOrderId, usd } from '@/lib/admin-view'
+import { describeNote, recoverProviderOrderId, usd, type NoteDescription } from '@/lib/admin-view'
 import { haptic } from '@/lib/haptics'
 import { formatInt } from '@/lib/order-calc'
 import { formatOrderDate, truncateUrl } from '@/lib/order-view'
+import { PAYMENT_STATUS, describePaymentIssue, shortId } from '@/lib/payment-view'
 import { timeAgo } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
@@ -18,6 +19,8 @@ import type { ReconCase } from '@/types/admin'
 interface Props {
   session: AuthSession
   onProblemCount: (n: number) => void
+  /** Provider payment cases are decided in Admin -> Treasury (complete / mark failed). */
+  onOpenPayments?: () => void
 }
 
 const SEVERITY: Record<Severity, { label: string; badge: string; border: string }> = {
@@ -27,7 +30,7 @@ const SEVERITY: Record<Severity, { label: string; badge: string; border: string 
 }
 const RANK: Record<Severity, number> = { critical: 0, high: 1, normal: 2 }
 
-export function ReconciliationTab({ session, onProblemCount }: Props) {
+export function ReconciliationTab({ session, onProblemCount, onOpenPayments }: Props) {
   const { data, error, loading, reload } = useLoader(() => getReconCases(session), [session.token, session.isMock])
   const [flash, setFlash] = useState<string | null>(null)
 
@@ -56,7 +59,7 @@ export function ReconciliationTab({ session, onProblemCount }: Props) {
 
   const now = Date.now()
   const sorted = [...data]
-    .map((c) => ({ c, severity: caseSeverity({ reason: c.reason, createdAt: c.createdAt, amount: c.order?.chargeAmount ?? null }, now) }))
+    .map((c) => ({ c, severity: caseSeverity({ reason: c.reason, createdAt: c.createdAt, amount: c.order?.chargeAmount ?? c.payment?.amount ?? null }, now) }))
     .sort((a, b) => RANK[a.severity] - RANK[b.severity] || Date.parse(a.c.createdAt) - Date.parse(b.c.createdAt))
 
   return (
@@ -72,7 +75,7 @@ export function ReconciliationTab({ session, onProblemCount }: Props) {
           </span>
           <p className="text-base font-bold text-content-primary">All clear</p>
           <p className="mx-auto max-w-[250px] text-sm text-content-secondary">
-            Nothing is waiting on a human. Held orders appear here after 10 minutes.
+            Nothing is waiting on a human. Held orders appear here after 10 minutes, stalled provider payments within 5 minutes of stalling.
           </p>
         </Card>
       ) : (
@@ -84,6 +87,7 @@ export function ReconciliationTab({ session, onProblemCount }: Props) {
             session={session}
             onDone={(message) => { setFlash(message); void reload() }}
             onFailed={() => void reload()}
+            onOpenPayments={onOpenPayments}
           />
         ))
       )}
@@ -91,9 +95,10 @@ export function ReconciliationTab({ session, onProblemCount }: Props) {
   )
 }
 
-function CaseCard({ kase, severity, session, onDone, onFailed }: { kase: ReconCase; severity: Severity; session: AuthSession; onDone: (message: string) => void; onFailed: () => void }) {
+export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPayments }: { kase: ReconCase; severity: Severity; session: AuthSession; onDone: (message: string) => void; onFailed: () => void; onOpenPayments?: () => void }) {
   const order = kase.order
-  const note = describeNote(order?.errorMessage ?? kase.reason)
+  const payment = kase.payment
+  const note: NoteDescription = payment ? { ...describePaymentIssue(kase.reason), refundOwed: false } : describeNote(order?.errorMessage ?? kase.reason)
   const isProcessing = order?.status === 'processing'
   const [confirm, setConfirm] = useState<'refund' | 'retry' | null>(null)
   const [resolving, setResolving] = useState(false)
@@ -137,15 +142,34 @@ function CaseCard({ kase, severity, session, onDone, onFailed }: { kase: ReconCa
             <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', style.badge)}>{style.label}</span>
             <span className="text-[11px] font-semibold text-content-muted">{timeAgo(kase.createdAt)} old</span>
           </div>
-          <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-content-primary">{order?.serviceName ?? `${kase.entityType} ${kase.entityId}`}</h3>
+          <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-content-primary">
+            {order?.serviceName ?? (payment ? `Top-up of ${payment.providerName}` : `${kase.entityType} ${kase.entityId}`)}
+          </h3>
           {order && (
             <p className="mt-0.5 text-xs text-content-secondary">
               @{order.username ?? order.telegramId} · {formatOrderDate(order.createdAt)}
             </p>
           )}
+          {payment && (
+            <p className="mt-0.5 text-xs text-content-secondary">
+              {payment.asset} · {payment.network} · created {formatOrderDate(payment.createdAt)}
+            </p>
+          )}
         </div>
         {order && <StatusBadge status={order.status} />}
+        {payment && (
+          <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800">
+            {PAYMENT_STATUS[payment.status]?.label ?? payment.status}
+          </span>
+        )}
       </div>
+
+      {payment && (
+        <dl className="mt-2 space-y-1 rounded-2xl bg-surface-sub px-3 py-2 text-xs">
+          <div className="flex justify-between gap-2"><dt className="text-content-secondary">To</dt><dd><code className="font-mono" title={payment.destinationWallet}>{shortId(payment.destinationWallet)}</code></dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-content-secondary">Tx</dt><dd>{payment.txHash ? <code className="font-mono" title={payment.txHash}>{shortId(payment.txHash)}</code> : 'not recorded'}</dd></div>
+        </dl>
+      )}
 
       {order && (
         <p className="mt-2 truncate rounded-2xl bg-surface-sub px-3 py-2 text-[13px] font-medium text-content-secondary" title={order.targetUrl}>
@@ -165,6 +189,12 @@ function CaseCard({ kase, severity, session, onDone, onFailed }: { kase: ReconCa
         <div className="mt-3 flex items-end justify-between text-xs font-medium text-content-secondary">
           <span>Qty <b className="text-content-primary">{formatInt(order.quantity)}</b></span>
           <span className="text-lg font-extrabold text-content-primary">{usd(order.chargeAmount)}</span>
+        </div>
+      )}
+      {payment && (
+        <div className="mt-3 flex items-end justify-between text-xs font-medium text-content-secondary">
+          <span>Paid from the treasury</span>
+          <span className="text-lg font-extrabold text-content-primary">{usd(payment.amount)}</span>
         </div>
       )}
 
@@ -240,6 +270,15 @@ function CaseCard({ kase, severity, session, onDone, onFailed }: { kase: ReconCa
               <RotateCw size={14} strokeWidth={2} className={cn(busy && 'animate-spin')} /> {confirm === 'retry' ? 'Confirm' : 'Retry Order'}
             </button>
           )}
+          {payment && onOpenPayments && (
+            <button
+              type="button"
+              onClick={() => { haptic.tap(); onOpenPayments() }}
+              className="flex min-h-11 items-center justify-center gap-1 rounded-2xl bg-brand px-1 text-[13px] font-bold leading-tight text-white transition-all active:scale-95"
+            >
+              <Landmark size={15} strokeWidth={1.75} /> Open Payment
+            </button>
+          )}
           <button
             type="button"
             disabled={busy}
@@ -258,6 +297,11 @@ function CaseCard({ kase, severity, session, onDone, onFailed }: { kase: ReconCa
       {confirm === 'retry' && (
         <p className="mt-2 text-[12px] font-medium text-amber-700">
           Check the provider panel first. If it already created this order, retrying delivers it twice. The retry goes to the same provider the customer was charged for.
+        </p>
+      )}
+      {payment && !resolving && (
+        <p className="mt-2 text-[12px] font-medium text-content-secondary">
+          Decide the payment in Treasury → Provider payments: advance it once the chain and the provider panel agree, or mark it failed if the transfer never arrived. The case then closes by itself.
         </p>
       )}
     </article>

@@ -53,7 +53,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
       </div>
 
       {tab === 'overview' && <OverviewTab session={session} onOpenQueue={() => setTab('queue')} onProblemCount={onProblemCount} />}
-      {tab === 'queue' && <ReconciliationTab session={session} onProblemCount={onProblemCount} />}
+      {tab === 'queue' && <ReconciliationTab session={session} onProblemCount={onProblemCount} onOpenPayments={() => setTab('treasury')} />}
       {tab === 'prices' && <PriceRulesTab session={session} />}
       {tab === 'pricing' && <PricingTab session={session} />}
       {tab === 'providers' && <ProvidersTab session={session} />}

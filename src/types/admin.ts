@@ -1,4 +1,5 @@
 import type { OrderStatus } from './smm'
+import type { PaymentView } from '../../supabase/functions/_shared/admin-treasury.ts'
 
 export type { AdminMetrics } from '../../supabase/functions/_shared/admin-metrics.ts'
 export type { ProfitAnalytics } from '../../supabase/functions/_shared/admin-analytics.ts'
@@ -80,6 +81,27 @@ export interface ProviderConfigView {
   lowBalanceAlerted: boolean
   /** Routing penalty, 1..10: offers of this provider are ranked as if they cost this many times more. */
   reliabilityPenalty: number
+  /** The only destination a top-up of this provider can have (null: top-ups are refused). */
+  payoutWallet: string | null
+  payoutNetwork: PayoutNetwork
+  payoutAsset: PayoutAsset
+  /** Hard limits; null means not configured, and then top-ups are refused (never "unlimited"). */
+  maxTopupPerTx: number | null
+  maxDailyTopup: number | null
+  /** Committed to this provider today (UTC, not given back), counted against maxDailyTopup. */
+  topupUsedToday: number
+}
+
+export type PayoutNetwork = 'mainnet' | 'testnet'
+export type PayoutAsset = 'TON' | 'USDT'
+
+/** admin_set_provider_payout: every field is written (the form sends the current values it did not change). */
+export interface ProviderPayoutInput {
+  wallet: string | null
+  network: PayoutNetwork
+  asset: PayoutAsset
+  maxTopupPerTx: number | null
+  maxDailyTopup: number | null
 }
 
 export interface ProviderConfigPatch {
@@ -114,8 +136,30 @@ export interface TopupProposal {
   createdAt: string
 }
 
+export type ProviderPaymentStatus =
+  | 'PROPOSED' | 'APPROVED' | 'VALIDATED' | 'PAYMENT_CREATED' | 'BROADCASTED' | 'CONFIRMING' | 'CONFIRMED'
+  | 'PROVIDER_BALANCE_VERIFIED' | 'COMPLETED' | 'FAILED' | 'UNKNOWN' | 'RECONCILIATION_REQUIRED' | 'CANCELED'
+
+/** An outbound top-up transfer (admin-treasury GET). Terms are fixed server-side from the provider's payout config. */
+export interface ProviderPayment extends Omit<PaymentView, 'status'> {
+  status: ProviderPaymentStatus
+}
+
+export type PaymentAdvanceTarget = 'CONFIRMING' | 'CONFIRMED' | 'PROVIDER_BALANCE_VERIFIED' | 'COMPLETED'
+
+/** Payment operations; each is one guarded transition in the database. */
+export type ProviderPaymentAction =
+  | { action: 'CREATE_INSTRUCTION'; paymentId: string }
+  | { action: 'RECORD_PAYMENT_BROADCAST'; paymentId: string; txHash: string; markConfirming?: boolean }
+  | { action: 'ADVANCE_PAYMENT'; paymentId: string; to: PaymentAdvanceTarget }
+  | { action: 'FAIL_PAYMENT' | 'CANCEL_PAYMENT'; paymentId: string; reason: string }
+
 export interface TreasuryPage {
   balance: number
+  /** Payments are refused if they would take the balance below this (platform_settings.minimum_treasury_reserve). */
+  minimumReserve: number
+  /** Every payment still in progress, plus the latest ones; newest first. */
+  payments: ProviderPayment[]
   proposals: TopupProposal[]
   updatedAt: string
   transactions: TreasuryTx[]
@@ -161,6 +205,21 @@ export interface ReconCaseOrder {
   canRetry: boolean
 }
 
+/** The provider payment behind a `provider_payment` case. */
+export interface ReconCasePayment {
+  status: ProviderPaymentStatus
+  providerName: string
+  amount: number
+  currency: string
+  asset: string
+  network: string
+  destinationWallet: string
+  txHash: string | null
+  broadcastedAt: string | null
+  confirmedAt: string | null
+  createdAt: string
+}
+
 export interface ReconCase {
   id: string
   entityType: 'order' | 'deposit' | 'provider_payment'
@@ -168,4 +227,5 @@ export interface ReconCase {
   reason: string
   createdAt: string
   order: ReconCaseOrder | null
+  payment: ReconCasePayment | null
 }

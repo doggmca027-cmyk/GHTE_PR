@@ -144,6 +144,7 @@ export function createMockAdmin(storage: KeyValueStorage, now: () => number = Da
             errorMessage: o.error_message, createdAt: o.created_at, serviceName: o.serviceName, username: o.username, telegramId: o.telegramId,
             canRetry: o.status === 'processing' && !o.providerOrderId,
           },
+          payment: null,
         }))
     },
 

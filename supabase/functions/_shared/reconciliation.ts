@@ -51,6 +51,14 @@ export function mapReconError(message: string): { status: number; error: string;
   if (/case_not_open/.test(message)) return { status: 409, error: 'case_not_open', message: 'This case was already resolved.' }
   if (/not_retryable/.test(message)) return { status: 409, error: 'not_retryable', message: 'This order cannot be retried. Refund it or mark it resolved.' }
   if (/unsupported_entity/.test(message)) return { status: 409, error: 'unsupported_entity', message: 'This kind of case can only be closed manually.' }
+  if (/payment_unresolved/.test(message)) {
+    const status = /payment is ([A-Z_]+)/.exec(message)?.[1]
+    return {
+      status: 409,
+      error: 'payment_unresolved',
+      message: `The payment${status ? ` (${status})` : ''} still needs a decision. In Treasury -> Provider payments, advance it or mark it failed; the case then closes by itself.`,
+    }
+  }
   if (/not in the reconciliation queue/.test(message)) return { status: 409, error: 'not_in_queue', message: 'This order no longer needs attention. Refresh the list.' }
   if (/insufficient_funds/.test(message)) return { status: 409, error: 'refund_failed', message: 'The refund could not be booked.' }
   if (/provider order id is required/.test(message)) return { status: 400, error: 'invalid_input', message: 'The provider order id is required to resolve a processing order.' }

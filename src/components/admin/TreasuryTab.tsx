@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertCircle, Check, Landmark, Minus, Plus, X } from 'lucide-react'
+import { AlertCircle, Check, Landmark, Minus, Plus, ShieldCheck, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useLoader } from '@/hooks/useLoader'
@@ -9,8 +9,9 @@ import { newIdempotencyKey } from '@/lib/idempotency'
 import { timeAgo } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
-import { adjustTreasury, decideTopupProposal, getTreasury } from '@/services/api/admin'
+import { adjustTreasury, decideTopupProposal, getTreasury, setTreasuryReserve } from '@/services/api/admin'
 import type { TopupProposal, TreasuryTx } from '@/types/admin'
+import { PaymentsPanel } from './PaymentsPanel'
 
 export function TreasuryTab({ session }: { session: AuthSession }) {
   const { data, error, loading, reload } = useLoader(() => getTreasury(session), [session.token, session.isMock])
@@ -18,6 +19,7 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
   const [nextBefore, setNextBefore] = useState<number | null | undefined>(undefined) // undefined: follow the first page
   const [loadingMore, setLoadingMore] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
+  const [editingReserve, setEditingReserve] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [busyProposal, setBusyProposal] = useState<string | null>(null)
@@ -44,7 +46,9 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
     try {
       await decideTopupProposal(session, p.id, decision)
       haptic.success()
-      setMessage(decision === 'approve' ? `Approved: ${usd(p.amount)} debited from the treasury for ${p.providerName}.` : `Rejected the top-up for ${p.providerName}.`)
+      setMessage(decision === 'approve'
+        ? `Approved: ${usd(p.amount)} debited for ${p.providerName}. Send the transfer shown under Provider payments, then record its hash.`
+        : `Rejected the top-up for ${p.providerName}.`)
       setMore([])
       setNextBefore(undefined)
     } catch (e) {
@@ -75,6 +79,16 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
         <p className="flex items-center gap-1.5 text-xs font-semibold text-content-secondary"><Landmark size={14} strokeWidth={1.75} /> Treasury balance</p>
         <p className="text-4xl font-extrabold tracking-tight text-content-primary">{usd(data.balance)}</p>
         <p className="text-xs text-content-secondary">Updated {timeAgo(data.updatedAt)} · separate from customer wallets and provider balances</p>
+        <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-surface-sub px-3.5 py-2.5">
+          <div className="min-w-0 text-xs">
+            <p className="flex items-center gap-1 font-bold text-content-primary"><ShieldCheck size={13} strokeWidth={1.75} /> Minimum reserve {usd(data.minimumReserve)}</p>
+            <p className="mt-0.5 text-content-secondary">{usd(Math.max(0, data.balance - data.minimumReserve))} available for provider top-ups</p>
+          </div>
+          <button type="button" onClick={() => { haptic.tap(); setMessage(null); setEditingReserve(true) }}
+            className="h-9 shrink-0 rounded-full bg-white px-3.5 text-[13px] font-bold text-brand-text shadow-sm active:scale-95">
+            Set reserve
+          </button>
+        </div>
         <Button className="mt-3 h-11 w-full text-sm" onClick={() => { haptic.tap(); setMessage(null); setAdjusting(true) }}>Manual Adjustment</Button>
       </Card>
 
@@ -87,6 +101,7 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
           <h2 className="px-1 text-sm font-bold text-content-primary">Pending Top-Ups</h2>
           {data.proposals.map((p) => {
             const short = p.amount > data.balance
+            const belowReserve = !short && data.balance - p.amount < data.minimumReserve
             const busy = busyProposal === p.id
             return (
               <article key={p.id} className="rounded-2xl border border-amber-300 bg-white px-3.5 py-3 shadow-card">
@@ -98,8 +113,9 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
                   <p className="shrink-0 text-[15px] font-extrabold text-content-primary">{usd(p.amount)} {p.currency}</p>
                 </div>
                 {short && <p role="alert" className="mt-1 text-xs font-semibold text-amber-600">Treasury holds only {usd(data.balance)}. Fund it first.</p>}
+                {belowReserve && <p role="alert" className="mt-1 text-xs font-semibold text-amber-600">Approving would take the treasury below its {usd(data.minimumReserve)} minimum reserve.</p>}
                 <div className="mt-2 flex gap-2">
-                  <Button className="h-10 flex-1 text-[13px]" disabled={busy || short} onClick={() => { if (confirming === p.id) void decide(p, 'approve'); else { haptic.tap(); setConfirming(p.id) } }}>
+                  <Button className="h-10 flex-1 text-[13px]" disabled={busy || short || belowReserve} onClick={() => { if (confirming === p.id) void decide(p, 'approve'); else { haptic.tap(); setConfirming(p.id) } }}>
                     <Check size={15} strokeWidth={2} /> {confirming === p.id ? `Confirm ${usd(p.amount)}` : 'Approve'}
                   </Button>
                   <button type="button" disabled={busy} onClick={() => void decide(p, 'reject')} className="flex h-10 flex-1 items-center justify-center gap-1 rounded-2xl bg-surface-sub text-[13px] font-semibold text-content-secondary active:scale-95 disabled:opacity-50">
@@ -111,6 +127,18 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
           })}
         </section>
       )}
+
+      <PaymentsPanel
+        session={session}
+        payments={data.payments}
+        onChanged={async (text) => {
+          setErrorMessage(null)
+          if (text) setMessage(text)
+          setMore([])
+          setNextBefore(undefined)
+          await reload() // a failure or cancel books a reversal in the ledger
+        }}
+      />
 
       <h2 className="px-1 text-sm font-bold text-content-primary">Ledger</h2>
       {rows.length === 0 && <Card className="p-4 text-sm text-content-secondary">No treasury transactions yet.</Card>}
@@ -134,6 +162,26 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
         </button>
       )}
 
+      {editingReserve && (
+        <ReserveModal
+          current={data.minimumReserve}
+          balance={data.balance}
+          onClose={() => setEditingReserve(false)}
+          onSubmit={async (minimum) => {
+            try {
+              await setTreasuryReserve(session, minimum)
+            } catch (e) {
+              haptic.error()
+              throw e
+            }
+            haptic.success()
+            setMessage(`Minimum treasury reserve set to ${usd(minimum)}.`)
+            setEditingReserve(false)
+            await reload()
+          }}
+        />
+      )}
+
       {adjusting && (
         <AdjustModal
           balance={data.balance}
@@ -154,6 +202,47 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
           }}
         />
       )}
+    </div>
+  )
+}
+
+/** platform_settings.minimum_treasury_reserve: provider payments that would take the balance below it are refused. */
+export function ReserveModal({ current, balance, onClose, onSubmit }: { current: number; balance: number; onClose: () => void; onSubmit: (minimum: number) => Promise<void> }) {
+  const [amount, setAmount] = useState(String(current))
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const value = parseAmount(amount)
+  const valid = value !== null && value < 1_000_000_000
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Minimum treasury reserve" className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+      <div className="w-full max-w-md space-y-3 rounded-3xl bg-white p-4 shadow-card">
+        <h3 className="text-[15px] font-bold text-content-primary">Minimum treasury reserve</h3>
+        <p className="text-xs text-content-secondary">
+          Provider top-ups that would take the treasury below this amount are refused by the server (checked under a lock, so
+          concurrent approvals cannot slip through). 0 disables the reserve.
+        </p>
+        <label className="block text-xs font-bold text-content-primary">
+          Reserve (USD)
+          <input value={amount} inputMode="decimal" autoFocus onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} aria-invalid={!valid}
+            className={cn('mt-1 w-full rounded-xl border bg-white px-3 py-2.5 text-sm font-medium outline-none', valid ? 'border-blue-100/70 focus:border-brand' : 'border-rose-300')} />
+        </label>
+        {valid && value > balance && <p role="status" className="text-xs font-semibold text-amber-600">Above the current balance ({usd(balance)}): every top-up will be refused until the treasury is funded.</p>}
+        {err && <p role="alert" className="text-xs font-semibold text-rose-600">{err}</p>}
+        <div className="flex gap-2">
+          <Button className="h-11 flex-1 text-sm" disabled={!valid || busy || value === current}
+            onClick={async () => {
+              if (value === null) return
+              setBusy(true); setErr(null)
+              try { await onSubmit(value) } catch (e) { setErr(e instanceof Error ? e.message : 'Could not save.'); setBusy(false) }
+            }}>
+            <Check size={16} strokeWidth={2} /> Save
+          </Button>
+          <button type="button" onClick={onClose} className="flex h-11 flex-1 items-center justify-center gap-1 rounded-2xl bg-surface-sub text-sm font-semibold text-content-secondary active:scale-95">
+            <X size={16} strokeWidth={2} /> Cancel
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

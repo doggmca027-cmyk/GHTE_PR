@@ -1,5 +1,5 @@
 import type { AuthSession } from '@/services/api/auth'
-import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, PlatformSettingsView, ReconCase, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
+import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayment, ProviderPaymentAction, ProviderPayoutInput, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, PlatformSettingsView, ReconCase, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
 import { createMockPricing } from './mock-pricing'
 import { createMockProviders } from './mock-providers'
 import { createMockSettings } from './mock-settings'
@@ -209,7 +209,30 @@ export async function listProviderConfigs(session: AuthSession): Promise<Provide
     lastBalanceSync: (r.last_balance_sync as string | null) ?? null, lowBalanceThreshold: num(r.low_balance_threshold),
     targetTopupBalance: num(r.target_topup_balance), lowBalanceAlerted: r.balance_alert_sent === true,
     reliabilityPenalty: r.reliability_penalty_multiplier == null ? 1 : num(r.reliability_penalty_multiplier),
+    payoutWallet: (r.allowed_destination_wallet as string | null) ?? null,
+    payoutNetwork: r.payout_network === 'testnet' ? 'testnet' : 'mainnet',
+    payoutAsset: r.payout_asset === 'USDT' ? 'USDT' : 'TON',
+    maxTopupPerTx: r.max_topup_per_tx == null ? null : num(r.max_topup_per_tx),
+    maxDailyTopup: r.max_daily_topup == null ? null : num(r.max_daily_topup),
+    topupUsedToday: num(r.topup_used_today),
   }))
+}
+
+/** Writes the whole payout config (admin_set_provider_payout re-validates the wallet, including its checksum). */
+export async function setProviderPayout(session: AuthSession, id: string, input: ProviderPayoutInput): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    mockProviders().setPayout(id, input)
+    return
+  }
+  await rpc(session, 'admin_set_provider_payout', {
+    p_provider_id: id,
+    p_wallet: input.wallet,
+    p_network: input.network,
+    p_asset: input.asset,
+    p_max_topup_per_tx: input.maxTopupPerTx,
+    p_max_daily_topup: input.maxDailyTopup,
+  })
 }
 
 export async function updateProviderConfig(session: AuthSession, id: string, patch: ProviderConfigPatch): Promise<void> {
@@ -249,6 +272,7 @@ async function callTreasury<T>(session: AuthSession, body: Record<string, unknow
   if (res.ok && data?.success) return data
   if (res.status === 401 || res.status === 403) throw new AdminApiError('forbidden', 'Admin access required.')
   if (res.status === 400) throw new AdminApiError('invalid_input', data?.message ?? 'Invalid input.')
+  if (res.status === 404) throw new AdminApiError('not_found', data?.message ?? 'Not found.')
   if (res.status === 409) throw new AdminApiError('conflict', data?.message ?? 'Conflict.')
   throw new AdminApiError('server', 'Something went wrong. Please try again.')
 }
@@ -259,7 +283,30 @@ export async function getTreasury(session: AuthSession, beforeSeq: number | null
     return mockTreasury().page(beforeSeq)
   }
   const r = await callTreasury<TreasuryPage>(session, { action: 'GET', ...(beforeSeq !== null ? { beforeSeq } : {}) })
-  return { balance: num(r.balance), updatedAt: String(r.updatedAt), transactions: r.transactions as TreasuryTx[], proposals: (r.proposals ?? []) as TopupProposal[], nextBefore: r.nextBefore ?? null }
+  return {
+    balance: num(r.balance), minimumReserve: num(r.minimumReserve), updatedAt: String(r.updatedAt), transactions: r.transactions as TreasuryTx[],
+    proposals: (r.proposals ?? []) as TopupProposal[], payments: (r.payments ?? []) as ProviderPayment[], nextBefore: r.nextBefore ?? null,
+  }
+}
+
+/** admin_set_treasury_reserve: payments that would take the treasury below this are refused. */
+export async function setTreasuryReserve(session: AuthSession, minimum: number): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    mockTreasury().setReserve(minimum)
+    return
+  }
+  await rpc(session, 'admin_set_treasury_reserve', { p_minimum: minimum })
+}
+
+/** Moves a provider payment one guarded step (record broadcast, advance, fail, cancel, create instruction). */
+export async function runPaymentAction(session: AuthSession, action: ProviderPaymentAction): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    mockTreasury().paymentAction(action)
+    return
+  }
+  await callTreasury(session, { ...action })
 }
 
 export async function adjustTreasury(session: AuthSession, input: TreasuryAdjustment): Promise<void> {

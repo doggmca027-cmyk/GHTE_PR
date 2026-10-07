@@ -8,8 +8,12 @@
 //   APPROVE_PROPOSAL also creates the outbound provider payment (Phase 6): limits + reserve + treasury debit in one locked
 //   database transaction, then the transfer instruction (PAYMENT_CREATED). No real broadcaster exists yet: in production the
 //   admin sends the transfer and records it; in MOCK_MODE a simulated broadcaster takes it to COMPLETED.
-//   { action: "RECORD_PAYMENT_BROADCAST", paymentId, txHash } | { action: "ADVANCE_PAYMENT", paymentId, to }
+//   { action: "RECORD_PAYMENT_BROADCAST", paymentId, txHash, markConfirming? } | { action: "ADVANCE_PAYMENT", paymentId, to }
 //   | { action: "FAIL_PAYMENT" | "CANCEL_PAYMENT", paymentId, reason }   (fail / cancel return the money to the treasury)
+//   | { action: "CREATE_INSTRUCTION", paymentId }   (VALIDATED -> PAYMENT_CREATED, e.g. after an approval whose second step failed)
+//   Every payment action is one guarded SQL transition (the state machine lives in the database, not here).
+//   GET also returns minimumReserve and the payments (all in progress + the latest 20), each with the reconciliation
+//   detector's live verdict (`issue`, same rules as the cron that opens the cases).
 //   { action: "MANUAL_ADJUSTMENT", amount (signed), description, idempotencyKey }
 //       -> books a manual_adjustment through process_treasury_transaction (row lock, no negative balance, audit entry
 //          written in the same transaction). Re-sending the same idempotencyKey books it once.
@@ -20,7 +24,7 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, json, readJson } from '../_shared/http.ts'
-import { mapTreasuryError, parseTreasuryRequest } from '../_shared/admin-treasury.ts'
+import { mapTreasuryError, parseTreasuryRequest, paymentView } from '../_shared/admin-treasury.ts'
 import { confirmProviderPayment, executeProviderPayment, mockBroadcastToBlockchain, type PaymentInstruction, type PaymentPorts } from '../_shared/provider-payment-flow.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -124,13 +128,26 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json({ success: true, result: { ...data, payment_status: 'PAYMENT_CREATED', instruction } })
     }
 
+    if (parsed.action === 'CREATE_INSTRUCTION') {
+      try {
+        return json({ success: true, result: { payment_id: parsed.paymentId, status: 'PAYMENT_CREATED', instruction: await ports.createInstruction(parsed.paymentId) } })
+      } catch (e) {
+        return businessError(e, parsed.action)
+      }
+    }
+
     if (parsed.action === 'RECORD_PAYMENT_BROADCAST' || parsed.action === 'ADVANCE_PAYMENT' || parsed.action === 'FAIL_PAYMENT' || parsed.action === 'CANCEL_PAYMENT') {
       try {
-        const r = parsed.action === 'RECORD_PAYMENT_BROADCAST'
-          ? await call('record_provider_payment_broadcast', { p_payment_id: parsed.paymentId, p_tx_hash: parsed.txHash, p_actor: userId })
-          : parsed.action === 'ADVANCE_PAYMENT'
-            ? await call('advance_provider_payment', { p_payment_id: parsed.paymentId, p_to: parsed.to, p_actor: userId })
-            : await call(parsed.action === 'FAIL_PAYMENT' ? 'fail_provider_payment' : 'cancel_provider_payment', { p_payment_id: parsed.paymentId, p_reason: parsed.reason, p_actor: userId })
+        let r: Record<string, unknown>
+        if (parsed.action === 'RECORD_PAYMENT_BROADCAST') {
+          r = await call('record_provider_payment_broadcast', { p_payment_id: parsed.paymentId, p_tx_hash: parsed.txHash, p_actor: userId })
+          // a second guarded step; if it fails the payment simply stays BROADCASTED (the hash is already saved)
+          if (parsed.markConfirming) r = await call('advance_provider_payment', { p_payment_id: parsed.paymentId, p_to: 'CONFIRMING', p_actor: userId })
+        } else if (parsed.action === 'ADVANCE_PAYMENT') {
+          r = await call('advance_provider_payment', { p_payment_id: parsed.paymentId, p_to: parsed.to, p_actor: userId })
+        } else {
+          r = await call(parsed.action === 'FAIL_PAYMENT' ? 'fail_provider_payment' : 'cancel_provider_payment', { p_payment_id: parsed.paymentId, p_reason: parsed.reason, p_actor: userId })
+        }
         return json({ success: true, result: r })
       } catch (e) {
         return businessError(e, parsed.action)
@@ -154,22 +171,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       id: String(r.id), providerId: String(r.provider_id), providerName: String((r.provider as { name?: string } | null)?.name ?? 'Provider'),
       amount: Number(r.amount), currency: String(r.currency), createdAt: String(r.created_at),
     }))
-    const { data: payRows, error: payError } = await db
-      .from('provider_payments')
-      .select('id, provider_id, amount, currency, asset, network, destination_wallet, tx_hash, status, failure_reason, created_at, updated_at, provider:providers(name)')
-      .order('created_at', { ascending: false })
-      .limit(20)
+    const { data: payRows, error: payError } = await db.rpc('list_provider_payments', { p_limit: 20 })
     if (payError) throw new Error(`provider payments: ${payError.message}`)
-    const payments = (payRows ?? []).map((r: Record<string, unknown>) => ({
-      id: String(r.id), providerName: String((r.provider as { name?: string } | null)?.name ?? 'Provider'), amount: Number(r.amount), currency: String(r.currency),
-      asset: String(r.asset), network: String(r.network), destinationWallet: String(r.destination_wallet), txHash: (r.tx_hash as string | null) ?? null,
-      status: String(r.status), failureReason: (r.failure_reason as string | null) ?? null, createdAt: String(r.created_at), updatedAt: String(r.updated_at),
-    }))
+    const now = Date.now()
+    const payments = ((payRows ?? []) as Record<string, unknown>[]).map((r) => paymentView(r, now))
+    const { data: settings, error: settingsError } = await db.from('platform_settings').select('minimum_treasury_reserve').eq('id', 1).single()
+    if (settingsError) throw new Error(`platform settings: ${settingsError.message}`)
     const page = (rows ?? []).slice(0, parsed.limit).map(publicTx)
     const hasMore = (rows ?? []).length > parsed.limit
     return json({
       success: true,
       balance: Number(state.balance),
+      minimumReserve: Number(settings.minimum_treasury_reserve ?? 0),
       updatedAt: String(state.updated_at),
       transactions: page,
       proposals,

@@ -1,32 +1,12 @@
 import { useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { PlatformIcon } from '@/components/services/PlatformIcon'
+import { copyText } from '@/lib/clipboard'
 import { haptic } from '@/lib/haptics'
 import { formatInt, formatUnits, toUnits } from '@/lib/order-calc'
 import { deliveredRatio, formatOrderDate, isActiveStatus, truncateUrl } from '@/lib/order-view'
 import type { IOrderView } from '@/types/orders'
 import { StatusBadge } from './StatusBadge'
-
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    try {
-      const el = document.createElement('textarea')
-      el.value = text
-      el.style.position = 'fixed'
-      el.style.opacity = '0'
-      document.body.appendChild(el)
-      el.select()
-      const ok = document.execCommand('copy')
-      el.remove()
-      return ok
-    } catch {
-      return false
-    }
-  }
-}
 
 export function OrderCard({ order }: { order: IOrderView }) {
   const [copied, setCopied] = useState(false)

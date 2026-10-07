@@ -1,7 +1,8 @@
 // Supabase Edge Function (Deno): POST /admin-reconciliation   (admins only)
 //   Authorization: Bearer <JWT issued by telegram-auth>
 //   { action: "GET_CASES" }
-//       -> { success, cases: [{ id, entityType, entityId, reason, createdAt, order: {...} | null }] }   (open cases, oldest first)
+//       -> { success, cases: [{ id, entityType, entityId, reason, createdAt, order: {...} | null, payment: {...} | null }] }
+//          (open cases, oldest first; the detector runs first, for orders and provider payments)
 //   { action: "RESOLVE_REFUND", caseId, reason? }
 //       -> full refund to the customer's wallet, order -> refunded, case -> resolved, in ONE database transaction
 //          (resolve_case_refund). A resolved case is a no-op, so it can never be refunded twice.
@@ -10,7 +11,8 @@
 //          for, then order -> submitted + case -> resolved atomically. On a refusal or an unknown outcome the case
 //          stays open with a note; nothing is refunded automatically.
 //   { action: "MARK_RESOLVED", caseId, note?, providerOrderId? }
-//       -> closes the case without any financial action.
+//       -> closes the case without any financial action. A provider payment that still needs a decision keeps its case:
+//          it closes when the payment is completed or marked failed (Admin -> Treasury).
 //
 // Auth: JWT verified here, then users.is_admin re-checked in the database; the SQL resolvers check the actor again.
 // Secrets: JWT_SECRET, PROVIDER_KEY_SECRET / PROVIDER_<NAME>_API_KEY, MOCK_MODE (dev only).
@@ -28,6 +30,7 @@ type Db = SupabaseClient<any, 'public', any>
 
 const publicCase = (c: Record<string, unknown>) => {
   const o = c.order as Record<string, unknown> | null
+  const p = (c.payment ?? null) as Record<string, unknown> | null
   return {
     id: String(c.id), entityType: String(c.entity_type), entityId: String(c.entity_id), reason: String(c.reason), createdAt: String(c.created_at),
     order: o && {
@@ -35,6 +38,11 @@ const publicCase = (c: Record<string, unknown>) => {
       providerOrderId: (o.provider_order_id as string | null) ?? null, errorMessage: (o.error_message as string | null) ?? null,
       createdAt: String(o.created_at), serviceName: String(o.service_name ?? 'Service'), username: (o.username as string | null) ?? null,
       telegramId: Number(o.telegram_id), canRetry: o.status === 'processing' && !o.provider_order_id && o.has_routing_snapshot === true,
+    },
+    payment: p && {
+      status: String(p.status), providerName: String(p.provider_name ?? 'Provider'), amount: Number(p.amount), currency: String(p.currency ?? 'USD'),
+      asset: String(p.asset), network: String(p.network), destinationWallet: String(p.destination_wallet), txHash: (p.tx_hash as string | null) ?? null,
+      broadcastedAt: (p.broadcasted_at as string | null) ?? null, confirmedAt: (p.confirmed_at as string | null) ?? null, createdAt: String(p.created_at),
     },
   }
 }
