@@ -5,6 +5,11 @@
 //   { action: "APPROVE_PROPOSAL" | "REJECT_PROPOSAL", proposalId }
 //       -> approve debits the treasury (provider_topup) and marks the proposal approved in ONE database transaction
 //          (approve_topup_proposal); reject only marks it. GET also returns the pending proposals.
+//   APPROVE_PROPOSAL also creates the outbound provider payment (Phase 6): limits + reserve + treasury debit in one locked
+//   database transaction, then the transfer instruction (PAYMENT_CREATED). No real broadcaster exists yet: in production the
+//   admin sends the transfer and records it; in MOCK_MODE a simulated broadcaster takes it to COMPLETED.
+//   { action: "RECORD_PAYMENT_BROADCAST", paymentId, txHash } | { action: "ADVANCE_PAYMENT", paymentId, to }
+//   | { action: "FAIL_PAYMENT" | "CANCEL_PAYMENT", paymentId, reason }   (fail / cancel return the money to the treasury)
 //   { action: "MANUAL_ADJUSTMENT", amount (signed), description, idempotencyKey }
 //       -> books a manual_adjustment through process_treasury_transaction (row lock, no negative balance, audit entry
 //          written in the same transaction). Re-sending the same idempotencyKey books it once.
@@ -16,6 +21,7 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, json, readJson } from '../_shared/http.ts'
 import { mapTreasuryError, parseTreasuryRequest } from '../_shared/admin-treasury.ts'
+import { confirmProviderPayment, executeProviderPayment, mockBroadcastToBlockchain, type PaymentInstruction, type PaymentPorts } from '../_shared/provider-payment-flow.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = SupabaseClient<any, 'public', any>
@@ -67,15 +73,68 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json({ success: true, transaction: publicTx(data as Record<string, unknown>) })
     }
 
+    // Database-backed payment ports (every step a guarded transition in SQL).
+    const call = async (fn: string, args: Record<string, unknown>) => {
+      const { data, error } = await db.rpc(fn, args)
+      if (error) throw new Error(error.message)
+      return data as Record<string, unknown>
+    }
+    const ports: PaymentPorts = {
+      async createInstruction(paymentId) {
+        const r = await call('create_provider_payment_instruction', { p_payment_id: paymentId, p_actor: userId })
+        if (r.already) {
+          const { data } = await db.from('provider_payments').select('destination_wallet, amount, asset, network, idempotency_key').eq('id', paymentId).single()
+          Object.assign(r, data)
+        }
+        return { paymentId, destinationWallet: String(r.destination_wallet), amount: Number(r.amount), asset: String(r.asset), network: String(r.network), idempotencyKey: String(r.idempotency_key) } satisfies PaymentInstruction
+      },
+      async recordBroadcast(paymentId, txHash) { await call('record_provider_payment_broadcast', { p_payment_id: paymentId, p_tx_hash: txHash, p_actor: userId }) },
+      async markUnknown(paymentId, reason) { await call('mark_provider_payment_unknown', { p_payment_id: paymentId, p_reason: reason, p_actor: userId }) },
+      async fail(paymentId, reason) { await call('fail_provider_payment', { p_payment_id: paymentId, p_reason: reason, p_actor: userId }) },
+      async advance(paymentId, to) { await call('advance_provider_payment', { p_payment_id: paymentId, p_to: to, p_actor: userId }) },
+    }
+    const businessError = (e: unknown, what: string) => {
+      const m = mapTreasuryError(e instanceof Error ? e.message : String(e))
+      if (m.status === 500) throw new Error(`${what}: ${e instanceof Error ? e.message : e}`)
+      return fail(m.status, m.error, m.message)
+    }
+
     if (parsed.action === 'APPROVE_PROPOSAL' || parsed.action === 'REJECT_PROPOSAL') {
       const fn = parsed.action === 'APPROVE_PROPOSAL' ? 'approve_topup_proposal' : 'reject_topup_proposal'
-      const { data, error } = await db.rpc(fn, { p_proposal_id: parsed.proposalId, p_actor: userId })
-      if (error) {
-        const m = mapTreasuryError(error.message)
-        if (m.status === 500) throw new Error(`${fn}: ${error.message}`)
-        return fail(m.status, m.error, m.message)
+      let data: Record<string, unknown>
+      try {
+        data = await call(fn, { p_proposal_id: parsed.proposalId, p_actor: userId })
+      } catch (e) {
+        return businessError(e, fn)
       }
-      return json({ success: true, result: data })
+      if (parsed.action === 'REJECT_PROPOSAL') return json({ success: true, result: data })
+
+      const paymentId = String(data.payment_id)
+      if (Deno.env.get('MOCK_MODE') === 'true') {
+        // Simulated end to end (no blockchain): broadcast, confirm, verify, complete.
+        const sent = await executeProviderPayment(paymentId, ports, mockBroadcastToBlockchain())
+        const done = sent.kind === 'broadcasted'
+          ? await confirmProviderPayment({ id: paymentId, status: 'BROADCASTED', txHash: sent.txHash }, { chainConfirmed: async () => true, providerBalanceCredited: async () => true }, ports)
+          : sent
+        return json({ success: true, result: { ...data, payment: { mock: true, broadcast: sent, confirmation: done } } })
+      }
+      // Production: no automatic broadcaster yet. The instruction is fixed server-side; the admin sends the transfer and
+      // records its hash with RECORD_PAYMENT_BROADCAST.
+      const instruction = await ports.createInstruction(paymentId)
+      return json({ success: true, result: { ...data, payment_status: 'PAYMENT_CREATED', instruction } })
+    }
+
+    if (parsed.action === 'RECORD_PAYMENT_BROADCAST' || parsed.action === 'ADVANCE_PAYMENT' || parsed.action === 'FAIL_PAYMENT' || parsed.action === 'CANCEL_PAYMENT') {
+      try {
+        const r = parsed.action === 'RECORD_PAYMENT_BROADCAST'
+          ? await call('record_provider_payment_broadcast', { p_payment_id: parsed.paymentId, p_tx_hash: parsed.txHash, p_actor: userId })
+          : parsed.action === 'ADVANCE_PAYMENT'
+            ? await call('advance_provider_payment', { p_payment_id: parsed.paymentId, p_to: parsed.to, p_actor: userId })
+            : await call(parsed.action === 'FAIL_PAYMENT' ? 'fail_provider_payment' : 'cancel_provider_payment', { p_payment_id: parsed.paymentId, p_reason: parsed.reason, p_actor: userId })
+        return json({ success: true, result: r })
+      } catch (e) {
+        return businessError(e, parsed.action)
+      }
     }
 
     // GET: balance + one page (fetch one extra row to know whether there is a next page).
@@ -95,6 +154,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       id: String(r.id), providerId: String(r.provider_id), providerName: String((r.provider as { name?: string } | null)?.name ?? 'Provider'),
       amount: Number(r.amount), currency: String(r.currency), createdAt: String(r.created_at),
     }))
+    const { data: payRows, error: payError } = await db
+      .from('provider_payments')
+      .select('id, provider_id, amount, currency, asset, network, destination_wallet, tx_hash, status, failure_reason, created_at, updated_at, provider:providers(name)')
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (payError) throw new Error(`provider payments: ${payError.message}`)
+    const payments = (payRows ?? []).map((r: Record<string, unknown>) => ({
+      id: String(r.id), providerName: String((r.provider as { name?: string } | null)?.name ?? 'Provider'), amount: Number(r.amount), currency: String(r.currency),
+      asset: String(r.asset), network: String(r.network), destinationWallet: String(r.destination_wallet), txHash: (r.tx_hash as string | null) ?? null,
+      status: String(r.status), failureReason: (r.failure_reason as string | null) ?? null, createdAt: String(r.created_at), updatedAt: String(r.updated_at),
+    }))
     const page = (rows ?? []).slice(0, parsed.limit).map(publicTx)
     const hasMore = (rows ?? []).length > parsed.limit
     return json({
@@ -103,6 +173,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       updatedAt: String(state.updated_at),
       transactions: page,
       proposals,
+      payments,
       nextBefore: hasMore ? page[page.length - 1].seq : null,
     })
   } catch (e) {

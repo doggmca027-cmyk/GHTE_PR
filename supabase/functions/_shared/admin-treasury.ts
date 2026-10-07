@@ -10,6 +10,9 @@ export type TreasuryRequest =
   | { action: 'GET'; limit: number; beforeSeq: number | null }
   | { action: 'MANUAL_ADJUSTMENT'; amount: number; description: string; idempotencyKey: string }
   | { action: 'APPROVE_PROPOSAL' | 'REJECT_PROPOSAL'; proposalId: string }
+  | { action: 'RECORD_PAYMENT_BROADCAST'; paymentId: string; txHash: string }
+  | { action: 'ADVANCE_PAYMENT'; paymentId: string; to: 'CONFIRMING' | 'CONFIRMED' | 'PROVIDER_BALANCE_VERIFIED' | 'COMPLETED' }
+  | { action: 'FAIL_PAYMENT' | 'CANCEL_PAYMENT'; paymentId: string; reason: string }
 
 /**
  * Validates the body. `amount` is signed: positive adds funds, negative removes them. A description (the why) and an
@@ -48,6 +51,23 @@ export function parseTreasuryRequest(body: unknown): TreasuryRequest | { error: 
     if (typeof b.proposalId !== 'string' || !UUID.test(b.proposalId)) return { error: 'proposalId must be a UUID.' }
     return { action, proposalId: b.proposalId.toLowerCase() }
   }
+  if (action === 'RECORD_PAYMENT_BROADCAST' || action === 'ADVANCE_PAYMENT' || action === 'FAIL_PAYMENT' || action === 'CANCEL_PAYMENT') {
+    if (typeof b.paymentId !== 'string' || !UUID.test(b.paymentId)) return { error: 'paymentId must be a UUID.' }
+    const paymentId = b.paymentId.toLowerCase()
+    if (action === 'RECORD_PAYMENT_BROADCAST') {
+      const tx = typeof b.txHash === 'string' ? b.txHash.trim() : ''
+      if (!tx || tx.length > 200 || /\s/.test(tx)) return { error: 'txHash must be one token of at most 200 characters.' }
+      return { action, paymentId, txHash: tx }
+    }
+    if (action === 'ADVANCE_PAYMENT') {
+      const to = b.to
+      if (to !== 'CONFIRMING' && to !== 'CONFIRMED' && to !== 'PROVIDER_BALANCE_VERIFIED' && to !== 'COMPLETED') return { error: 'to must be CONFIRMING, CONFIRMED, PROVIDER_BALANCE_VERIFIED or COMPLETED.' }
+      return { action, paymentId, to }
+    }
+    const reason = typeof b.reason === 'string' ? b.reason.trim() : ''
+    if (reason.length < 3 || reason.length > 300) return { error: 'reason must be 3 to 300 characters.' }
+    return { action, paymentId, reason }
+  }
   return { error: 'Unknown action.' }
 }
 
@@ -55,6 +75,11 @@ export function parseTreasuryRequest(body: unknown): TreasuryRequest | { error: 
 export function mapTreasuryError(message: string): { status: number; error: string; message: string } {
   const funds = /insufficient_treasury_funds: available (-?[\d.]+), required (-?[\d.]+)/.exec(message)
   if (funds) return { status: 409, error: 'insufficient_treasury_funds', message: `Insufficient treasury funds: ${funds[1]} available, ${funds[2]} required.` }
+  const limit = /(max_topup_per_tx_exceeded|max_daily_topup_exceeded|treasury_reserve_breached|payout_limits_not_configured|payout_not_configured|destination_not_allowed|payout_config_mismatch): ?(.*)/.exec(message)
+  if (limit) return { status: 409, error: limit[1], message: limit[2] || limit[1] }
+  if (/invalid provider payment transition|payment_not_approved/.test(message)) return { status: 409, error: 'invalid_transition', message: 'The payment is not in a state that allows this.' }
+  if (/tx_already_used/.test(message)) return { status: 409, error: 'tx_already_used', message: 'This transaction hash is already recorded on another payment.' }
+  if (/payment .* not found/.test(message)) return { status: 404, error: 'not_found', message: 'Payment not found.' }
   if (/proposal_not_pending/.test(message)) return { status: 409, error: 'proposal_not_pending', message: 'This proposal was already decided.' }
   if (/unsupported_currency/.test(message)) return { status: 409, error: 'unsupported_currency', message: 'The treasury is held in USD; this provider is paid in another currency.' }
   if (/proposal .* not found/.test(message)) return { status: 404, error: 'not_found', message: 'Proposal not found.' }

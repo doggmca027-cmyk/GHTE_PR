@@ -72,6 +72,8 @@ describe('topup proposals (real SQL)', () => {
     prov = await q(`insert into providers(name, api_url) values ('P1', 'https://1') returning id`)
     prov2 = await q(`insert into providers(name, api_url) values ('P2', 'https://2') returning id`)
     eur = await q(`insert into providers(name, api_url, currency) values ('Euro', 'https://e', 'EUR') returning id`)
+    // Phase 6: approving now creates an outbound payment, which needs the provider's payout config (fail closed without it)
+    await db.exec(`update providers set allowed_destination_wallet = '0:' || repeat('ab', 32), max_topup_per_tx = 1000, max_daily_topup = 10000`)
   }, 120_000)
 
   const create = async (provider: string, amount: number | null) =>
@@ -120,6 +122,27 @@ describe('topup proposals (real SQL)', () => {
   })
 
   describe('approving', () => {
+    it('Phase 6: a provider without payout config cannot be paid (fail closed); nothing changes', async () => {
+      await fund(500)
+      await db.exec(`update providers set allowed_destination_wallet = null where id = '${prov}'`)
+      const p = await create(prov, 10)
+      await expect(approve(p.id, admin)).rejects.toThrow(/payout_not_configured/)
+      expect(await treasury()).toBe(500)
+      expect(await status(p.id)).toBe('pending')
+      await db.exec(`update providers set allowed_destination_wallet = '0:' || repeat('ab', 32), max_topup_per_tx = null, max_daily_topup = null where id = '${prov}'`)
+      await expect(approve(p.id, admin)).rejects.toThrow(/payout_limits_not_configured/)
+      expect(await treasury()).toBe(500)
+    })
+
+    it('Phase 6: approval creates a VALIDATED provider payment with the server-side destination', async () => {
+      await fund(500)
+      const p = await create(prov, 40)
+      const r = (await approve(p.id, admin)).rows[0].r
+      expect(r).toMatchObject({ status: 'approved', payment_status: 'VALIDATED' })
+      const pay = (await db.query<Record<string, unknown>>(`select status::text, amount::text, destination_wallet, asset, network, treasury_debited, proposal_id from provider_payments where id = $1`, [r.payment_id])).rows[0]
+      expect(pay).toEqual({ status: 'VALIDATED', amount: '40.0000', destination_wallet: '0:' + 'ab'.repeat(32), asset: 'TON', network: 'mainnet', treasury_debited: true, proposal_id: p.id })
+    })
+
     it('debits the treasury exactly once, marks the proposal and audits it', async () => {
       await fund(500)
       const p = await create(prov, 95.5)

@@ -4,6 +4,9 @@
 //       Starts a throwaway, real PostgreSQL server (embedded-postgres, no Docker needed), applies every migration and
 //       fires the races below through a pool of separate connections. The server is deleted afterwards.
 //
+//   Scenarios: A wallet race, B provider balance reservation race, C idempotency race,
+//              D provider payment daily limit race, E treasury minimum reserve race.
+//
 //   CONCURRENCY_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres npm run test:concurrency
 //       Runs against a LOCAL Supabase instead (`npx supabase start`; migrations are applied there by the CLI).
 //       Only localhost is accepted: this script writes test users, providers and orders.
@@ -121,6 +124,71 @@ async function race(pool: pg.Pool, sampler: pg.Client, s: Scenario, attempts: At
   return { ok, errors, ms, peakLockWaiters, peakActive }
 }
 
+/** Provider payments: fires validate_provider_payment for every id at once (own connection, locks held HOLD_MS). */
+async function raceValidations(pool: pg.Pool, sampler: pg.Client, paymentIds: string[]): Promise<RaceResult> {
+  const clients = await Promise.all(paymentIds.map(() => pool.connect()))
+  let sampling = true
+  let peakLockWaiters = 0
+  let peakActive = 0
+  const sample = (async () => {
+    while (sampling) {
+      const r = await sampler.query<{ waiting: number; active: number }>(
+        `select count(*) filter (where wait_event_type = 'Lock')::int waiting, count(*) filter (where state = 'active')::int active
+           from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid()`)
+      peakLockWaiters = Math.max(peakLockWaiters, r.rows[0].waiting)
+      peakActive = Math.max(peakActive, r.rows[0].active)
+    }
+  })()
+  const started = Date.now()
+  const settled = await Promise.allSettled(paymentIds.map(async (id, i) => {
+    const c = clients[i]
+    try {
+      await c.query('begin')
+      await c.query('select validate_provider_payment($1::uuid)', [id])
+      await c.query('select pg_sleep($1)', [HOLD_MS / 1000])
+      await c.query('commit')
+      return { orderId: id }
+    } catch (e) {
+      await c.query('rollback').catch(() => {})
+      throw e
+    }
+  }))
+  const ms = Date.now() - started
+  sampling = false
+  await sample
+  clients.forEach((c) => c.release())
+  const errors = new Map<string, number>()
+  const ok: { orderId: string }[] = []
+  for (const r of settled) {
+    if (r.status === 'fulfilled') ok.push(r.value)
+    else {
+      const m = r.reason instanceof Error ? r.reason.message : String(r.reason)
+      const k = /max_daily_topup_exceeded|treasury_reserve_breached|max_topup_per_tx_exceeded|insufficient_treasury_funds|deadlock/.exec(m)?.[0] ?? `other: ${m.slice(0, 80)}`
+      errors.set(k, (errors.get(k) ?? 0) + 1)
+    }
+  }
+  return { ok, errors, ms, peakLockWaiters, peakActive }
+}
+
+async function seedPayoutProvider(admin: pg.Client, maxPerTx: number, maxDaily: number) {
+  const id = randomUUID()
+  await admin.query(
+    `insert into providers(id, name, api_url, allowed_destination_wallet, max_topup_per_tx, max_daily_topup) values ($1, $2, 'https://race.invalid', $3, $4, $5)`,
+    [id, `race-pay-${id.slice(0, 8)}`, `0:${'ab'.repeat(32)}`, maxPerTx, maxDaily])
+  return id
+}
+async function approvedPayment(admin: pg.Client, provider: string, amount: number) {
+  const id = (await admin.query<{ id: string }>(
+    `insert into provider_payments(provider_id, amount, asset, network, destination_wallet, status, idempotency_key)
+     select id, $2, payout_asset, payout_network, allowed_destination_wallet, 'PROPOSED', 'race:' || gen_random_uuid() from providers where id = $1 returning id`,
+    [provider, amount])).rows[0].id
+  await admin.query(`update provider_payments set status = 'APPROVED' where id = $1`, [id])
+  return id
+}
+const treasuryBalance = async (admin: pg.Client) => Number((await admin.query<{ b: string }>(`select balance::text b from treasury_state where id = 1`)).rows[0].b)
+const treasuryConsistent = async (admin: pg.Client) =>
+  (await admin.query<{ ok: boolean }>(`select (select balance from treasury_state where id = 1) = (select coalesce(sum(amount), 0) from treasury_transactions) ok`)).rows[0].ok
+
 // ---------------------------------------------------------------------------
 // Checks + output
 // ---------------------------------------------------------------------------
@@ -210,6 +278,42 @@ async function main() {
     check('purchase ledger entries', pC.rows[0].n, 1)
     check('wallet balance (100 - 5)', num(wC.rows[0].b), 95)
     check('wallet = sum of its ledger', await ledgerConsistent(admin, [uC]), true)
+
+    // ---- D. Provider payment daily limit race ---------------------------------------------------
+    console.log('\nD. Payout daily limit race: provider with max $10/tx and $50/day, 20 concurrent $10 payments')
+    await admin.query(`update platform_settings set minimum_treasury_reserve = 0 where id = 1`)
+    await admin.query(`select process_treasury_transaction('deposit', 10000, 'race funding', 'race-treasury-' || gen_random_uuid())`)
+    const tD0 = await treasuryBalance(admin)
+    const pD = await seedPayoutProvider(admin, 10, 50)
+    const payD: string[] = []
+    for (let i = 0; i < 20; i++) payD.push(await approvedPayment(admin, pD, 10))
+    const rD = await raceValidations(pool, sampler, payD)
+    console.log(summary(rD))
+    const usedD = await admin.query<{ s: string; n: number }>(`select coalesce(sum(amount), 0)::text s, count(*)::int n from provider_payments where provider_id = $1 and status = 'VALIDATED'`, [pD])
+    check('payments validated', rD.ok.length, 5)
+    check('refused: daily limit', rD.errors.get('max_daily_topup_exceeded') ?? 0, 15)
+    check('any other error (deadlock, unexpected)', [...rD.errors.keys()].filter((k) => k !== 'max_daily_topup_exceeded'), [])
+    check('total committed today (never above $50)', [usedD.rows[0].n, num(usedD.rows[0].s)], [5, 50])
+    check('treasury debited exactly $50', tD0 - (await treasuryBalance(admin)), 50)
+    check('treasury balance = sum of its journal', await treasuryConsistent(admin), true)
+
+    // ---- E. Treasury minimum reserve race --------------------------------------------------------
+    console.log('\nE. Treasury reserve race: reserve leaves room for $50, 10 concurrent $25 payments to 10 different providers')
+    const tE0 = await treasuryBalance(admin)
+    const reserve = tE0 - 60 // room for two $25 payments, not three
+    await admin.query(`update platform_settings set minimum_treasury_reserve = $1 where id = 1`, [reserve])
+    const payE: string[] = []
+    for (let i = 0; i < 10; i++) payE.push(await approvedPayment(admin, await seedPayoutProvider(admin, 100, 1000), 25))
+    const rE = await raceValidations(pool, sampler, payE)
+    console.log(summary(rE))
+    const tE1 = await treasuryBalance(admin)
+    check('payments validated', rE.ok.length, 2)
+    check('refused: minimum reserve', rE.errors.get('treasury_reserve_breached') ?? 0, 8)
+    check('any other error (deadlock, unexpected)', [...rE.errors.keys()].filter((k) => k !== 'treasury_reserve_breached'), [])
+    check('treasury debited exactly $50', tE0 - tE1, 50)
+    check('treasury never below the reserve', tE1 >= reserve, true)
+    check('treasury balance = sum of its journal', await treasuryConsistent(admin), true)
+    await admin.query(`update platform_settings set minimum_treasury_reserve = 0 where id = 1`)
   } finally {
     await pool.end().catch(() => {})
     await sampler.end().catch(() => {})
