@@ -12,10 +12,27 @@ import type { HealthStatus } from './types.ts'
 
 export const PING_TIMEOUT_MS = 8_000
 
+// Reliability penalty (providers.reliability_penalty_multiplier, 1..10): the router multiplies an offer's cost by it, so a provider
+// that keeps failing must be that much cheaper to win. It climbs fast on a failed check and falls back slowly on a good one, so a
+// provider that flaps stays pessimised for a while after it recovers.
+export const PENALTY_MIN = 1
+export const PENALTY_MAX = 10
+export const PENALTY_STEP_UP = 0.5
+export const PENALTY_STEP_DOWN = 0.25
+
+/** The penalty after one more check. A failure adds PENALTY_STEP_UP (cap 10), a success subtracts PENALTY_STEP_DOWN (floor 1). */
+export function nextPenalty(current: number, outcome: 'ok' | 'fail'): number {
+  const base = Number.isFinite(current) ? Math.min(PENALTY_MAX, Math.max(PENALTY_MIN, current)) : PENALTY_MIN
+  const next = outcome === 'fail' ? base + PENALTY_STEP_UP : base - PENALTY_STEP_DOWN
+  return Math.round(Math.min(PENALTY_MAX, Math.max(PENALTY_MIN, next)) * 1000) / 1000
+}
+
 export interface MonitoredProvider {
   id: string
   name: string
   healthStatus: HealthStatus
+  /** Current providers.reliability_penalty_multiplier (absent: the penalty is not managed for this provider). */
+  reliabilityPenalty?: number
 }
 
 export type AlertKind = 'down' | 'recovered'
@@ -101,6 +118,11 @@ export interface HealthPorts<P extends MonitoredProvider> {
   applyCheck(provider: P, from: HealthStatus, to: HealthStatus, checkedAt: string): Promise<'changed' | 'unchanged' | 'lost_race'>
   appendLog(entry: HealthLogEntry): Promise<void>
   notify(provider: P, kind: AlertKind, checkedAt: string): Promise<void>
+  /**
+   * Compare-and-set of the reliability penalty: only applies while it still equals `from`, so overlapping runs never
+   * stack two steps on one check. True for the caller that wrote it.
+   */
+  savePenalty?(provider: P, from: number, to: number): Promise<boolean>
   now?: () => Date
   pingTimeoutMs?: number
 }
@@ -114,6 +136,8 @@ export interface ProviderCheckReport {
   /** True when this check raised a low-balance alert. */
   balanceAlert: boolean
   errorKind: string | null
+  /** The penalty stored by this check (absent when it did not change). */
+  penalty?: number
 }
 
 export interface HealthRunReport {
@@ -193,6 +217,18 @@ async function processBalance<P extends MonitoredProvider>(p: P, reading: Balanc
   }
 }
 
+/** Best effort, like the balance: a penalty write failing must never turn a finished check into a failed one. */
+async function adjustPenalty<P extends MonitoredProvider>(p: P, outcome: 'ok' | 'fail', ports: HealthPorts<P>): Promise<number | undefined> {
+  if (!ports.savePenalty || p.reliabilityPenalty === undefined) return undefined
+  const next = nextPenalty(p.reliabilityPenalty, outcome)
+  if (next === p.reliabilityPenalty) return undefined
+  try {
+    return (await ports.savePenalty(p, p.reliabilityPenalty, next)) ? next : undefined
+  } catch {
+    return undefined
+  }
+}
+
 async function checkOne<P extends MonitoredProvider>(p: P, ports: HealthPorts<P>): Promise<ProviderCheckReport> {
   const clock = ports.now ?? (() => new Date())
   const started = Date.now()
@@ -225,8 +261,9 @@ async function checkOne<P extends MonitoredProvider>(p: P, ports: HealthPorts<P>
   await ports.appendLog({ providerId: p.id, status: to, previousStatus: p.healthStatus, latencyMs, errorKind, checkedAt }).catch(() => {})
   const kind = outcome === 'changed' ? alertFor(p.healthStatus, to) : null
   if (kind) await ports.notify(p, kind, checkedAt).catch(() => {})
+  const penalty = await adjustPenalty(p, to === 'healthy' ? 'ok' : 'fail', ports)
   const balanceAlert = to === 'healthy' && reading ? await processBalance(p, reading, checkedAt, ports) : false
-  return { ...base, to, alert: kind, balanceAlert }
+  return { ...base, to, alert: kind, balanceAlert, ...(penalty !== undefined ? { penalty } : {}) }
 }
 
 /** Checks every provider. Never throws because of a single provider. */

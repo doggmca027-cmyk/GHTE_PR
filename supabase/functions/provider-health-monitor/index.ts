@@ -3,7 +3,8 @@
 // Pings every active, routing-enabled provider with a cheap authenticated call (balance, 8 s timeout),
 // stores providers.health_status (healthy | unavailable) + last_health_check, appends provider_health_log and
 // alerts admins on Telegram when a provider goes down or comes back, stores the balance it just read and
-// raises ONE low-balance alert per dip (providers.balance_alert_sent is the lock). The routing engine reads health_status,
+// raises ONE low-balance alert per dip (providers.balance_alert_sent is the lock). It also keeps providers.reliability_penalty_multiplier
+// (1..10): +0.5 on a failed check, -0.25 on a good one, so the router pessimises a flaky provider before an order is placed. The routing engine reads health_status,
 // so failover to the next-best offer happens on the very next order.
 //
 // Auth: header `x-cron-secret: $CRON_SECRET` or `Authorization: Bearer <service role key>`. Never callable by clients.
@@ -56,13 +57,14 @@ Deno.serve(instrument('provider-health-monitor', async (req: Request, { log, cor
       async listProviders() {
         const { data, error } = await db
           .from('providers')
-          .select('id, name, api_url, api_key_encrypted, health_status')
+          .select('id, name, api_url, api_key_encrypted, health_status, reliability_penalty_multiplier')
           .eq('is_active', true)
           .eq('routing_enabled', true)
         if (error) throw new Error(`load providers: ${error.message}`)
         return (data ?? []).map((r: Record<string, unknown>) => ({
           id: String(r.id), name: String(r.name), apiUrl: String(r.api_url),
           apiKeyEncrypted: (r.api_key_encrypted as string | null) ?? null, healthStatus: r.health_status as HealthStatus,
+          reliabilityPenalty: Number(r.reliability_penalty_multiplier),
         }))
       },
 
@@ -136,6 +138,17 @@ Deno.serve(instrument('provider-health-monitor', async (req: Request, { log, cor
           .select('id')
         if (error) throw new Error(`update provider health: ${error.message}`)
         return data && data.length > 0 ? 'changed' : 'lost_race'
+      },
+
+      async savePenalty(p, from, to) {
+        const { data, error } = await db
+          .from('providers')
+          .update({ reliability_penalty_multiplier: to })
+          .eq('id', p.id)
+          .eq('reliability_penalty_multiplier', from)
+          .select('id')
+        if (error) throw new Error(`save penalty: ${error.message}`)
+        return (data ?? []).length > 0
       },
 
       async appendLog(e) {

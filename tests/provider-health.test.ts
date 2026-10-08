@@ -8,6 +8,7 @@ import {
   classifyPingError,
   isBalanceParseError,
   sanitizeBalance,
+  nextPenalty,
   runHealthChecks,
   type AlertKind,
   type HealthLogEntry,
@@ -151,8 +152,8 @@ function portsFor(db: PGlite, script: Script) {
   const pings: string[] = []
   const ports: HealthPorts<Row> = {
     async listProviders() {
-      return (await db.query<{ id: string; name: string; health_status: HealthStatus }>(`select id, name, health_status from providers where is_active and routing_enabled order by name`)).rows
-        .map((r) => ({ id: r.id, name: r.name, healthStatus: r.health_status }))
+      return (await db.query<{ id: string; name: string; health_status: HealthStatus; pen: number }>(`select id, name, health_status, reliability_penalty_multiplier::float8 pen from providers where is_active and routing_enabled order by name`)).rows
+        .map((r) => ({ id: r.id, name: r.name, healthStatus: r.health_status, reliabilityPenalty: r.pen }))
     },
     async ping(p) {
       pings.push(p.id)
@@ -192,6 +193,9 @@ function portsFor(db: PGlite, script: Script) {
     async appendLog(e: HealthLogEntry) {
       await db.query(`insert into provider_health_log(provider_id, status, previous_status, latency_ms, error_kind, checked_at) values ($1,$2,$3,$4,$5,$6)`,
         [e.providerId, e.status, e.previousStatus, e.latencyMs, e.errorKind, e.checkedAt])
+    },
+    async savePenalty(p, from, to) {
+      return (await db.query(`update providers set reliability_penalty_multiplier = $3 where id = $1 and reliability_penalty_multiplier = $2 returning id`, [p.id, from, to])).rows.length > 0
     },
     async notify(p, kind) { alerts.push({ name: p.name, kind }) },
     pingTimeoutMs: 50,
@@ -495,10 +499,11 @@ describe('provider-health-monitor core', () => {
       await runHealthChecks(ports)
       expect((await routeNow(db)).providerId).toBe(B)
 
-      // A recovers: traffic returns to the higher-scored provider
+      // A recovers. The monitor owns the penalty: B's manual 2x decays by 0.25 per good check back to 1, so the cheaper B
+      // (0.07) ends up ahead of A again; a manual penalty is a one-off, not a permanent setting.
       script.down.clear()
-      await runHealthChecks(ports)
-      expect((await routeNow(db)).providerId).toBe(A)
+      for (let i = 0; i < 6; i++) await runHealthChecks(ports)
+      expect((await routeNow(db)).providerId).toBe(B)
     })
 
     it('refuses the order (before charging) when every provider is down', async () => {
@@ -506,5 +511,81 @@ describe('provider-health-monitor core', () => {
       await runHealthChecks(ports)
       await expect(routeNow(db)).rejects.toBeInstanceOf(ServiceUnavailableError)
     })
+  })
+})
+
+describe('reliability penalty', () => {
+  let db: PGlite
+  beforeEach(async () => { db = await world() }, 120_000)
+  const penaltyOf = async (id: string) => (await db.query<{ p: number }>(`select reliability_penalty_multiplier::float8 p from providers where id = $1`, [id])).rows[0].p
+
+  it('nextPenalty: +0.5 on failure (cap 10), -0.25 on success (floor 1), garbage input counts as 1', () => {
+    expect(nextPenalty(1, 'fail')).toBe(1.5)
+    expect(nextPenalty(9.8, 'fail')).toBe(10)
+    expect(nextPenalty(10, 'fail')).toBe(10)
+    expect(nextPenalty(2, 'ok')).toBe(1.75)
+    expect(nextPenalty(1.1, 'ok')).toBe(1)
+    expect(nextPenalty(1, 'ok')).toBe(1)
+    expect(nextPenalty(Number.NaN, 'fail')).toBe(1.5)
+  })
+
+  it('a failing provider climbs with every failed check and is capped at 10; a healthy one stays at 1', async () => {
+    const { ports } = portsFor(db, { down: new Set([A]) })
+    await runHealthChecks(ports)
+    expect(await penaltyOf(A)).toBe(1.5)
+    await runHealthChecks(ports)
+    expect(await penaltyOf(A)).toBe(2)
+    for (let i = 0; i < 30; i++) await runHealthChecks(ports)
+    expect(await penaltyOf(A)).toBe(10)
+    expect(await penaltyOf(B)).toBe(1)
+  })
+
+  it('a timeout counts as a failure', async () => {
+    const { ports } = portsFor(db, { down: new Set(), hang: new Set([A]) })
+    await runHealthChecks(ports)
+    expect(await penaltyOf(A)).toBe(1.5)
+  })
+
+  it('a recovered provider sheds the penalty gradually and the balance is stored on success', async () => {
+    const script = { down: new Set([A]), balance: { [A]: 42 } as Record<string, number> }
+    const { ports } = portsFor(db, script)
+    for (let i = 0; i < 4; i++) await runHealthChecks(ports) // 1 -> 3
+    expect(await penaltyOf(A)).toBe(3)
+    script.down.clear()
+    await runHealthChecks(ports)
+    expect(await penaltyOf(A)).toBe(2.75)
+    for (let i = 0; i < 20; i++) await runHealthChecks(ports)
+    expect(await penaltyOf(A)).toBe(1)
+    expect((await db.query<{ b: string }>(`select provider_balance::text b from providers where id = $1`, [A])).rows[0].b).toBe('42.0000')
+  })
+
+  it('rate limiting is inconclusive: the penalty does not move', async () => {
+    const { ports } = portsFor(db, { down: new Set() })
+    const base = ports.ping
+    ports.ping = async (p) => { if (p.id === A) throw new SMMProviderError('http', 'x', { httpStatus: 429, code: 'rate_limited' }); return base(p) }
+    await runHealthChecks(ports)
+    expect(await penaltyOf(A)).toBe(1)
+  })
+
+  it('two overlapping runs add one step, not two (compare-and-set)', async () => {
+    const { ports } = portsFor(db, { down: new Set([A]) })
+    await Promise.all([runHealthChecks(ports), runHealthChecks(ports)])
+    expect(await penaltyOf(A)).toBe(1.5)
+  })
+
+  it('a penalty write that fails does not fail the check', async () => {
+    const { ports } = portsFor(db, { down: new Set([A]) })
+    ports.savePenalty = async () => { throw new Error('db down') }
+    const report = await runHealthChecks(ports)
+    expect(report.errors).toBe(0)
+    expect(await statusOf(db, A)).toBe('unavailable')
+  })
+
+  it('the router uses the penalty: a flaky provider loses to a slightly dearer reliable one', async () => {
+    // A: cost 0.1 (+ score bonus 1%), B: cost 0.07. Make B flaky enough (x3 -> 0.21) to lose to A.
+    await db.exec(`update providers set reliability_penalty_multiplier = 3 where id = '${B}'`)
+    expect((await routeNow(db)).providerId).toBe(A)
+    await db.exec(`update providers set reliability_penalty_multiplier = 1 where id = '${B}'`)
+    expect((await routeNow(db)).providerId).toBe(B)
   })
 })
