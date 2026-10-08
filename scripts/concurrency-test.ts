@@ -9,7 +9,9 @@
 //              F reconciliation detector race (pg_cron and admins running sync_reconciliation_cases at once),
 //              G worker heartbeat race (overlapping worker runs reporting at once; no run may be lost),
 //              H double Partial, I Canceled + Partial race, J Partial + full refund race, K refund_order storm
-//                (the order-status refund paths: never more than the charge back, never twice, always a safe final state).
+//                (the order-status refund paths: never more than the charge back, never twice, always a safe final state),
+//              L affiliate withdrawal storm, M many small withdrawals, N same-key retries, O withdrawal against a clawback
+//                (transfer_affiliate_balance_to_wallet: the referral balance can never be spent twice).
 //
 //   CONCURRENCY_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres npm run test:concurrency
 //       Runs against a LOCAL Supabase instead (`npx supabase start`; migrations are applied there by the CLI).
@@ -250,6 +252,28 @@ async function seedSubmittedOrder(admin: pg.Client, s: Scenario, user: string): 
   await admin.query(`update orders set status = 'submitted', provider_order_id = $2 where id = $1`, [id, `P-${id.slice(0, 8)}`])
   return id
 }
+
+/** A referrer with `rewards` x 0.20 of cleared affiliate earnings (hold 0, 5%): rewards come from real completed orders of one invitee. */
+async function seedReferrer(admin: pg.Client, s: Scenario, rewards: number): Promise<{ referrer: string; buyer: string; orders: string[] }> {
+  await admin.query(`update platform_settings set referral_reward_percentage = 5, referral_hold_days = 0 where id = 1`)
+  const referrer = await seedUser(admin, 1)
+  const buyer = await seedUser(admin, 100_000)
+  const code = (await admin.query<{ c: string }>(`select referral_code c from users where id = $1`, [referrer])).rows[0].c
+  await admin.query(`select apply_referral($1::uuid, $2)`, [buyer, code])
+  const orders: string[] = []
+  for (let i = 0; i < rewards; i++) {
+    const id = await seedSubmittedOrder(admin, s, buyer)
+    await admin.query(`update orders set status = 'completed' where id = $1`, [id])
+    orders.push(id)
+  }
+  return { referrer, buyer, orders }
+}
+
+const transferOp = (user: string, amount: number | null, key: string | null): RaceOp => (c) =>
+  inTx(c, async () => {
+    const r = await c.query<{ r: { transferred: string; replayed: boolean } }>(`select transfer_affiliate_balance_to_wallet($1::uuid, $2::numeric, $3::text) r`, [user, amount, key])
+    return `transfer:${r.rows[0].r.transferred}:${r.rows[0].r.replayed ? 'replayed' : 'new'}`
+  })
 
 /** One database operation of a race. It manages its own transaction(s), like the worker's separate RPC calls do. */
 type RaceOp = (c: pg.PoolClient) => Promise<string>
@@ -592,6 +616,72 @@ async function main() {
     const mK = await orderMoney(admin, orderK)
     check('refund calls that failed', rK.errors, [])
     check('credits for the order', [mK.entries, mK.refunded, mK.status], [1, ORDER_CHARGE, 'refunded'])
+
+    // ---- L-O. Affiliate withdrawals ---------------------------------------------------------------
+    const sA2 = await seedScenario(admin, 'affiliate', { customerRate: ORDER_CHARGE, costRate: 1, providerBalance: null })
+    const affiliate = async (referrer: string) => (await admin.query<{ b: { total: number; available: number } }>(`select referral_balance($1::uuid) b`, [referrer])).rows[0].b
+    const walletBalance = async (user: string) => num((await admin.query<{ b: string }>(`select balance::text b from wallets where user_id = $1`, [user])).rows[0].b)
+    const ledgerOf = async (referrer: string) => (await admin.query<{ n: number; s: string }>(`select count(*) filter (where transaction_type = 'transfer_to_wallet')::int n, coalesce(sum(-amount) filter (where transaction_type = 'transfer_to_wallet'), 0)::text s from referral_ledger where user_id = $1`, [referrer])).rows[0]
+
+    // ---- L. Withdrawal storm --------------------------------------------------------------------
+    console.log('\nL. Withdrawal storm: 30 concurrent "withdraw everything" requests, $10.00 cleared (50 rewards of $0.20)')
+    const refL = await seedReferrer(admin, sA2, 50)
+    const startL = await walletBalance(refL.referrer)
+    check('cleared affiliate balance before the storm', (await affiliate(refL.referrer)).available, 10)
+    const rL = await raceOps(pool, Array.from({ length: 30 }, () => transferOp(refL.referrer, null, null)))
+    const succeededL = rL.ok.length
+    const lL = await ledgerOf(refL.referrer)
+    check('requests that moved money', succeededL, 1)
+    check('refused: nothing left to withdraw', rL.errors.filter((e) => /insufficient_affiliate_balance/.test(e)).length, 29)
+    check('any other error (deadlock, unexpected)', rL.errors.filter((e) => !/insufficient_affiliate_balance/.test(e)), [])
+    check('wallet credited exactly once, by the whole balance', [num(lL.s), (await walletBalance(refL.referrer)) - startL], [10, 10])
+    check('affiliate balance left', (await affiliate(refL.referrer)).total, 0)
+
+    // ---- M. Many small withdrawals --------------------------------------------------------------
+    console.log('\nM. Small withdrawals: 40 concurrent $0.50 requests with distinct keys against $10.00 cleared')
+    const refM = await seedReferrer(admin, sA2, 50)
+    const startM = await walletBalance(refM.referrer)
+    const rM = await raceOps(pool, Array.from({ length: 40 }, () => transferOp(refM.referrer, 0.5, `m-${randomUUID()}`)))
+    const lM = await ledgerOf(refM.referrer)
+    check('requests that moved money (20 x $0.50 = $10.00)', rM.ok.length, 20)
+    check('refused for lack of balance', rM.errors.filter((e) => /insufficient_affiliate_balance/.test(e)).length, 20)
+    check('any other error', rM.errors.filter((e) => !/insufficient_affiliate_balance/.test(e)), [])
+    check('total withdrawn never exceeds what was earned', [num(lM.s), (await walletBalance(refM.referrer)) - startM], [10, 10])
+    check('affiliate balance left', (await affiliate(refM.referrer)).total, 0)
+
+    // ---- N. Same-key retries --------------------------------------------------------------------
+    console.log('\nN. Retries: 25 concurrent requests with the SAME idempotency key (a client retrying a timeout)')
+    const refN = await seedReferrer(admin, sA2, 10)
+    const startN = await walletBalance(refN.referrer)
+    const keyN = `n-${randomUUID()}`
+    const rN = await raceOps(pool, Array.from({ length: 25 }, () => transferOp(refN.referrer, 1, keyN)))
+    const lN = await ledgerOf(refN.referrer)
+    check('requests answered', [rN.ok.length, rN.errors], [25, []])
+    check('of which moved money / replayed', [rN.ok.filter((o) => o.endsWith(':new')).length, rN.ok.filter((o) => o.endsWith(':replayed')).length], [1, 24])
+    check('withdrawn once ($1.00)', [lN.n, num(lN.s), (await walletBalance(refN.referrer)) - startN], [1, 1, 1])
+
+    // ---- O. Withdrawal against clawbacks --------------------------------------------------------
+    console.log('\nO. Withdrawal vs clawback: 20 rounds, "withdraw everything" races the refund of the order that earned the reward')
+    let oOverWithdrawn = 0, oUnbalanced = 0, oBothWays = new Set<string>()
+    for (let i = 0; i < 20; i++) {
+      const r = await seedReferrer(admin, sA2, 1) // $0.20 cleared
+      const startO = await walletBalance(r.referrer)
+      await raceOps(pool, i % 2 === 0 ? [transferOp(r.referrer, null, null), refundOp(r.orders[0])] : [refundOp(r.orders[0]), transferOp(r.referrer, null, null)], 25)
+      const l = await ledgerOf(r.referrer)
+      const b = await affiliate(r.referrer)
+      const credited = (await walletBalance(r.referrer)) - startO
+      if (num(l.s) > 0.2 + 1e-9) oOverWithdrawn++            // never more than was earned
+      if (Math.abs(credited - num(l.s)) > 1e-9) oUnbalanced++ // the wallet got exactly what the ledger says left
+      oBothWays.add(num(l.s) > 0 ? 'withdrawn before the clawback (balance goes negative, recovered later)' : 'clawback first (nothing to withdraw)')
+      if (b.total < -0.2 - 1e-9) oOverWithdrawn++
+    }
+    console.log(`  outcomes seen: ${[...oBothWays].join('; ')}`)
+    check('rounds where more than the earned reward left the ledger', oOverWithdrawn, 0)
+    check('rounds where wallet credit and ledger debit differ', oUnbalanced, 0)
+    const refAll = [refL.referrer, refM.referrer, refN.referrer]
+    check('wallets = sum of their ledgers (referrers)', await ledgerConsistent(admin, refAll), true)
+    const refTotals = await admin.query<{ bad: number }>(`select count(*)::int bad from (select user_id, sum(amount) s from referral_ledger group by user_id) x where x.s < -0.2`)
+    check('no referrer below the one-reward clawback floor', refTotals.rows[0].bad, 0)
 
     // ---- whole-wallet balance ---------------------------------------------------------------------
     const allOrders = [...ordersH, ...ordersI, ...ordersJ, orderK]
