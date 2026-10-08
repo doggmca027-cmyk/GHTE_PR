@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Toast, type ToastMessage } from '@/components/ui/Toast'
 import { useAuth } from '@/context/AuthContext'
+import { track } from '@/lib/analytics-client'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import { haptic } from '@/lib/haptics'
 import {
@@ -69,6 +70,21 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
 
   const busy = phase.kind === 'submitting'
   const done = phase.kind === 'done'
+
+  // Funnel: opening the order form for a service IS the start of checkout. Reported once per opening, with exactly what the server's
+  // allow-list accepts for the event (service_id, quantity, has_promo); the category travels with service_view, which the server
+  // lists with category_id. Neither the link nor the promo code is ever reported (typing a code only reports promo_entered).
+  useEffect(() => {
+    track('service_view', { service_id: service.id, category_id: service.categoryId })
+    track('checkout_started', { service_id: service.id, quantity: service.minQuantity, has_promo: false })
+  }, [service.id, service.categoryId, service.minQuantity])
+  const promoRef = useRef(false)
+  useEffect(() => {
+    if (!promoRef.current && promo.trim() !== '') {
+      promoRef.current = true
+      track('promo_entered', { service_id: service.id })
+    }
+  }, [promo, service.id])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !submittingRef.current && onClose()

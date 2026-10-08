@@ -9,6 +9,7 @@ import { DEPOSIT_PRESETS_USD, MAX_DEPOSIT_USD, MIN_DEPOSIT_USD, buildTransaction
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { DepositApiError } from '@/services/api/deposit-errors'
+import { track } from '@/lib/analytics-client'
 import { createDeposit, quoteDeposit, simulateMockPayment, verifyDeposit } from '@/services/api/deposits'
 import type { DepositAsset, DepositIntent, DepositQuote } from '@/types/wallet'
 
@@ -112,6 +113,7 @@ export function DepositModal({ session, wallet, initialAmount, onClose, onCredit
     try {
       setPhase({ kind: 'creating' })
       const intent = await createDeposit(session, { amountUsd: usd, asset })
+      track('deposit_started', { asset, amount_usd: usd })
 
       if (wallet.isMock) {
         setPhase({ kind: 'mock_awaiting', intent })

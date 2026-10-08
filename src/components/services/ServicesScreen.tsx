@@ -3,6 +3,7 @@ import { AlertCircle, SearchX } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useAuth } from '@/context/AuthContext'
+import { track } from '@/lib/analytics-client'
 import { haptic } from '@/lib/haptics'
 import { fetchCatalog } from '@/services/api/services'
 import type { AuthSession } from '@/services/api/auth'
@@ -54,6 +55,12 @@ export function ServicesScreen({ session, onTopUp, onViewOrders }: Props) {
       .filter((s) => ids.has(s.categoryId))
       .sort((a, b) => a.sortOrder - b.sortOrder || a.ratePer1000 - b.ratePer1000 || a.name.localeCompare(b.name))
   }, [catalog, categories, categoryId])
+
+  // The catalog was looked at: once it is loaded, and again when the customer switches platform or category.
+  const ready = state.status === 'ready'
+  useEffect(() => {
+    if (ready) track('catalog_view', { platform, ...(categoryId !== ALL_CATEGORIES ? { category_id: categoryId } : {}) })
+  }, [ready, platform, categoryId])
 
   const open = (service: ICatalogService) => {
     haptic.tap()

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircle, Loader2, Sparkles } from 'lucide-react'
 import { Layout } from '@/components/layout/Layout'
 import { Card } from '@/components/ui/Card'
@@ -10,6 +10,8 @@ import { OrdersScreen } from '@/components/orders/OrdersScreen'
 import { ServicesScreen } from '@/components/services/ServicesScreen'
 import { SettingsScreen } from '@/components/settings/SettingsScreen'
 import { useAuth } from '@/context/AuthContext'
+import { bindAnalytics, track } from '@/lib/analytics-client'
+import { WebApp } from '@/lib/webapp'
 
 // Admin code is split into its own chunk: regular users never download it.
 const AdminScreen = lazy(() => import('@/components/admin/AdminScreen').then((m) => ({ default: m.AdminScreen })))
@@ -27,6 +29,24 @@ export default function App() {
   const [tab, setTab] = useState<TabId>('home')
   const [depositRequest, setDepositRequest] = useState<DepositRequest | null>(null)
   const clearDepositRequest = useCallback(() => setDepositRequest(null), [])
+
+  // Product analytics (after the first paint, never blocking): bind the signed-in session, report the app opening once and the
+  // screen the customer lands on. The services screen reports its own catalog views.
+  const session = state.status === 'authenticated' ? state.session : null
+  const opened = useRef(false)
+  useEffect(() => {
+    bindAnalytics(session)
+    if (session && !opened.current) {
+      opened.current = true
+      track('app_opened', { platform: String(WebApp.platform ?? 'unknown').toLowerCase() })
+    }
+  }, [session?.token, session?.isMock]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!session) return
+    if (tab === 'orders') track('orders_view')
+    else if (tab === 'wallet') track('wallet_view')
+    else if (tab === 'settings') track('settings_view')
+  }, [tab, session?.token]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Jump to the wallet and open the deposit drawer (suggesting at least the missing amount, if known). */
   const topUp = (shortfallUsd?: number) => {

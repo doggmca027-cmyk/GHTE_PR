@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { haptic } from '@/lib/haptics'
 import type { AuthSession } from '@/services/api/auth'
+import { AnalyticsTab } from './AnalyticsTab'
 import { ControlCenterTab } from './ControlCenterTab'
 import { ObservabilityTab } from './ObservabilityTab'
 import { OverviewTab } from './OverviewTab'
@@ -11,7 +12,7 @@ import { ProvidersTab } from './ProvidersTab'
 import { ReconciliationTab } from './ReconciliationTab'
 import { TreasuryTab } from './TreasuryTab'
 
-type AdminTab = 'overview' | 'health' | 'queue' | 'prices' | 'pricing' | 'providers' | 'treasury' | 'controls'
+type AdminTab = 'overview' | 'analytics' | 'health' | 'queue' | 'prices' | 'pricing' | 'providers' | 'treasury' | 'controls'
 
 export function AdminScreen({ session }: { session: AuthSession }) {
   const [tab, setTab] = useState<AdminTab>('overview')
@@ -20,6 +21,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
 
   const tabs: { id: AdminTab; label: string; badge?: number }[] = [
     { id: 'overview', label: 'Overview' },
+    { id: 'analytics', label: 'Analytics' },
     { id: 'health', label: 'System Health' },
     { id: 'queue', label: 'Reconciliation', badge: problems },
     { id: 'prices', label: 'Price rules' },
@@ -55,6 +57,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
       </div>
 
       {tab === 'overview' && <OverviewTab session={session} onOpenQueue={() => setTab('queue')} onProblemCount={onProblemCount} />}
+      {tab === 'analytics' && <AnalyticsTab session={session} />}
       {tab === 'health' && <ObservabilityTab session={session} />}
       {tab === 'queue' && <ReconciliationTab session={session} onProblemCount={onProblemCount} onOpenPayments={() => setTab('treasury')} />}
       {tab === 'prices' && <PriceRulesTab session={session} />}
