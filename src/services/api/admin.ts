@@ -2,7 +2,7 @@ import type { AuthSession } from '@/services/api/auth'
 import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayment, ProviderPaymentAction, ProviderPayoutInput, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, SystemHealth, PlatformSettingsView, ReconCase, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
 import { createMockPricing } from './mock-pricing'
 import { createMockObservability } from './mock-observability'
-import { createMockProviders } from './mock-providers'
+import { mockProviders } from './mock-providers'
 import { createMockSettings } from './mock-settings'
 import { createMockTreasury } from './mock-treasury'
 import { metricsFromRpc } from '../../../supabase/functions/_shared/admin-metrics.ts'
@@ -191,9 +191,6 @@ export async function setServiceMargin(session: AuthSession, input: MarginRuleIn
 }
 
 // ---- Provider management (admin_list_providers / admin_update_provider_config) ------------------------
-
-let mockProvidersStore: ReturnType<typeof createMockProviders> | undefined
-const mockProviders = () => (mockProvidersStore ??= createMockProviders())
 
 const HEALTH: readonly ProviderHealth[] = ['healthy', 'degraded', 'unavailable', 'disabled']
 

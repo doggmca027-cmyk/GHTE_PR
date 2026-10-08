@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { AlertCircle, Check, Pencil, X } from 'lucide-react'
+import { AlertCircle, Check, KeyRound, Pencil, Plus, Settings2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { Toast } from '@/components/ui/Toast'
 import { useLoader } from '@/hooks/useLoader'
 import { balanceState, parseAmount, usd } from '@/lib/admin-view'
 import { haptic } from '@/lib/haptics'
@@ -10,6 +11,9 @@ import { timeAgo } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { listProviderConfigs, setProviderPayout, updateProviderConfig } from '@/services/api/admin'
+import { listAdminProviders, toggleProviderRouting, upsertProvider } from '@/services/api/admin-providers'
+import { ProviderModal } from './ProviderModal'
+import type { AdminProvider } from '@/types/admin-providers'
 import type { ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayoutInput } from '@/types/admin'
 
 const HEALTH_BADGE: Record<ProviderHealth, { label: string; className: string }> = {
@@ -27,7 +31,12 @@ export interface ProviderConfigChanges {
 
 export function ProvidersTab({ session }: { session: AuthSession }) {
   const { data, error, loading, reload } = useLoader(() => listProviderConfigs(session), [session.token, session.isMock])
+  // admin-providers adds what the config RPC does not carry: API URL, priority, slug and whether a key is stored
+  const details = useLoader(() => listAdminProviders(session), [session.token, session.isMock])
+  const detailsById = new Map((details.data ?? []).map((d) => [d.id, d]))
   const [editing, setEditing] = useState<ProviderConfigView | null>(null)
+  const [editingProvider, setEditingProvider] = useState<AdminProvider | null>(null)
+  const [adding, setAdding] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
@@ -36,13 +45,15 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
     setBusyId(p.id)
     setMessage(null)
     try {
-      await updateProviderConfig(session, p.id, { routingEnabled: !p.routingEnabled })
+      // TOGGLE_ROUTING: a 409 (no API key, provider inactive) comes back as a readable message and the switch stays where it was
+      await toggleProviderRouting(session, p.id, !p.routingEnabled)
       haptic.success()
       setMessage({ kind: 'ok', text: `${p.name}: routing ${p.routingEnabled ? 'disabled' : 'enabled'}.` })
-      await reload()
+      await Promise.all([reload(), details.reload()])
     } catch (e) {
       haptic.error()
       setMessage({ kind: 'error', text: e instanceof Error ? e.message : 'Could not save.' })
+      await Promise.all([reload(), details.reload()]) // show what the server really has
     } finally {
       setBusyId(null)
     }
@@ -70,14 +81,14 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
       <p className="rounded-2xl bg-brand-light/60 px-3.5 py-2.5 text-[13px] font-medium text-brand-text">
         Health and balance are refreshed every minute for providers with routing on. You get one Telegram alert when a balance reaches its threshold.
       </p>
-      {message && (
-        <p role="status" className={cn('rounded-2xl px-3.5 py-2.5 text-[13px] font-medium', message.kind === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700')}>
-          {message.text}
-        </p>
-      )}
+      <button type="button" onClick={() => { haptic.tap(); setMessage(null); setAdding(true) }} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl bg-brand text-sm font-bold text-white active:scale-[0.98]">
+        <Plus size={16} strokeWidth={2} /> Add provider
+      </button>
+
       {data.length === 0 && <Card className="p-4 text-sm text-content-secondary">No providers yet.</Card>}
       {data.map((p) => {
         const state = balanceState(p.balance, p.lowBalanceThreshold, p.lastBalanceSync)
+        const d = detailsById.get(p.id)
         return (
           <article key={p.id} className={cn('rounded-3xl border bg-white p-4 shadow-card', state === 'low' ? 'border-amber-300' : 'border-blue-100/70')}>
             <div className="flex items-start justify-between gap-3">
@@ -91,7 +102,7 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
                 role="switch"
                 aria-checked={p.routingEnabled}
                 aria-label={`${p.routingEnabled ? 'Disable' : 'Enable'} routing for ${p.name}`}
-                disabled={busyId === p.id || (!p.isActive && !p.routingEnabled)}
+                disabled={busyId === p.id}
                 onClick={() => void toggleRouting(p)}
                 className={cn('relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50', p.routingEnabled ? 'bg-brand' : 'bg-slate-300')}
               >
@@ -99,6 +110,14 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
               </button>
             </div>
 
+            {d && (
+              <p className="mt-2 truncate font-mono text-xs text-content-secondary" title={d.apiUrl}>{d.apiUrl}</p>
+            )}
+            {d && !d.hasApiKey && (
+              <p role="status" className="mt-2 flex items-center gap-1.5 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                <KeyRound size={14} strokeWidth={1.75} /> No API key: routing cannot be switched on.
+              </p>
+            )}
             <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <div>
                 <dt className="text-xs text-content-secondary">Balance</dt>
@@ -110,6 +129,12 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
                 <dt className="text-xs text-content-secondary">Low-balance threshold</dt>
                 <dd className="font-bold text-content-primary">{usd(p.lowBalanceThreshold)}</dd>
               </div>
+              {d && (
+                <div>
+                  <dt className="text-xs text-content-secondary">Priority</dt>
+                  <dd className="font-bold text-content-primary">{d.priority}</dd>
+                </div>
+              )}
               <div>
                 <dt className="text-xs text-content-secondary">Reliability penalty</dt>
                 <dd className={cn('font-bold', p.reliabilityPenalty > 1 ? 'text-amber-600' : 'text-content-primary')}>x{p.reliabilityPenalty}</dd>
@@ -119,13 +144,40 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
             <PayoutSummary provider={p} />
             <div className="mt-3 flex items-center justify-between">
               <p className="text-xs text-content-secondary">{p.lastHealthCheck ? `Checked ${timeAgo(p.lastHealthCheck)}` : 'Never checked'}</p>
-              <button type="button" onClick={() => { haptic.tap(); setMessage(null); setEditing(p) }} className="flex h-9 items-center gap-1.5 rounded-full bg-brand-light px-3.5 text-[13px] font-bold text-brand-text active:scale-95">
-                <Pencil size={14} strokeWidth={1.75} /> Edit Config
-              </button>
+              <div className="flex gap-2">
+                {d && (
+                  <button type="button" onClick={() => { haptic.tap(); setMessage(null); setEditingProvider(d) }} className="flex h-9 items-center gap-1.5 rounded-full bg-brand-light px-3.5 text-[13px] font-bold text-brand-text active:scale-95">
+                    <Pencil size={14} strokeWidth={1.75} /> Edit
+                  </button>
+                )}
+                <button type="button" onClick={() => { haptic.tap(); setMessage(null); setEditing(p) }} className="flex h-9 items-center gap-1.5 rounded-full bg-brand-light px-3.5 text-[13px] font-bold text-brand-text active:scale-95">
+                  <Settings2 size={14} strokeWidth={1.75} /> Edit Config
+                </button>
+              </div>
             </div>
           </article>
         )
       })}
+
+      {(adding || editingProvider) && (
+        <ProviderModal
+          provider={editingProvider}
+          onClose={() => { setAdding(false); setEditingProvider(null) }}
+          onSave={async (request) => {
+            try {
+              const r = await upsertProvider(session, request)
+              haptic.success()
+              setMessage({ kind: 'ok', text: r.created ? `${r.provider.name} added. Switch routing on once it has an API key.` : `${r.provider.name} saved.` })
+            } catch (e) {
+              haptic.error()
+              throw e
+            }
+            await Promise.all([reload(), details.reload()])
+            setAdding(false)
+            setEditingProvider(null)
+          }}
+        />
+      )}
 
       {editing && (
         <ConfigModal
@@ -148,6 +200,7 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
           }}
         />
       )}
+      <Toast message={message} onDismiss={() => setMessage(null)} />
     </div>
   )
 }
