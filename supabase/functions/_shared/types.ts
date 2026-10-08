@@ -52,6 +52,8 @@ export const DEFAULT_SMM_V2_CAPABILITIES: Readonly<ProviderCapabilities> = Objec
  */
 export interface IProvider {
   id: string
+  /** Stable unique identifier (providers.slug), e.g. "secsers-mock". Filled where the row is read with it; routing does not need it. */
+  slug?: string
   name: string
   apiUrl: string
   /** SMM API generation, e.g. "v2". */
@@ -93,6 +95,8 @@ export interface IProviderServiceOffer {
   maxQuantity: number
   refillSupported: boolean
   cancelSupported: boolean
+  /** The panel can deliver part of an order and refund the rest (provider_service_offers.supports_partial). Absent/false = not claimed. */
+  supportsPartial?: boolean
   isActive: boolean
   /** Higher is preferred by the (future) routing engine. */
   routingScore: number
