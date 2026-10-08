@@ -14,9 +14,11 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { isAuthorized } from '../_shared/catalog-sync.ts'
 import {
   emptySyncStats,
+  groupOrdersByProvider,
   mergeSyncStats,
   syncProviderOrders,
   type SyncEvent,
+  type OrderProviderRef,
   type SyncOrder,
   type SyncPorts,
 } from '../_shared/order-sync.ts'
@@ -26,6 +28,7 @@ import { registerSecret, type Logger } from '../_shared/logger.ts'
 import { createNotifier } from '../_shared/notify-db.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
 import type { NotifyEvent } from '../_shared/telegram-notify.ts'
+import type { IProviderAdapter } from '../_shared/providers/contract.ts'
 import { createSMMv2Adapter } from '../_shared/smm-v2-adapter.ts'
 
 const DEFAULT_BATCH = 50
@@ -131,7 +134,7 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
   // orders (id recovery / reconciliation), and refunds that previously failed (needs_refund).
   const { data: rows, error } = await db
     .from('orders')
-    .select('id, user_id, service_id, provider_id, provider_order_id, status, quantity, charge_amount, remains, start_count, error_message, created_at')
+    .select('id, user_id, service_id, provider_id, provider_order_id, status, quantity, charge_amount, remains, start_count, error_message, created_at, offer:provider_service_offers(provider_id)')
     .or(
       'and(status.in.(submitted,in_progress),provider_order_id.not.is.null),' +
         'status.eq.processing,' +
@@ -145,15 +148,18 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
     return json({ error: 'internal_error' }, 500)
   }
 
-  type Row = SyncOrder & { provider_id: string | null }
-  const orders = ((rows ?? []) as Row[]).map((o) => ({
+  // An order is polled at the panel that ACCEPTED it: the provider of its offer (failover picks the offer, and with it the
+  // provider, before the order exists). orders.provider_id is only the fallback for orders that have no offer.
+  type RawRow = SyncOrder & { provider_id: string | null; offer: { provider_id: string } | { provider_id: string }[] | null }
+  type Row = SyncOrder & OrderProviderRef
+  const orders = ((rows ?? []) as unknown as RawRow[]).map(({ offer, ...o }): Row => ({
     ...o,
     charge_amount: Number(o.charge_amount),
+    offer_provider_id: (Array.isArray(offer) ? offer[0]?.provider_id : offer?.provider_id) ?? null,
   }))
-  const byProvider = new Map<string, Row[]>()
-  for (const o of orders) {
-    if (!o.provider_id) continue
-    byProvider.set(o.provider_id, [...(byProvider.get(o.provider_id) ?? []), o])
+  const { byProvider, unassigned, mismatched } = groupOrdersByProvider(orders)
+  for (const o of mismatched) {
+    log.error('order provider and offer provider disagree; not polled', { orderId: o.id, error_code: 'order_provider_mismatch' })
   }
 
   const events: SyncEvent[] = []
@@ -191,7 +197,7 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
         continue
       }
       registerSecret(apiKey)
-      const adapter = createSMMv2Adapter(
+      const adapter: IProviderAdapter = createSMMv2Adapter(
         { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log },
         { MOCK_MODE: Deno.env.get('MOCK_MODE') },
       )
@@ -200,7 +206,7 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
   }
 
   // Orders without a provider id at all (should not exist for these statuses): just rotate them.
-  for (const o of orders.filter((o) => !o.provider_id)) await ports.touch(o.id)
+  for (const o of [...unassigned, ...mismatched]) await ports.touch(o.id)
 
   // Telegram messages: strictly after the database work, never able to affect it.
   const notified = await deliverNotifications(db, events, started, log)

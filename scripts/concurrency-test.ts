@@ -7,7 +7,9 @@
 //   Scenarios: A wallet race, B provider balance reservation race, C idempotency race,
 //              D provider payment daily limit race, E treasury minimum reserve race,
 //              F reconciliation detector race (pg_cron and admins running sync_reconciliation_cases at once),
-//              G worker heartbeat race (overlapping worker runs reporting at once; no run may be lost).
+//              G worker heartbeat race (overlapping worker runs reporting at once; no run may be lost),
+//              H double Partial, I Canceled + Partial race, J Partial + full refund race, K refund_order storm
+//                (the order-status refund paths: never more than the charge back, never twice, always a safe final state).
 //
 //   CONCURRENCY_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres npm run test:concurrency
 //       Runs against a LOCAL Supabase instead (`npx supabase start`; migrations are applied there by the CLI).
@@ -233,6 +235,112 @@ const treasuryConsistent = async (admin: pg.Client) =>
   (await admin.query<{ ok: boolean }>(`select (select balance from treasury_state where id = 1) = (select coalesce(sum(amount), 0) from treasury_transactions) ok`)).rows[0].ok
 
 // ---------------------------------------------------------------------------
+// Order refund races (H-K): apply_partial_refund / refund_order / the worker's cancel path
+// ---------------------------------------------------------------------------
+
+const ORDER_QUANTITY = 1000
+const ORDER_CHARGE = 4 // customerRate 4 per 1000 x 1000 units
+
+/** A paid order the provider has accepted (status submitted), exactly where sync-order-status finds it. */
+async function seedSubmittedOrder(admin: pg.Client, s: Scenario, user: string): Promise<string> {
+  const id = (await admin.query<{ id: string }>(
+    `select id from place_order($1::uuid, $2::uuid, 'https://t.me/race', $3::int, $4::uuid, $5::uuid, $6::uuid, 1::numeric, $7::text)`,
+    [user, s.service, ORDER_QUANTITY, s.offer, s.provider, s.providerService, `race-refund-${randomUUID()}`])).rows[0].id
+  await admin.query(`update orders set status = 'processing' where id = $1`, [id])
+  await admin.query(`update orders set status = 'submitted', provider_order_id = $2 where id = $1`, [id, `P-${id.slice(0, 8)}`])
+  return id
+}
+
+/** One database operation of a race. It manages its own transaction(s), like the worker's separate RPC calls do. */
+type RaceOp = (c: pg.PoolClient) => Promise<string>
+
+const inTx = async (c: pg.PoolClient, body: () => Promise<string>): Promise<string> => {
+  await c.query('begin')
+  try {
+    const out = await body()
+    await c.query('select pg_sleep($1)', [HOLD_MS / 1000]) // hold the row locks so the others really queue
+    await c.query('commit')
+    return out
+  } catch (e) {
+    await c.query('rollback').catch(() => {})
+    throw e
+  }
+}
+
+const partialOp = (order: string, remains: number): RaceOp => (c) =>
+  inTx(c, async () => {
+    const r = await c.query<{ partial_refund_amount: string; status: string }>(`select partial_refund_amount::text, status::text from apply_partial_refund($1::uuid, $2::int, 10)`, [order, remains])
+    return `partial:${r.rows[0].status}:${r.rows[0].partial_refund_amount}`
+  })
+
+const refundOp = (order: string): RaceOp => (c) =>
+  inTx(c, async () => {
+    const r = await c.query<{ status: string }>(`select status::text from refund_order($1::uuid, null, 'race refund')`, [order])
+    return `refund:${r.rows[0].status}`
+  })
+
+/**
+ * The worker's cancel path (order-sync failAndRefund): a conditional status update, then refund_order. Whether the two
+ * run in one transaction or in two (as they do over PostgREST) must not matter.
+ */
+/** refund_order, then the worker drops the needs_refund note (failAndRefund does the same). */
+const refundAndClear = async (c: { query: pg.Client['query'] }, order: string, comment: string) => {
+  await c.query(`select refund_order($1::uuid, null, $2)`, [order, comment])
+  await c.query(`update orders set error_message = null where id = $1 and status = 'refunded'`, [order])
+}
+
+const cancelOp = (order: string, twoTransactions: boolean): RaceOp => async (c) => {
+  const update = async () => (await c.query(
+    `update orders set status = 'canceled', error_message = 'needs_refund: provider canceled order' where id = $1 and status in ('submitted', 'in_progress') returning id`, [order])).rowCount ?? 0
+  if (twoTransactions) {
+    await c.query('begin')
+    const n = await update()
+    await c.query('select pg_sleep($1)', [HOLD_MS / 1000])
+    await c.query('commit')
+    if (n === 0) return 'cancel:conflict'
+    return inTx(c, async () => { await refundAndClear(c, order, 'Provider canceled order'); return 'cancel:refunded' })
+  }
+  return inTx(c, async () => {
+    if ((await update()) === 0) return 'cancel:conflict'
+    await refundAndClear(c, order, 'Provider canceled order')
+    return 'cancel:refunded'
+  })
+}
+
+interface OpResult { ok: string[]; errors: string[] }
+
+/** Every op on its own connection, all released at (nearly) the same moment. */
+async function raceOps(pool: pg.Pool, ops: RaceOp[], jitterMs = 0): Promise<OpResult> {
+  const clients = await Promise.all(ops.map(() => pool.connect()))
+  // jitterMs > 0 staggers the start by a random 0..jitterMs, so over many rounds each op wins the row lock sometimes
+  const settled = await Promise.allSettled(ops.map(async (op, i) => {
+    if (jitterMs > 0) await new Promise((r) => setTimeout(r, Math.random() * jitterMs))
+    return op(clients[i])
+  }))
+  clients.forEach((c) => c.release())
+  const out: OpResult = { ok: [], errors: [] }
+  for (const r of settled) {
+    if (r.status === 'fulfilled') out.ok.push(r.value)
+    else out.errors.push(r.reason instanceof Error ? r.reason.message : String(r.reason))
+  }
+  return out
+}
+
+interface OrderMoney { status: string; partial: number; refunded: number; entries: number; needsRefund: boolean }
+
+async function orderMoney(admin: pg.Client, order: string): Promise<OrderMoney> {
+  const o = (await admin.query<{ status: string; partial: string; note: string | null }>(`select status::text, partial_refund_amount::text partial, error_message note from orders where id = $1`, [order])).rows[0]
+  const t = (await admin.query<{ s: string; n: number }>(`select coalesce(sum(amount), 0)::text s, count(*)::int n from wallet_transactions where reference_id = $1 and type = 'refund' and status = 'completed'`, [order])).rows[0]
+  return { status: o.status, partial: num(o.partial), refunded: num(t.s), entries: t.n, needsRefund: (o.note ?? '').startsWith('needs_refund') }
+}
+
+/** What the next sync-order-status run does for an order left canceled with a needs_refund note. */
+async function workerRetry(admin: pg.Client, order: string) {
+  const m = await orderMoney(admin, order)
+  if ((m.status === 'canceled' || m.status === 'failed') && m.needsRefund) await refundAndClear(admin, order, 'Automatic refund retry')
+}
+
+// ---------------------------------------------------------------------------
 // Checks + output
 // ---------------------------------------------------------------------------
 
@@ -400,6 +508,96 @@ async function main() {
     check('runs counted, none lost', num(hb.rows[0].runs), 40)
     check('failures counted', num(hb.rows[0].failures), 10)
     check('last success and last error both kept', [hb.rows[0].ok, hb.rows[0].err], [true, true])
+
+    // ---- H-K. Order refunds ---------------------------------------------------------------------
+    const sR = await seedScenario(admin, 'refund', { customerRate: ORDER_CHARGE, costRate: 1, providerBalance: null })
+    const uR = await seedUser(admin, 100_000)
+    const sumRefunds = async (orders: string[]) => (await admin.query<{ s: string }>(`select coalesce(sum(amount), 0)::text s from wallet_transactions where reference_id = any($1::uuid[]) and type = 'refund' and status = 'completed'`, [orders])).rows[0].s
+    const walletOf = async () => num((await admin.query<{ b: string }>(`select balance::text b from wallets where user_id = $1`, [uR])).rows[0].b)
+
+    // ---- H. Double Partial ----------------------------------------------------------------------
+    console.log('\nH. Double Partial: 2 concurrent Partial answers for the same order (25 rounds; same remains in half, 400 vs 700 in the rest)')
+    const ordersH: string[] = []
+    let hBadEntries = 0, hOverCharge = 0, hNotPartial = 0, hMismatch = 0, hErrors = 0
+    for (let i = 0; i < 25; i++) {
+      const order = await seedSubmittedOrder(admin, sR, uR)
+      ordersH.push(order)
+      const r = await raceOps(pool, [partialOp(order, 400), partialOp(order, i % 2 === 0 ? 400 : 700)])
+      hErrors += r.errors.length
+      const m = await orderMoney(admin, order)
+      if (m.entries !== 1) hBadEntries++
+      if (m.refunded > ORDER_CHARGE) hOverCharge++
+      if (m.status !== 'partial') hNotPartial++
+      if (Math.abs(m.refunded - m.partial) > 1e-9 || ![1.6, 2.8].includes(m.refunded)) hMismatch++
+    }
+    check('errors (both calls answered; the second returns the settled order)', hErrors, 0)
+    check('rounds where the wallet was credited other than exactly once', hBadEntries, 0)
+    check('rounds where more than the charge came back', hOverCharge, 0)
+    check('rounds not ending in partial', hNotPartial, 0)
+    check('rounds where credit differs from orders.partial_refund_amount', hMismatch, 0)
+    check('wallet = sum of its ledger', await ledgerConsistent(admin, [uR]), true)
+
+    // ---- I. Cancel + Partial race ---------------------------------------------------------------
+    console.log('\nI. Canceled + Partial race: the worker\'s cancel path against apply_partial_refund (40 rounds, one and two transactions)')
+    const ordersI: string[] = []
+    const finalI = new Map<string, number>()
+    let iOverCharge = 0, iUnsafe = 0, iStuck = 0, iFullOrPartialOnly = 0
+    for (let i = 0; i < 40; i++) {
+      const order = await seedSubmittedOrder(admin, sR, uR)
+      ordersI.push(order)
+      await raceOps(pool, i % 2 === 0 ? [cancelOp(order, i % 4 === 0), partialOp(order, 400)] : [partialOp(order, 400), cancelOp(order, i % 4 === 1)], 25)
+      await workerRetry(admin, order) // the next sync run finishes a cancel whose refund did not happen
+      const m = await orderMoney(admin, order)
+      finalI.set(m.status, (finalI.get(m.status) ?? 0) + 1)
+      if (m.refunded > ORDER_CHARGE) iOverCharge++
+      if (!['refunded', 'partial'].includes(m.status)) iUnsafe++
+      if (m.needsRefund) iStuck++
+      // refunded: the whole charge came back; partial: exactly the undelivered share. Nothing in between, nothing more.
+      if (!((m.status === 'refunded' && m.refunded === ORDER_CHARGE) || (m.status === 'partial' && m.refunded === 1.6))) iFullOrPartialOnly++
+    }
+    console.log(`  final states: ${[...finalI].map(([k, v]) => `${v} ${k}`).join(', ')}`)
+    check('rounds where more than the charge came back', iOverCharge, 0)
+    check('rounds ending in an unsafe state (not refunded / partial)', iUnsafe, 0)
+    check('rounds left with an unfinished refund (needs_refund)', iStuck, 0)
+    check('rounds where the credit is neither the full charge nor the exact partial', iFullOrPartialOnly, 0)
+    check('wallet = sum of its ledger', await ledgerConsistent(admin, [uR]), true)
+
+    // ---- J. Partial + full refund race ----------------------------------------------------------
+    console.log('\nJ. Partial + full refund race: apply_partial_refund against refund_order (an admin force refund), 25 rounds')
+    const ordersJ: string[] = []
+    let jOverCharge = 0, jNotTerminal = 0, jExact = 0
+    for (let i = 0; i < 25; i++) {
+      const order = await seedSubmittedOrder(admin, sR, uR)
+      ordersJ.push(order)
+      // refund_order on a still-submitted order is refused by the state machine; the admin tool only refunds settled orders, so
+      // the full refund here follows the cancel path. Either order of arrival must leave the charge returned once, in total.
+      await raceOps(pool, i % 2 === 0 ? [partialOp(order, 250), cancelOp(order, false)] : [cancelOp(order, false), partialOp(order, 250)], 25)
+      await workerRetry(admin, order)
+      // an admin force-refunds whatever is left (idempotent when already refunded)
+      await admin.query(`select refund_order($1::uuid, null, 'Admin force refund')`, [order])
+      const m = await orderMoney(admin, order)
+      if (m.refunded > ORDER_CHARGE) jOverCharge++
+      if (m.status !== 'refunded') jNotTerminal++
+      if (m.refunded === ORDER_CHARGE) jExact++
+    }
+    check('rounds where more than the charge came back', jOverCharge, 0)
+    check('rounds not ending in refunded', jNotTerminal, 0)
+    check('rounds where exactly the charge came back, in total', jExact, 25)
+
+    // ---- K. refund_order storm ------------------------------------------------------------------
+    console.log('\nK. refund_order storm: 30 concurrent refunds of one canceled order')
+    const orderK = await seedSubmittedOrder(admin, sR, uR)
+    await admin.query(`update orders set status = 'canceled' where id = $1`, [orderK])
+    const rK = await raceOps(pool, Array.from({ length: 30 }, () => refundOp(orderK)))
+    const mK = await orderMoney(admin, orderK)
+    check('refund calls that failed', rK.errors, [])
+    check('credits for the order', [mK.entries, mK.refunded, mK.status], [1, ORDER_CHARGE, 'refunded'])
+
+    // ---- whole-wallet balance ---------------------------------------------------------------------
+    const allOrders = [...ordersH, ...ordersI, ...ordersJ, orderK]
+    const charged = allOrders.length * ORDER_CHARGE
+    check('wallet = funding - charges + refunds (no unit created or lost)', Math.round((await walletOf()) * 10_000) / 10_000, Math.round((100_000 - charged + num(await sumRefunds(allOrders))) * 10_000) / 10_000)
+    check('wallet = sum of its ledger', await ledgerConsistent(admin, [uR]), true)
   } finally {
     await pool.end().catch(() => {})
     await sampler.end().catch(() => {})

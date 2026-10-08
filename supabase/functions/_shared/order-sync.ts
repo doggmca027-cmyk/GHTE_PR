@@ -11,7 +11,11 @@
 //     retried or overlapping run cannot pay twice.
 
 import { isValidOrderTransition } from './order-transitions.ts'
-import type { BatchStatusEntry, ISMMProviderAdapter, OrderStatus } from './types.ts'
+import type { IProviderAdapter, ProviderBatchStatusEntry } from './providers/contract.ts'
+import type { OrderStatus } from './types.ts'
+
+/** The only part of a provider the order sync needs: one batched status query (the IProviderAdapter contract). */
+export type OrderSyncAdapter = Pick<IProviderAdapter, 'getOrdersStatus'>
 
 export const STATUS_QUERY_CHUNK = 50
 export const NEEDS_REFUND = 'needs_refund'
@@ -68,6 +72,59 @@ export function stepsTo(current: OrderStatus, target: OrderStatus): OrderStatus[
   // A held order the provider actually accepted never got its `submitted` step.
   if (current === 'processing' && isValidOrderTransition('submitted', target)) return ['submitted', target]
   return null
+}
+
+// ---------------------------------------------------------------------------
+// Which panel an order must be polled at
+// ---------------------------------------------------------------------------
+
+export interface OrderProviderRef {
+  /** orders.provider_id: set by place_order from the chosen offer. */
+  provider_id: string | null
+  /** providers.id of the order's offer (orders.provider_offer_id -> provider_service_offers.provider_id); null for orders without an offer. */
+  offer_provider_id: string | null
+}
+
+export type OrderProviderResolution =
+  | { kind: 'resolved'; providerId: string }
+  /** Neither a provider nor an offer is recorded: nothing to poll. */
+  | { kind: 'none' }
+  /** The two records disagree: polling either panel could read another provider's order, so the order is not polled at all. */
+  | { kind: 'mismatch' }
+
+/**
+ * The panel that ACCEPTED the order. The offer is the source of truth: failover picks the offer (and with it the provider)
+ * before the order exists, and provider_order_id is that provider's id, so an order is only ever looked up at its offer's provider.
+ * Orders from before offers existed fall back to orders.provider_id.
+ */
+export function resolveOrderProvider(o: OrderProviderRef): OrderProviderResolution {
+  if (o.offer_provider_id && o.provider_id && o.offer_provider_id !== o.provider_id) return { kind: 'mismatch' }
+  const providerId = o.offer_provider_id ?? o.provider_id
+  return providerId ? { kind: 'resolved', providerId } : { kind: 'none' }
+}
+
+export interface ProviderGroups<T> {
+  byProvider: Map<string, T[]>
+  /** No provider on record. */
+  unassigned: T[]
+  /** Provider and offer disagree (a data problem): never polled, never refunded. */
+  mismatched: T[]
+}
+
+/** Groups orders by the panel that accepted them. Pure. */
+export function groupOrdersByProvider<T extends OrderProviderRef>(orders: T[]): ProviderGroups<T> {
+  const out: ProviderGroups<T> = { byProvider: new Map(), unassigned: [], mismatched: [] }
+  for (const o of orders) {
+    const r = resolveOrderProvider(o)
+    if (r.kind === 'none') out.unassigned.push(o)
+    else if (r.kind === 'mismatch') out.mismatched.push(o)
+    else {
+      const list = out.byProvider.get(r.providerId)
+      if (list) list.push(o)
+      else out.byProvider.set(r.providerId, [o])
+    }
+  }
+  return out
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +222,7 @@ const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0
 /** Syncs a batch of orders that all belong to ONE provider (the adapter's panel). */
 export async function syncProviderOrders(
   orders: SyncOrder[],
-  adapter: Pick<ISMMProviderAdapter, 'getOrdersStatus'>,
+  adapter: OrderSyncAdapter,
   ports: SyncPorts,
   options: SyncOptions = {},
   log: Logger = console,
@@ -243,7 +300,7 @@ export async function syncProviderOrders(
 
   // 2. One status query per chunk of provider order ids.
   const byProviderId = new Map(lookup.map((o) => [o.provider_order_id as string, o]))
-  const entries = new Map<string, BatchStatusEntry>()
+  const entries = new Map<string, ProviderBatchStatusEntry>()
   for (const ids of chunkArray([...byProviderId.keys()], options.chunkSize ?? STATUS_QUERY_CHUNK)) {
     try {
       const result = await adapter.getOrdersStatus(ids)
