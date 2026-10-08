@@ -57,6 +57,8 @@ export interface PlaceOrderArgs {
   providerServiceId: string
   /** Provider cost of this order: round(offer.costPer1000 * quantity / 1000, 4). */
   costAmount: number
+  /** Promo code typed by the customer; place_order validates it, prices the order and redeems it atomically. */
+  promoCode?: string | null
 }
 
 export interface PlaceOrderPorts {
@@ -127,6 +129,7 @@ export interface PlaceOrderRequest {
   providerId: string
   providerServiceId: string
   costAmount: number
+  promoCode?: string | null
   /** The provider's own id for the service, read from the database (never from the client). */
   externalServiceId: string
 }
@@ -225,6 +228,14 @@ export function mapDbError(message: string): MappedError {
   }
   if (/user is banned/.test(message)) return { httpStatus: 403, error: 'banned', message: 'Your account is suspended.' }
   if (/service not found or inactive/.test(message)) return { httpStatus: 404, error: 'service_unavailable', message: 'This service is no longer available.' }
+  if (/promo_not_found/.test(message)) return { httpStatus: 404, error: 'promo_not_found', message: 'This promo code does not exist.' }
+  if (/promo_inactive|promo_expired/.test(message)) return { httpStatus: 409, error: 'promo_expired', message: 'This promo code is no longer valid.' }
+  if (/promo_exhausted/.test(message)) return { httpStatus: 409, error: 'promo_exhausted', message: 'This promo code has been used up.' }
+  if (/promo_already_used/.test(message)) return { httpStatus: 409, error: 'promo_already_used', message: 'You have already used this promo code.' }
+  if (/promo_not_applicable/.test(message)) return { httpStatus: 409, error: 'promo_not_applicable', message: 'This promo code cannot be applied to this order.' }
+  if (/below_cost/.test(message)) {
+    return { httpStatus: 503, error: 'service_unavailable', message: 'This service is temporarily unavailable. You were not charged.' }
+  }
   if (/provider offer not found|quantity is outside the limits of the selected provider offer|cost does not match/.test(message)) {
     return { httpStatus: 503, error: 'service_unavailable', message: 'This service is temporarily unavailable. You were not charged.' }
   }

@@ -70,7 +70,7 @@ const PROBE = `
   ;(globalThis as any).__probe = { initData: WebApp.initData, platform: WebApp.platform, ready: typeof WebApp.ready, haptic: typeof WebApp.HapticFeedback }
 `
 
-describe('Telegram WebApp in the production bundle', () => {
+describe('Telegram WebApp in the production bundle', { timeout: 30_000 }, () => { // esbuild bundles on demand: slow when the whole suite runs in parallel
   it('exposes initData from the launch parameters', async () => {
     const win = runInFakeTelegram(
       await bundle(PROBE),

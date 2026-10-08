@@ -238,11 +238,12 @@ describe('migration 20261014: orders carry the routing snapshot', () => {
     expect(o).toMatchObject({ provider_offer_id: OFFER_B, provider_id: PROV_B, routing_score_snapshot: 0, cost_amount: '0.0700', profit_amount: '0.3300' })
   }, 120_000)
 
-  it('a loss-making order is allowed and recorded as negative profit', async () => {
+  it('a loss-making order is refused (Phase 13: the engine never sells under the provider cost), charging nothing', async () => {
     const db = await world()
     await db.exec(`update provider_service_offers set cost_per_1000 = 0.9 where id = '${OFFER_A}'`)
-    const o = (await place(db, { cost: 0.9 })).rows[0]
-    expect(o).toMatchObject({ cost_amount: '0.9000', profit_amount: '-0.5000' })
+    await expect(place(db, { cost: 0.9 })).rejects.toThrow(/below_cost/)
+    expect(await balance(db)).toBe(100)
+    expect((await db.query(`select 1 from orders`)).rows).toHaveLength(0)
   }, 120_000)
 
   it('rejects arguments that do not match the offer, charging nothing and creating no order', async () => {

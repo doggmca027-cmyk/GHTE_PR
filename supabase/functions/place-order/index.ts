@@ -1,6 +1,8 @@
 // Supabase Edge Function (Deno): POST /place-order
 //   Authorization: Bearer <JWT issued by telegram-auth>
-//   Body: { serviceId, targetUrl, quantity, idempotencyKey? }   (any price/rate/user fields are ignored)
+//   Body: { serviceId, targetUrl, quantity, idempotencyKey?, promoCode? }   (any price/rate/user fields are ignored)
+//   The price is built by the database (list price - tier discount - promo discount, never under provider cost + minimum margin);
+//   see supabase/migrations/20261105000000_discount_engine.sql and the quote-order function.
 //
 // Flow: verify JWT -> validate -> load the service's provider offers -> route (selectBestOffer, see
 //       _shared/routing.ts) -> place_order() (validates + snapshots the offer, atomic debit)
@@ -81,6 +83,7 @@ function buildPorts(db: Db): PlaceOrderPorts {
           p_provider_service_id: a.providerServiceId,
           p_cost_amount: a.costAmount,
           p_idempotency_key: a.idempotencyKey,
+          p_promo_code: a.promoCode ?? null,
         }),
         'place_order',
       )
@@ -234,6 +237,7 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
           providerId: offer.providerId,
           providerServiceId: offer.providerServiceId,
           costAmount: costForQuantity(offer.costPer1000, input.quantity),
+          promoCode: input.promoCode ?? null,
           externalServiceId: details.externalServiceId,
         },
         buildPorts(db),

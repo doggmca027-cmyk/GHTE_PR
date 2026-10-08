@@ -11,7 +11,9 @@
 //              H double Partial, I Canceled + Partial race, J Partial + full refund race, K refund_order storm
 //                (the order-status refund paths: never more than the charge back, never twice, always a safe final state),
 //              L affiliate withdrawal storm, M many small withdrawals, N same-key retries, O withdrawal against a clawback
-//                (transfer_affiliate_balance_to_wallet: the referral balance can never be spent twice).
+//                (transfer_affiliate_balance_to_wallet: the referral balance can never be spent twice),
+//              P promo max_uses race, Q stacked discounts under load, R a price drop racing the orders that were priced from it
+//                (the discount engine: a code is never over-redeemed and no order is ever sold under its cost).
 //
 //   CONCURRENCY_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres npm run test:concurrency
 //       Runs against a LOCAL Supabase instead (`npx supabase start`; migrations are applied there by the CLI).
@@ -682,6 +684,66 @@ async function main() {
     check('wallets = sum of their ledgers (referrers)', await ledgerConsistent(admin, refAll), true)
     const refTotals = await admin.query<{ bad: number }>(`select count(*)::int bad from (select user_id, sum(amount) s from referral_ledger group by user_id) x where x.s < -0.2`)
     check('no referrer below the one-reward clawback floor', refTotals.rows[0].bad, 0)
+
+    // ---- P-R. Discount engine -----------------------------------------------------------------
+    const sD = await seedScenario(admin, 'discount', { customerRate: 4, costRate: 2, providerBalance: null })
+    const adminD = (await admin.query<{ id: string }>(`insert into users(telegram_id, is_admin) values ($1, true) returning id`, [Math.floor(Math.random() * 9e12) + 1e12])).rows[0].id
+    await admin.query(`update platform_settings set discount_min_margin_per_1000 = 0.01 where id = 1`)
+    const placeOp = (user: string, promo: string | null, service = sD): RaceOp => (c) =>
+      inTx(c, async () => {
+        const r = await c.query<{ charge_amount: string }>(
+          `select charge_amount::text from place_order($1::uuid, $2::uuid, 'https://t.me/race', 1000, $3::uuid, $4::uuid, $5::uuid, 2::numeric, $6::text, $7::text)`,
+          [user, service.service, service.offer, service.provider, service.providerService, `d-${randomUUID()}`, promo])
+        return `order:${r.rows[0].charge_amount}`
+      })
+    const vipUsers = async (count: number) => {
+      const ids: string[] = []
+      for (let i = 0; i < count; i++) {
+        const id = await seedUser(admin, 1000)
+        await admin.query(`update users set tier_id = (select id from user_tiers where slug = 'vip') where id = $1`, [id])
+        ids.push(id)
+      }
+      return ids
+    }
+
+    // ---- P. Promo max_uses race -----------------------------------------------------------------
+    console.log('\nP. Promo race: a code with max_uses = 5, 60 different users order with it at the same moment')
+    await admin.query(`select admin_upsert_promo_code($1::uuid, 'RACE5', 'fixed', 0.5, 5)`, [adminD])
+    const usersP = await vipUsers(60)
+    const rP = await raceOps(pool, usersP.map((u) => placeOp(u, 'RACE5')))
+    const usedP = (await admin.query<{ uses: number; reds: number }>(`select (select current_uses from promo_codes where code = 'RACE5') uses, (select count(*)::int from promo_code_redemptions r join promo_codes p on p.id = r.promo_code_id where p.code = 'RACE5') reds`)).rows[0]
+    check('orders that got the code', rP.ok.length, 5)
+    check('refused: used up', rP.errors.filter((e) => /promo_exhausted/.test(e)).length, 55)
+    check('any other error (deadlock, unexpected)', rP.errors.filter((e) => !/promo_exhausted/.test(e)), [])
+    check('uses counted / redemptions recorded (never above max_uses)', [usedP.uses, usedP.reds], [5, 5])
+
+    // ---- Q. Stacked discounts under load ----------------------------------------------------------
+    console.log('\nQ. Stacking under load: 60 VIP customers with a $3.00 promo each (far more than the margin allows)')
+    await admin.query(`select admin_upsert_promo_code($1::uuid, 'GREEDY', 'fixed', 3)`, [adminD])
+    const usersQ = await vipUsers(60)
+    const rQ = await raceOps(pool, usersQ.map((u) => placeOp(u, 'GREEDY')))
+    const chargesQ = rQ.ok.map((o) => num(o.split(':')[1]))
+    const lossQ = await admin.query<{ n: number }>(`select count(*)::int n from orders where service_id = $1 and charge_amount < cost_amount`, [sD.service])
+    check('orders placed', [rQ.ok.length, rQ.errors], [60, []])
+    check('every charge is exactly the floor (cost 2.00 + margin 0.01)', [...new Set(chargesQ)], [2.01])
+    check('orders sold under their cost', lossQ.rows[0].n, 0)
+
+    // ---- R. A price drop racing the orders -------------------------------------------------------
+    console.log('\nR. Price drop vs orders: 40 orders race an admin who cuts the list price below cost')
+    const usersR = await vipUsers(40)
+    const dropper: RaceOp = (c) => inTx(c, async () => {
+      await c.query(`update services set customer_rate_per_1000 = 1 where id = $1`, [sD.service]) // below the cost of 2.00
+      return 'price-drop'
+    })
+    // orders start at random moments over ~400 ms, the price drop at 150 ms: some orders are in flight when it arrives (it waits for
+    // them), the rest start after it and must see the new price
+    const after = (ms: number, op: RaceOp): RaceOp => async (c) => { await new Promise((r) => setTimeout(r, ms)); return op(c) }
+    const rR = await raceOps(pool, [...usersR.map((u) => after(Math.random() * 400, placeOp(u, null))), after(150, dropper)])
+    const lossR = await admin.query<{ n: number }>(`select count(*)::int n from orders where service_id = $1 and charge_amount < cost_amount`, [sD.service])
+    check('every order either went through at a safe price or was refused as below cost', rR.errors.filter((e) => !/below_cost/.test(e)), [])
+    check('orders sold under their cost (the price check and the charge see the same price)', lossR.rows[0].n, 0)
+    console.log(`  ${rR.ok.filter((o) => o.startsWith('order:')).length} orders went through before the drop, ${rR.errors.length} were refused after it`)
+    check('the price drop itself committed', rR.ok.includes('price-drop'), true)
 
     // ---- whole-wallet balance ---------------------------------------------------------------------
     const allOrders = [...ordersH, ...ordersI, ...ordersJ, orderK]

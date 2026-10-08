@@ -53,10 +53,13 @@ export interface PlaceOrderInput {
   quantity: number
   /** Client-supplied dedupe key (validated), if any. */
   clientKey?: string
+  /** A promo code typed by the customer (upper-cased); the database decides whether and how much it takes off. */
+  promoCode?: string
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const CLIENT_KEY_RE = /^[A-Za-z0-9_-]{8,64}$/
+const PROMO_CODE_RE = /^[A-Za-z0-9_-]{3,32}$/
 
 export type BodyError = { ok: false; error: 'invalid_input'; message: string }
 
@@ -83,7 +86,12 @@ export function parsePlaceOrderBody(raw: unknown): { ok: true; value: PlaceOrder
     }
     clientKey = body.idempotencyKey
   }
-  return { ok: true, value: { serviceId: body.serviceId.toLowerCase(), targetUrl: url.value, quantity: body.quantity, clientKey } }
+  let promoCode: string | undefined
+  if (body.promoCode !== undefined && body.promoCode !== null && body.promoCode !== '') {
+    if (typeof body.promoCode !== 'string' || !PROMO_CODE_RE.test(body.promoCode.trim())) return fail('promoCode must be 3-32 characters of A-Z a-z 0-9 _ -')
+    promoCode = body.promoCode.trim().toUpperCase()
+  }
+  return { ok: true, value: { serviceId: body.serviceId.toLowerCase(), targetUrl: url.value, quantity: body.quantity, clientKey, ...(promoCode ? { promoCode } : {}) } }
 }
 
 /**
