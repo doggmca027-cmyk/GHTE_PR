@@ -20,7 +20,7 @@ const offer = (id: string, providerId: string, over: Partial<IProviderServiceOff
 })
 
 describe('effective provider cost routing', () => {
-  it('runs in EFFECTIVE_COST mode', () => expect(ROUTING_MODE).toBe('EFFECTIVE_COST'))
+  it('runs in BALANCED mode (effective cost with a bounded score bonus)', () => expect(ROUTING_MODE).toBe('BALANCED'))
 
   it('effective cost = base cost x reliability penalty', () => {
     expect(effectiveCost({ costPer1000: 1 }, { reliabilityPenalty: 1.3 })).toBeCloseTo(1.3, 10)

@@ -3,6 +3,7 @@
 
 import { calculateCustomerRate } from './price-engine.ts'
 import { timingSafeEqual } from './telegram.ts'
+import type { CostBasis } from './service-cost.ts'
 import type { IProviderService, Platform, PriceRule } from './types.ts'
 
 // ---------------------------------------------------------------------------
@@ -279,7 +280,7 @@ export function withoutAnomalies(diff: ProviderServiceDiff, valid: IProviderServ
 }
 
 // ---------------------------------------------------------------------------
-// Public service planning (re-price / re-limit / reactivate; the sync never CREATES storefront services)
+// Public service planning (re-price / re-limit / reactivate / deactivate; the sync never CREATES storefront services)
 // ---------------------------------------------------------------------------
 
 export interface ExistingService {
@@ -322,32 +323,49 @@ export interface ServicePlan {
   row?: ServiceRow
   repriced: boolean
   reactivated: boolean
+  deactivated: boolean
 }
 
 export interface PlanServiceInput {
   existing: LinkedService
-  provider: IProviderService
+  /** Cost and limits derived from the service's offers (service-cost.ts); null = no offer can receive an order. */
+  basis: CostBasis | null
   rules: PriceRule[]
-  /** True when the provider service was inactive and is listed again. */
+  /** True when a provider service behind one of the service's offers was inactive and is listed again. */
   providerServiceReactivated: boolean
+  /** True when a provider service behind one of the service's offers disappeared from its panel in this run. */
+  offerLost: boolean
   minMargin?: number
 }
 
+const NO_CHANGE: ServicePlan = { action: 'none', repriced: false, reactivated: false, deactivated: false }
+
+/**
+ * Re-prices and re-limits an existing storefront service from its offers. The base cost is the cheapest priceable offer, so a new
+ * cheaper offer lowers the price and a vanished one raises it. Limits never exceed what the offers can deliver but keep a narrower
+ * admin choice. With no priceable offer the price is left alone; the service is switched off only when this run took its offer away.
+ */
 export function planService(input: PlanServiceInput): ServicePlan {
-  const { existing, provider: p } = input
+  const { existing, basis } = input
+
+  if (!basis) {
+    if (!(existing.is_active && input.offerLost)) return NO_CHANGE
+    return { action: 'update', repriced: false, reactivated: false, deactivated: true, row: { ...serviceRow(existing), is_active: false } }
+  }
+
   const rate = calculateCustomerRate(
-    p.ratePer1000,
+    basis.cost,
     input.rules,
     { serviceId: existing.id, categoryId: existing.category_id, platform: existing.platform },
     { minMargin: input.minMargin },
   )
 
-  // Keep admin-narrowed limits, but never exceed what the provider can actually deliver.
-  let min = Math.max(existing.min_quantity, p.minQuantity)
-  let max = Math.min(existing.max_quantity, p.maxQuantity)
+  // Keep admin-narrowed limits, but never exceed what the offers can actually deliver.
+  let min = Math.max(existing.min_quantity, basis.minQuantity)
+  let max = Math.min(existing.max_quantity, basis.maxQuantity)
   if (min > max) {
-    min = p.minQuantity
-    max = p.maxQuantity
+    min = basis.minQuantity
+    max = basis.maxQuantity
   }
   const reactivated = input.providerServiceReactivated && !existing.is_active
   const repriced = r4(existing.customer_rate_per_1000) !== r4(rate)
@@ -357,29 +375,39 @@ export function planService(input: PlanServiceInput): ServicePlan {
     reactivated ||
     min !== existing.min_quantity ||
     max !== existing.max_quantity ||
-    existing.refill_supported !== p.refillSupported
-  if (!changed) return { action: 'none', repriced: false, reactivated: false }
+    existing.refill_supported !== basis.refillSupported
+  if (!changed) return NO_CHANGE
 
   return {
     action: 'update',
     repriced,
     reactivated,
+    deactivated: false,
     row: {
-      id: existing.id,
-      category_id: existing.category_id,
-      name: existing.name,
-      description: existing.description,
-      primary_provider_service_id: existing.primary_provider_service_id,
-      fallback_provider_service_id: existing.fallback_provider_service_id,
+      ...serviceRow(existing),
       customer_rate_per_1000: rate,
       min_quantity: min,
       max_quantity: max,
       is_active: reactivated ? true : existing.is_active,
-      sort_order: existing.sort_order,
-      refill_supported: p.refillSupported,
+      refill_supported: basis.refillSupported,
     },
   }
 }
+
+const serviceRow = (e: ExistingService): ServiceRow => ({
+  id: e.id,
+  category_id: e.category_id,
+  name: e.name,
+  description: e.description,
+  primary_provider_service_id: e.primary_provider_service_id,
+  fallback_provider_service_id: e.fallback_provider_service_id,
+  customer_rate_per_1000: e.customer_rate_per_1000,
+  min_quantity: e.min_quantity,
+  max_quantity: e.max_quantity,
+  is_active: e.is_active,
+  sort_order: e.sort_order,
+  refill_supported: e.refill_supported,
+})
 
 // ---------------------------------------------------------------------------
 // Provider offers: cost and limits must always equal the provider service they are built on

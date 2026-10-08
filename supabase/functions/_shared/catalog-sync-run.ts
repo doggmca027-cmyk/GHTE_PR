@@ -5,13 +5,14 @@
 //   1. getServices() from the adapter. A failure aborts the provider BEFORE anything is written or deactivated.
 //   2. provider_services: upsert (new services appear, price / limits / names / flags are refreshed).
 //      Services whose price jumped more than 30 % or whose data became impossible are held back and their offers suspended.
-//   3. Services that are already on the storefront: re-priced by the price rules, limits clamped, reactivated when the
-//      provider lists them again. NEW provider services are NOT put on the storefront: they wait in provider_services until an
-//      admin links them (primary_provider_service_id / provider_service_offers).
-//   4. provider_service_offers: cost, limits and flags are made equal to the provider service they are built on
+//   3. provider_service_offers: cost, limits and flags are made equal to the provider service they are built on
 //      (is_active, routing_score and the anomaly flags are never touched).
-//   5. Soft delete: provider_services missing from the response get is_active = false (never deleted), and so do the
-//      storefront services that were sold from them. Offers are left to the router, which skips an inactive provider service.
+//   4. Soft delete: provider_services missing from the response get is_active = false (never deleted).
+//   5. Storefront services that sell through this provider (they have an offer from it) are re-priced and re-limited from ALL their
+//      offers: the base cost is the cheapest offer that can receive an order (service-cost.ts), not the legacy primary. A service
+//      whose last usable offer was lost in this run is switched off; one whose provider service came back is switched on.
+//      NEW provider services are NOT put on the storefront: they wait in provider_services until an admin links them
+//      (admin-catalog-mapping).
 
 import {
   detectCatalogAnomalies,
@@ -32,6 +33,7 @@ import {
 } from './catalog-sync.ts'
 import type { Logger } from './logger.ts'
 import type { IProviderAdapter } from './providers/contract.ts'
+import { groupByService, serviceCostBasis, type PricingOffer } from './service-cost.ts'
 import type { PriceRule } from './types.ts'
 
 /** The only part of a provider the catalog sync needs: it never sees a panel's URL, key or wire format. */
@@ -46,14 +48,15 @@ export interface CatalogStore {
   loadProviderServices(providerId: string): Promise<ExistingProviderService[]>
   upsertProviderServices(rows: ProviderServiceRow[]): Promise<{ id: string; external_service_id: string }[]>
   flagAnomaly(anomaly: CatalogAnomaly): Promise<void>
-  /** Storefront services whose primary provider service belongs to this provider. */
-  loadLinkedServices(providerId: string): Promise<LinkedService[]>
-  updateServices(rows: ServiceRow[]): Promise<void>
   /** Every offer of this provider with the current values of its provider_services row (read AFTER the upsert). */
   loadOffers(providerId: string): Promise<ExistingOffer[]>
   updateOffers(rows: OfferRow[]): Promise<void>
   deactivateProviderServices(ids: string[]): Promise<void>
-  deactivateServices(ids: string[]): Promise<void>
+  /** Storefront services that have at least one offer from this provider. */
+  loadLinkedServices(providerId: string): Promise<LinkedService[]>
+  /** ALL offers (any provider) of these services, with what decides whether each can receive an order. Read AFTER the writes above. */
+  loadServiceOffers(serviceIds: string[]): Promise<PricingOffer[]>
+  updateServices(rows: ServiceRow[]): Promise<void>
   saveBalance(providerId: string, balance: number): Promise<void>
 }
 
@@ -116,39 +119,42 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
   report.added = diff.added.length
   report.updated = diff.updated.length
 
-  // 4. Re-price / re-limit the storefront services that are already linked to this provider.
-  const validByExt = new Map(valid.map((s) => [s.externalServiceId, s]))
-  const extByPsId = new Map(existingPS.map((e) => [e.id, e.external_service_id]))
-  const linked = await store.loadLinkedServices(provider.id)
-  const toUpdate: ServiceRow[] = []
-  for (const service of linked) {
-    const ext = extByPsId.get(service.primary_provider_service_id)
-    const current = ext === undefined ? undefined : validByExt.get(ext)
-    if (ext === undefined || !current) continue
-    const plan = planService({ existing: service, provider: current, rules, providerServiceReactivated: diff.reactivated.has(ext) })
-    if (plan.action === 'update' && plan.row) {
-      toUpdate.push(plan.row)
-      report.services.updated++
-      if (plan.repriced) report.services.repriced++
-      if (plan.reactivated) report.services.reactivated++
-    }
-  }
-  if (toUpdate.length > 0) await store.updateServices(toUpdate)
-
-  // 5. Offers: cost and limits follow the provider service, so routing always sees the real margin base.
+  // 4. Offers: cost and limits follow the provider service, so routing always sees the real margin base.
   const driftedOffers = planOfferSync(await store.loadOffers(provider.id))
   if (driftedOffers.length > 0) await store.updateOffers(driftedOffers)
   report.offers.synced = driftedOffers.length
 
-  // 6. Soft delete what disappeared. Rows are kept so orders / history stay intact.
+  // 5. Soft delete what disappeared. Rows are kept so orders / history stay intact.
+  const deactivatedPsIds = new Set<string>()
   if (!deactivationBlocked && diff.missing.length > 0) {
     const missingIds = diff.missing.map((m) => m.id)
     await store.deactivateProviderServices(missingIds)
-    const missing = new Set(missingIds)
-    const serviceIds = linked.filter((s) => s.is_active && missing.has(s.primary_provider_service_id)).map((s) => s.id)
-    if (serviceIds.length > 0) await store.deactivateServices(serviceIds)
+    for (const id of missingIds) deactivatedPsIds.add(id)
     report.deactivated = missingIds.length
-    report.services.deactivated = serviceIds.length
   }
+
+  // 6. Storefront services that sell through this provider: priced from their cheapest usable offer (read after steps 3-5, so a
+  //    deactivated provider service, a suspended anomaly or a changed cost is already reflected).
+  const reactivatedPsIds = new Set(existingPS.filter((e) => diff.reactivated.has(e.external_service_id)).map((e) => e.id))
+  const linked = await store.loadLinkedServices(provider.id)
+  const offersByService = groupByService(linked.length > 0 ? await store.loadServiceOffers(linked.map((s) => s.id)) : [])
+  const toUpdate: ServiceRow[] = []
+  for (const service of linked) {
+    const offers = offersByService.get(service.id) ?? []
+    const plan = planService({
+      existing: service,
+      basis: serviceCostBasis(offers),
+      rules,
+      providerServiceReactivated: offers.some((o) => reactivatedPsIds.has(o.provider_service_id)),
+      offerLost: offers.some((o) => deactivatedPsIds.has(o.provider_service_id)),
+    })
+    if (plan.action !== 'update' || !plan.row) continue
+    toUpdate.push(plan.row)
+    report.services.updated++
+    if (plan.repriced) report.services.repriced++
+    if (plan.reactivated) report.services.reactivated++
+    if (plan.deactivated) report.services.deactivated++
+  }
+  if (toUpdate.length > 0) await store.updateServices(toUpdate)
   return report
 }

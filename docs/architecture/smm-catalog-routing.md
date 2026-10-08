@@ -75,15 +75,26 @@ An order points at what actually served it: `service_id` (what was bought), `pro
 ## 3. How an order travels
 
 1. **Catalog sync** (`sync-catalog`, every 6 hours) reads each panel through `IProviderAdapter.getServices()` and upserts `provider_services`.
-   It does **not** create `categories` or `services`: a new panel service waits in `provider_services` until an admin links it. For
-   services already on the storefront it re-prices `services.customer_rate_per_1000` with the price rules and clamps limits. Offers' cost, limits
-   and flags are kept equal to their provider service by the trigger `trg_provider_services_sync_offers` and re-checked by the sync itself
-   (`planOfferSync`; `is_active` / `routing_score` untouched). A service the panel stops listing gets `is_active = false` (soft delete) on
-   `provider_services` and on the storefront service sold from it; the router skips offers whose provider service is inactive. More than
-   half of a large catalogue vanishing in one run is treated as a partial response and deactivates nothing. Logic:
-   `_shared/catalog-sync-run.ts`.
-2. **Routing** (`place-order`): loads the offers of the service, drops inactive/unhealthy ones, ranks by
-   **effective cost** = `cost_per_1000 x reliability_penalty_multiplier`, then `routing_score`, then id.
+   It does **not** create `categories` or `services`: a new panel service waits in `provider_services` until an admin links it
+   (`admin-catalog-mapping`). Offers' cost, limits and flags are kept equal to their provider service by the trigger
+   `trg_provider_services_sync_offers` and re-checked by the sync itself (`planOfferSync`; `is_active` / `routing_score` untouched).
+   A service the panel stops listing gets `is_active = false` (soft delete) on `provider_services`. More than half of a large
+   catalogue vanishing in one run is treated as a partial response and deactivates nothing. Logic: `_shared/catalog-sync-run.ts`.
+   **Pricing**: every storefront service that has an offer from the provider is re-priced and re-limited from ALL its offers
+   (`_shared/service-cost.ts`, shared with `admin-pricing`):
+   * **base cost** = the lowest `cost_per_1000` among the offers that can receive an order: offer active, panel still lists the
+     service, provider active and `routing_enabled` (health is ignored on purpose: a few minutes of "degraded" must not move prices).
+     The markup from the price rules is applied to it. With no such offer the price is left alone.
+   * **limits**: never wider than the smallest `min` / largest `max` of those offers; a narrower admin choice is kept (limits are
+     only ever tightened by the sync, never widened).
+   * `refill_supported` only when every such offer supports it.
+   * the service is switched off when this run took away its last usable offer, and back on when a panel service returns.
+2. **Routing** (`place-order`, mode **BALANCED**): loads the offers of the service and keeps those that are active, whose provider is
+   active, routing-enabled and healthy, whose limits take the quantity and whose cost does not exceed the customer's price. Ranks by
+   `effective_cost = cost_per_1000 x reliability_penalty x (1 - min(routing_score, 1000) / 10000)`: the score is worth 0.01 % of the
+   price per point (100 = 1 %, cap 1000 = 10 %). Equal: higher score, then lowest offer id. The first accepting offer in that order
+   gets the order; an offer that refuses before anything is sent hands over to the next. The price is built on the cheapest offer, so
+   the "cost <= price" rule is what keeps a score-preferred, dearer offer from selling at a loss.
 3. **`place_order()`** (database function, one transaction) validates the chosen offer, debits the customer, reserves the
    provider balance, and writes the order with its snapshots. If the provider refuses before anything is sent, the next offer is
    tried; once a request reached a provider the outcome is final for that call.
@@ -96,11 +107,11 @@ These two columns are the **old routing**: a service named one primary and one f
 schema and still used:
 
 * `trg_services_sync_offers` turns a primary/fallback into offers (primary score 100, fallback 0);
-* the repricing (admin-pricing and sync-catalog) uses the primary provider's rate as the cost basis; `sync-catalog` no longer creates services;
-* about 25 files (functions, shared modules, tests, scripts) refer to them.
+* pricing no longer uses them: the base cost is the cheapest usable offer (see 3.1). `sync-catalog` does not create services;
+* about 25 files (functions, shared modules, tests, scripts) still refer to them.
 
-`place_order` and the router no longer read them for new orders: they use the offers. **They must not be dropped yet.** The
-planned refactor moves sync-catalog and pricing fully onto offers; only then can the columns go, in a migration of their own.
+`place_order`, the router and pricing do not read them: they use the offers. **They must not be dropped yet** (the storefront
+and other legacy code still read them); that is a migration of its own.
 
 ## 5. Where to look
 

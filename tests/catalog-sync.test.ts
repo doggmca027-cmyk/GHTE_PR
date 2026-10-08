@@ -12,6 +12,7 @@ import {
   type ExistingProviderService,
   type LinkedService,
 } from '../supabase/functions/_shared/catalog-sync.ts'
+import type { CostBasis } from '../supabase/functions/_shared/service-cost.ts'
 import { calculateCustomerRate } from '../supabase/functions/_shared/price-engine.ts'
 import { SMMv2Adapter } from '../supabase/functions/_shared/smm-v2-adapter.ts'
 import { decryptSecret, encryptSecret, providerKeyEnvName } from '../supabase/functions/_shared/secrets.ts'
@@ -99,37 +100,55 @@ describe('planService', () => {
     fallback_provider_service_id: null, customer_rate_per_1000: 2.5, min_quantity: 10, max_quantity: 1000,
     is_active: true, sort_order: 5, refill_supported: false, platform: 'telegram', ...o,
   })
-  const base = { rules: [globalRule(150)], providerServiceReactivated: false }
+  const base = { rules: [globalRule(150)], providerServiceReactivated: false, offerLost: false }
+  const basis = (o: Partial<CostBasis> = {}): CostBasis => ({ cost: 1, minQuantity: 10, maxQuantity: 1000, refillSupported: false, offers: 1, ...o })
 
   it('does nothing when price and limits are already current', () => {
-    expect(planService({ ...base, existing: svc(), provider: incoming({ externalServiceId: '1', ratePer1000: 1 }) }).action).toBe('none')
+    expect(planService({ ...base, existing: svc(), basis: basis() }).action).toBe('none')
   })
 
   it('re-prices but keeps admin-owned fields (name, description, sort order)', () => {
-    const plan = planService({ ...base, existing: svc(), provider: incoming({ externalServiceId: '1', ratePer1000: 2 }) })
+    const plan = planService({ ...base, existing: svc(), basis: basis({ cost: 2 }) })
     expect(plan.action).toBe('update')
     expect(plan.repriced).toBe(true)
     expect(plan.row).toMatchObject({ id: 's1', name: 'Admin renamed', description: 'desc', sort_order: 5, customer_rate_per_1000: 5 })
   })
 
-  it('clamps limits to what the provider can deliver but keeps narrower admin limits', () => {
-    const narrowed = planService({ ...base, existing: svc({ min_quantity: 50, max_quantity: 500 }), provider: incoming({ externalServiceId: '1', minQuantity: 10, maxQuantity: 1000 }) })
+  it('a cheaper offer lowers the price, a dearer base raises it', () => {
+    expect(planService({ ...base, existing: svc(), basis: basis({ cost: 0.6 }) }).row?.customer_rate_per_1000).toBe(1.5)
+    expect(planService({ ...base, existing: svc(), basis: basis({ cost: 1.4 }) }).row?.customer_rate_per_1000).toBe(3.5)
+  })
+
+  it('clamps limits to what the offers can deliver but keeps narrower admin limits', () => {
+    const narrowed = planService({ ...base, existing: svc({ min_quantity: 50, max_quantity: 500 }), basis: basis({ minQuantity: 10, maxQuantity: 1000 }) })
     expect(narrowed.action).toBe('none')
-    const clamped = planService({ ...base, existing: svc({ min_quantity: 10, max_quantity: 1000 }), provider: incoming({ externalServiceId: '1', minQuantity: 100, maxQuantity: 800 }) })
+    const clamped = planService({ ...base, existing: svc({ min_quantity: 10, max_quantity: 1000 }), basis: basis({ minQuantity: 100, maxQuantity: 800 }) })
     expect(clamped.row).toMatchObject({ min_quantity: 100, max_quantity: 800 })
   })
 
-  it('reactivates only when the provider service came back and the service was off', () => {
+  it('takes the refill promise from the basis (every offer must keep it)', () => {
+    expect(planService({ ...base, existing: svc({ refill_supported: true }), basis: basis({ refillSupported: false }) }).row?.refill_supported).toBe(false)
+  })
+
+  it('reactivates only when a provider service came back and the service was off', () => {
     const off = svc({ is_active: false })
-    expect(planService({ ...base, existing: off, provider: incoming({ externalServiceId: '1' }) }).action).toBe('none')
-    const back = planService({ ...base, existing: off, providerServiceReactivated: true, provider: incoming({ externalServiceId: '1' }) })
+    expect(planService({ ...base, existing: off, basis: basis() }).action).toBe('none')
+    const back = planService({ ...base, existing: off, providerServiceReactivated: true, basis: basis() })
     expect(back).toMatchObject({ action: 'update', reactivated: true })
     expect(back.row?.is_active).toBe(true)
   })
 
+  it('with no usable offer the price is left alone; the service is switched off only when this run took an offer away', () => {
+    expect(planService({ ...base, existing: svc(), basis: null }).action).toBe('none')
+    expect(planService({ ...base, existing: svc({ is_active: false }), basis: null, offerLost: true }).action).toBe('none')
+    const off = planService({ ...base, existing: svc(), basis: null, offerLost: true })
+    expect(off).toMatchObject({ action: 'update', deactivated: true })
+    expect(off.row).toMatchObject({ is_active: false, customer_rate_per_1000: 2.5, min_quantity: 10, max_quantity: 1000 })
+  })
+
   it('applies service-specific rules to existing services', () => {
     const rule: PriceRule = { id: 'svc', type: 'fixed', value: 1, service_id: 's1', priority: 0 }
-    const plan = planService({ ...base, rules: [globalRule(150), rule], existing: svc(), provider: incoming({ externalServiceId: '1', ratePer1000: 2 }) })
+    const plan = planService({ ...base, rules: [globalRule(150), rule], existing: svc(), basis: basis({ cost: 2 }) })
     expect(plan.row?.customer_rate_per_1000).toBe(3)
   })
 })

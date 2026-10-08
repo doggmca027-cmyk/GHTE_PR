@@ -1,12 +1,23 @@
 // Provider routing: pick which provider offer fulfils an order. Pure functions, no I/O.
 //
-// Mode EFFECTIVE_COST (Phase 2):
-//   1. only active offers whose provider is active, routing-enabled and healthy
-//      (degraded / unavailable / disabled providers never receive new orders)
-//   2. lowest EFFECTIVE cost first: costPer1000 x the provider's reliability penalty (1 = fully reliable)
-//   3. equal effective cost: highest routingScore first
-//   4. still equal: lowest offer id, so the choice is deterministic
-// The caller refuses the order BEFORE charging when nothing qualifies.
+// Mode BALANCED (Phase 7). Offers are ranked by
+//
+//   effective_cost = cost_per_1000 x reliability_penalty x (1 - min(routing_score, 1000) / 10000)
+//
+//   * cost_per_1000        what the provider charges us (the price of the offer)
+//   * reliability_penalty  >= 1, set by the provider health monitor: a flaky provider must be that much cheaper to win
+//   * routing_score        the operator's preference, worth 0.01 % of the price per point: score 100 = a 1 % edge, the cap (1000) = 10 %
+//   The score is a relative bonus, so it means the same for a 0.05 and a 5.00 service (a flat "cost - score x k" would let a
+//   high score outweigh any price difference below k). Equal effective cost: the higher routingScore wins; still equal: the
+//   lowest offer id, so the choice is deterministic.
+//
+// Who may be chosen at all:
+//   1. only active offers whose provider is active, routing-enabled and healthy (degraded / unavailable / disabled providers never
+//      receive new orders)
+//   2. when the caller knows the price (maxCostPer1000 = services.customer_rate_per_1000), never an offer that costs more than the
+//      customer pays: the price is built on the CHEAPEST offer, so a pricier one reached through a score bonus must not sell at a loss
+//   3. only offers whose own limits take the quantity
+// The caller refuses the order BEFORE charging when nothing qualifies, and tries the next offer when one refuses before sending.
 
 import type { HealthStatus, IProvider, IProviderServiceOffer } from './types.ts'
 
@@ -17,12 +28,26 @@ export class ServiceUnavailableError extends Error {
   }
 }
 
-export const ROUTING_MODE = 'EFFECTIVE_COST'
+export const ROUTING_MODE = 'BALANCED'
 
-/** What an offer really costs us once the provider's unreliability is priced in. Ranking only: never charged or recorded. */
-export function effectiveCost(offer: Pick<IProviderServiceOffer, 'costPer1000'>, provider?: Pick<IProvider, 'reliabilityPenalty'>): number {
+/** routing_score above this counts as this. */
+export const MAX_SCORE_BONUS_POINTS = 1000
+/** Share of the price each score point is worth. */
+export const SCORE_BONUS_PER_POINT = 0.0001
+
+/** 1 for score 0 down to 0.9 for score 1000. Non-numbers and negatives count as 0. */
+export function scoreFactor(routingScore: number | undefined): number {
+  const points = Number.isFinite(routingScore) ? Math.min(Math.max(routingScore as number, 0), MAX_SCORE_BONUS_POINTS) : 0
+  return 1 - points * SCORE_BONUS_PER_POINT
+}
+
+/** What an offer really costs us once reliability and the operator's preference are priced in. Ranking only: never charged or recorded. */
+export function effectiveCost(
+  offer: Pick<IProviderServiceOffer, 'costPer1000'> & { routingScore?: number },
+  provider?: Pick<IProvider, 'reliabilityPenalty'>,
+): number {
   const penalty = provider?.reliabilityPenalty ?? 1
-  return offer.costPer1000 * (Number.isFinite(penalty) && penalty >= 1 ? penalty : 1)
+  return offer.costPer1000 * (Number.isFinite(penalty) && penalty >= 1 ? penalty : 1) * scoreFactor(offer.routingScore)
 }
 
 // compared at 1e-8 so float noise (0.1 * 3) never decides between two offers
@@ -38,6 +63,8 @@ export function costForQuantity(costPer1000: number, quantity: number): number {
 export interface SelectOptions {
   /** Drop offers that cannot take this quantity (outside the offer's own min/max). */
   quantity?: number
+  /** The customer's price per 1000 for this service: offers costing more than this are dropped (never sell at a loss). */
+  maxCostPer1000?: number
 }
 
 /** Offers that may receive a NEW order, best first. */
@@ -48,6 +75,7 @@ export function rankOffers(offers: IProviderServiceOffer[], providers: IProvider
   return offers
     .filter((o) => o.isActive && eligible.has(o.providerId))
     .filter((o) => opts.quantity === undefined || (opts.quantity >= o.minQuantity && opts.quantity <= o.maxQuantity))
+    .filter((o) => opts.maxCostPer1000 === undefined || round4(o.costPer1000) <= round4(opts.maxCostPer1000))
     .sort((a, b) => ec(a, eligible) - ec(b, eligible) || b.routingScore - a.routingScore || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 

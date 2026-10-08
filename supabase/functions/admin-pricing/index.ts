@@ -1,10 +1,11 @@
 // Supabase Edge Function (Deno): POST /admin-pricing   (admins only)
 //   Authorization: Bearer <JWT issued by telegram-auth>
 //   { action: "GET" }
-//       -> { success, services: [...] }  via get_admin_pricing_view() (best active offer cost vs retail price)
+//       -> { success, services: [...] }  via get_admin_pricing_view() (the offer routing would pick, and the base cost, vs retail price)
 //   { action: "UPDATE_RULE", serviceId? | categoryId? | platform?, type: "fixed" | "percentage", value }
 //       -> upserts the price rule for that scope, then re-prices every affected service right away with
-//          _shared/price-engine.ts (the same math sync-catalog uses) and writes services.customer_rate_per_1000.
+//          _shared/price-engine.ts (the same math sync-catalog uses) and writes services.customer_rate_per_1000. The markup is applied to the
+//          CHEAPEST offer that can receive an order (_shared/service-cost.ts), not to the legacy primary provider service.
 //
 // Auth: JWT verified here, then users.is_admin is re-checked in the database; the pricing view RPC checks it
 // again with the caller's own token (require_admin()).
@@ -12,6 +13,7 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
+import { groupByService, OFFER_PRICING_COLUMNS, serviceCostBasis, toPricingOffer, type PricingOfferRow } from '../_shared/service-cost.ts'
 import { affectedServices, parsePricingRequest, repriceServices, type RepriceService } from '../_shared/admin-pricing.ts'
 import type { Platform, PriceRule } from '../_shared/types.ts'
 
@@ -21,6 +23,8 @@ type Db = SupabaseClient<any, 'public', any>
 // platform is the joined slug: the pricing engine and the reprice logic keep working with the slug
 const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, priority, is_active'
 const WRITE_BATCH = 20
+const OFFER_ID_CHUNK = 100
+const OFFER_PAGE = 1000
 
 function must<T>(res: { data: T | null; error: { message: string } | null }, what: string): T {
   if (res.error) throw new Error(`${what}: ${res.error.message}`)
@@ -34,6 +38,22 @@ const toRule = (r: Record<string, unknown>): PriceRule => ({
   min_rate: r.min_rate == null ? null : Number(r.min_rate),
   max_rate: r.max_rate == null ? null : Number(r.max_rate),
 })
+
+/** All offers of the given services (chunked: the ids travel in the URL). */
+async function loadOffers(db: Db, serviceIds: string[]): Promise<PricingOfferRow[]> {
+  const out: PricingOfferRow[] = []
+  for (let i = 0; i < serviceIds.length; i += OFFER_ID_CHUNK) {
+    for (let from = 0; ; from += OFFER_PAGE) {
+      const page = must(
+        await db.from('provider_service_offers').select(OFFER_PRICING_COLUMNS).in('service_id', serviceIds.slice(i, i + OFFER_ID_CHUNK)).order('id').range(from, from + OFFER_PAGE - 1),
+        'load offers',
+      ) as unknown as PricingOfferRow[]
+      out.push(...page)
+      if (page.length < OFFER_PAGE) break
+    }
+  }
+  return out
+}
 
 Deno.serve(instrument('admin-pricing', async (req: Request, { log }): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
@@ -100,20 +120,21 @@ Deno.serve(instrument('admin-pricing', async (req: Request, { log }): Promise<Re
       ) as { id: string }).id
     }
 
-    // Re-price immediately with the shared engine, from the same basis as sync-catalog (primary provider rate).
+    // Re-price immediately with the shared engine, from the same basis as sync-catalog: the cheapest offer that can receive orders.
     const rules = (must(await db.from('price_rules').select(RULE_COLUMNS).eq('is_active', true), 'load price_rules') as Record<string, unknown>[]).map(toRule)
     const rows = must(
       await db.from('services')
-        .select('id, category_id, customer_rate_per_1000, category:categories!inner(platform:platforms!inner(slug)), primary:provider_services!primary_provider_service_id(rate_per_1000)')
+        .select('id, category_id, customer_rate_per_1000, category:categories!inner(platform:platforms!inner(slug))')
         .eq('is_active', true),
       'load services',
-    ) as unknown as {
-      id: string; category_id: string; customer_rate_per_1000: number
-      category: { platform: { slug: Platform } }; primary: { rate_per_1000: number } | null
-    }[]
-    const services: RepriceService[] = rows.flatMap((r) =>
-      r.primary ? [{ id: r.id, category_id: r.category_id, platform: r.category.platform.slug, customer_rate_per_1000: Number(r.customer_rate_per_1000), provider_rate: Number(r.primary.rate_per_1000) }] : [],
-    )
+    ) as unknown as { id: string; category_id: string; customer_rate_per_1000: number; category: { platform: { slug: Platform } } }[]
+    const offerRows = rows.length === 0 ? [] : await loadOffers(db, rows.map((r) => r.id))
+    const offersByService = groupByService(offerRows.map(toPricingOffer))
+    const services: RepriceService[] = rows.flatMap((r) => {
+      const basis = serviceCostBasis(offersByService.get(r.id) ?? [])
+      // no offer can receive an order: there is no cost to mark up, so the price is left alone
+      return basis ? [{ id: r.id, category_id: r.category_id, platform: r.category.platform.slug, customer_rate_per_1000: Number(r.customer_rate_per_1000), provider_rate: basis.cost }] : []
+    })
     const changes = repriceServices(affectedServices(services, parsed), rules)
     for (let i = 0; i < changes.length; i += WRITE_BATCH) {
       await Promise.all(changes.slice(i, i + WRITE_BATCH).map(async (c) =>

@@ -57,7 +57,7 @@ export interface RepriceService {
   category_id: string
   platform: Platform
   customer_rate_per_1000: number
-  /** The primary provider service's rate: the same basis sync-catalog prices from. */
+  /** The cheapest offer that can receive an order (service-cost.ts): the same basis sync-catalog prices from. */
   provider_rate: number
 }
 

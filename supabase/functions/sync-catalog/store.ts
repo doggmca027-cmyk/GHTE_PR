@@ -4,6 +4,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import type { CatalogStore } from '../_shared/catalog-sync-run.ts'
 import type { ExistingOffer, ExistingProviderService, LinkedService, OfferSource } from '../_shared/catalog-sync.ts'
+import { OFFER_PRICING_COLUMNS, toPricingOffer, type PricingOffer, type PricingOfferRow } from '../_shared/service-cost.ts'
 import type { Platform } from '../_shared/types.ts'
 
 const PAGE = 1000
@@ -74,18 +75,38 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
     },
 
     async loadLinkedServices(providerId) {
-      const rows = await fetchAll<LinkedServiceRow>(
-        (from, to) =>
-          db.from('services')
-            .select('id, category_id, name, description, primary_provider_service_id, fallback_provider_service_id, customer_rate_per_1000, min_quantity, max_quantity, is_active, sort_order, refill_supported, category:categories(platform:platforms(slug)), provider_service:primary_provider_service_id!inner(provider_id)')
-            .eq('provider_service.provider_id', providerId).order('id').range(from, to),
-        'load services',
+      // services that sell through this provider = services with an offer from it
+      const offers = await fetchAll<{ service_id: string }>(
+        (from, to) => db.from('provider_service_offers').select('service_id').eq('provider_id', providerId).order('id').range(from, to),
+        'load offered services',
       )
+      const rows: LinkedServiceRow[] = []
+      for (const part of chunks([...new Set(offers.map((o) => o.service_id))], ID_CHUNK)) {
+        rows.push(...await fetchAll<LinkedServiceRow>(
+          (from, to) =>
+            db.from('services')
+              .select('id, category_id, name, description, primary_provider_service_id, fallback_provider_service_id, customer_rate_per_1000, min_quantity, max_quantity, is_active, sort_order, refill_supported, category:categories(platform:platforms(slug))')
+              .in('id', part).order('id').range(from, to),
+          'load services',
+        ))
+      }
       return rows.map(({ category, ...s }) => ({
         ...s,
         customer_rate_per_1000: Number(s.customer_rate_per_1000),
         platform: (category?.platform?.slug ?? 'other') as Platform,
       }))
+    },
+
+    async loadServiceOffers(serviceIds) {
+      const out: PricingOffer[] = []
+      for (const part of chunks(serviceIds, ID_CHUNK)) {
+        const rows = await fetchAll<PricingOfferRow>(
+          (from, to) => db.from('provider_service_offers').select(OFFER_PRICING_COLUMNS).in('service_id', part).order('id').range(from, to),
+          'load service offers',
+        )
+        out.push(...rows.map(toPricingOffer))
+      }
+      return out
     },
 
     async updateServices(rows) {
@@ -116,10 +137,6 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       for (const part of chunks(ids, ID_CHUNK)) {
         must(await db.from('provider_services').update({ is_active: false }).in('id', part), 'deactivate provider_services')
       }
-    },
-
-    async deactivateServices(ids) {
-      for (const part of chunks(ids, ID_CHUNK)) must(await db.from('services').update({ is_active: false }).in('id', part), 'deactivate services')
     },
 
     async saveBalance(providerId, balance) {

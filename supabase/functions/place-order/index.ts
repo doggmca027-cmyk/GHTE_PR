@@ -157,7 +157,7 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   // 3b. Everything that determines price and routing comes from the database.
   const [settings, { data: service, error: serviceError }] = await Promise.all([
     loadPlatformSettings(db, log),
-    db.from('services').select('id, is_active, min_quantity, max_quantity').eq('id', input.serviceId).maybeSingle(),
+    db.from('services').select('id, is_active, min_quantity, max_quantity, customer_rate_per_1000').eq('id', input.serviceId).maybeSingle(),
   ])
   try {
     assertSwitchOn(settings, 'orders')
@@ -192,12 +192,15 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   try {
     offers = existing?.provider_offer_id
       ? [resolveOffer(candidates.offers, candidates.providers, { quantity: input.quantity, pinnedOfferId: existing.provider_offer_id })]
-      : rankOffers(candidates.offers, candidates.providers, { quantity: input.quantity })
+      : rankOffers(candidates.offers, candidates.providers, { quantity: input.quantity, maxCostPer1000: Number(service.customer_rate_per_1000) })
   } catch (e) {
     if (e instanceof ServiceUnavailableError) return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
     throw e
   }
-  if (offers.length === 0) return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
+  if (offers.length === 0) {
+    log.warn('no offer can take the order', { error_code: 'no_routable_offer', serviceId: input.serviceId })
+    return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
+  }
   const mockMode = Deno.env.get('MOCK_MODE') === 'true'
 
   // 4. Execute. Failover to the next offer happens ONLY on a refusal before anything was sent or charged (no API key,
