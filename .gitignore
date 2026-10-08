@@ -23,3 +23,7 @@ Thumbs.db
 
 .vercel
 .env*
+
+# research artifacts
+research_notes/
+reports/
