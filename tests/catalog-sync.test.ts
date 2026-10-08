@@ -10,7 +10,7 @@ import {
   summarize,
   emptyProviderReport,
   type ExistingProviderService,
-  type ExistingService,
+  type LinkedService,
 } from '../supabase/functions/_shared/catalog-sync.ts'
 import { calculateCustomerRate } from '../supabase/functions/_shared/price-engine.ts'
 import { SMMv2Adapter } from '../supabase/functions/_shared/smm-v2-adapter.ts'
@@ -94,21 +94,12 @@ describe('diffProviderServices', () => {
 })
 
 describe('planService', () => {
-  const svc = (o: Partial<ExistingService> = {}): ExistingService => ({
+  const svc = (o: Partial<LinkedService> = {}): LinkedService => ({
     id: 's1', category_id: 'c1', name: 'Admin renamed', description: 'desc', primary_provider_service_id: 'ps1',
     fallback_provider_service_id: null, customer_rate_per_1000: 2.5, min_quantity: 10, max_quantity: 1000,
-    is_active: true, sort_order: 5, refill_supported: false, ...o,
+    is_active: true, sort_order: 5, refill_supported: false, platform: 'telegram', ...o,
   })
-  const base = { providerServiceId: 'ps1', categoryId: 'c1', platform: 'telegram' as const, rules: [globalRule(150)], providerServiceReactivated: false }
-
-  it('creates a priced service for a new provider service', () => {
-    const plan = planService({ ...base, provider: incoming({ externalServiceId: '1', name: ' Views ', ratePer1000: 0.08, refillSupported: true }) })
-    expect(plan.action).toBe('create')
-    expect(plan.row).toMatchObject({
-      name: 'Views', category_id: 'c1', primary_provider_service_id: 'ps1', customer_rate_per_1000: 0.2,
-      is_active: true, refill_supported: true, min_quantity: 10, max_quantity: 1000,
-    })
-  })
+  const base = { rules: [globalRule(150)], providerServiceReactivated: false }
 
   it('does nothing when price and limits are already current', () => {
     expect(planService({ ...base, existing: svc(), provider: incoming({ externalServiceId: '1', ratePer1000: 1 }) }).action).toBe('none')

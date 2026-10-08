@@ -74,9 +74,14 @@ An order points at what actually served it: `service_id` (what was bought), `pro
 
 ## 3. How an order travels
 
-1. **Catalog sync** (`sync-catalog`, every 6 hours) reads each panel, writes `provider_services`, creates missing `categories`
-   and `services`, and prices `services.customer_rate_per_1000` with the price rules. A trigger (`trg_provider_services_sync_offers`) keeps the
-   offers' cost and limits equal to the provider service.
+1. **Catalog sync** (`sync-catalog`, every 6 hours) reads each panel through `IProviderAdapter.getServices()` and upserts `provider_services`.
+   It does **not** create `categories` or `services`: a new panel service waits in `provider_services` until an admin links it. For
+   services already on the storefront it re-prices `services.customer_rate_per_1000` with the price rules and clamps limits. Offers' cost, limits
+   and flags are kept equal to their provider service by the trigger `trg_provider_services_sync_offers` and re-checked by the sync itself
+   (`planOfferSync`; `is_active` / `routing_score` untouched). A service the panel stops listing gets `is_active = false` (soft delete) on
+   `provider_services` and on the storefront service sold from it; the router skips offers whose provider service is inactive. More than
+   half of a large catalogue vanishing in one run is treated as a partial response and deactivates nothing. Logic:
+   `_shared/catalog-sync-run.ts`.
 2. **Routing** (`place-order`): loads the offers of the service, drops inactive/unhealthy ones, ranks by
    **effective cost** = `cost_per_1000 x reliability_penalty_multiplier`, then `routing_score`, then id.
 3. **`place_order()`** (database function, one transaction) validates the chosen offer, debits the customer, reserves the
@@ -91,8 +96,7 @@ These two columns are the **old routing**: a service named one primary and one f
 schema and still used:
 
 * `trg_services_sync_offers` turns a primary/fallback into offers (primary score 100, fallback 0);
-* `sync-catalog` sets `primary_provider_service_id` when it creates a service, and the repricing (admin-pricing and
-  sync-catalog) uses the primary provider's rate as the cost basis;
+* the repricing (admin-pricing and sync-catalog) uses the primary provider's rate as the cost basis; `sync-catalog` no longer creates services;
 * about 25 files (functions, shared modules, tests, scripts) refer to them.
 
 `place_order` and the router no longer read them for new orders: they use the offers. **They must not be dropped yet.** The

@@ -279,7 +279,7 @@ export function withoutAnomalies(diff: ProviderServiceDiff, valid: IProviderServ
 }
 
 // ---------------------------------------------------------------------------
-// Public service planning
+// Public service planning (re-price / re-limit / reactivate; the sync never CREATES storefront services)
 // ---------------------------------------------------------------------------
 
 export interface ExistingService {
@@ -297,8 +297,13 @@ export interface ExistingService {
   refill_supported: boolean
 }
 
+/** A storefront service as the sync sees it: plus the platform of its category, which selects the price rules. */
+export interface LinkedService extends ExistingService {
+  platform: Platform
+}
+
 export interface ServiceRow {
-  id?: string
+  id: string
   category_id: string
   name: string
   description: string | null
@@ -313,18 +318,15 @@ export interface ServiceRow {
 }
 
 export interface ServicePlan {
-  action: 'create' | 'update' | 'none'
+  action: 'update' | 'none'
   row?: ServiceRow
   repriced: boolean
   reactivated: boolean
 }
 
 export interface PlanServiceInput {
-  existing?: ExistingService
-  providerServiceId: string
+  existing: LinkedService
   provider: IProviderService
-  categoryId: string
-  platform: Platform
   rules: PriceRule[]
   /** True when the provider service was inactive and is listed again. */
   providerServiceReactivated: boolean
@@ -336,30 +338,9 @@ export function planService(input: PlanServiceInput): ServicePlan {
   const rate = calculateCustomerRate(
     p.ratePer1000,
     input.rules,
-    { serviceId: existing?.id, categoryId: input.categoryId, platform: input.platform },
+    { serviceId: existing.id, categoryId: existing.category_id, platform: existing.platform },
     { minMargin: input.minMargin },
   )
-
-  if (!existing) {
-    return {
-      action: 'create',
-      repriced: false,
-      reactivated: false,
-      row: {
-        category_id: input.categoryId,
-        name: p.name.trim(),
-        description: null,
-        primary_provider_service_id: input.providerServiceId,
-        fallback_provider_service_id: null,
-        customer_rate_per_1000: rate,
-        min_quantity: p.minQuantity,
-        max_quantity: p.maxQuantity,
-        is_active: true,
-        sort_order: 0,
-        refill_supported: p.refillSupported,
-      },
-    }
-  }
 
   // Keep admin-narrowed limits, but never exceed what the provider can actually deliver.
   let min = Math.max(existing.min_quantity, p.minQuantity)
@@ -401,6 +382,59 @@ export function planService(input: PlanServiceInput): ServicePlan {
 }
 
 // ---------------------------------------------------------------------------
+// Provider offers: cost and limits must always equal the provider service they are built on
+// ---------------------------------------------------------------------------
+
+/** What an offer was built on: the current values of its provider_services row. */
+export interface OfferSource {
+  rate_per_1000: number
+  min_quantity: number
+  max_quantity: number
+  refill_supported: boolean
+  cancel_supported: boolean
+}
+
+export interface ExistingOffer {
+  id: string
+  service_id: string
+  provider_id: string
+  provider_service_id: string
+  cost_per_1000: number
+  min_quantity: number
+  max_quantity: number
+  refill_supported: boolean
+  cancel_supported: boolean
+  source: OfferSource
+}
+
+/** The columns written back; is_active, routing_score and the anomaly flags are operator / guard decisions and never touched. */
+export type OfferRow = Omit<ExistingOffer, 'source'>
+
+/** Offers whose cost, limits or flags drifted from their provider service (the DB trigger normally prevents it; this repairs it). */
+export function planOfferSync(offers: ExistingOffer[]): OfferRow[] {
+  const out: OfferRow[] = []
+  for (const { source: s, ...o } of offers) {
+    const drifted =
+      r4(o.cost_per_1000) !== r4(s.rate_per_1000) ||
+      o.min_quantity !== s.min_quantity ||
+      o.max_quantity !== s.max_quantity ||
+      o.refill_supported !== s.refill_supported ||
+      o.cancel_supported !== s.cancel_supported
+    if (drifted) {
+      out.push({
+        ...o,
+        cost_per_1000: s.rate_per_1000,
+        min_quantity: s.min_quantity,
+        max_quantity: s.max_quantity,
+        refill_supported: s.refill_supported,
+        cancel_supported: s.cancel_supported,
+      })
+    }
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 
@@ -414,8 +448,9 @@ export interface ProviderSyncReport {
   added: number
   updated: number
   deactivated: number
-  services: { created: number; repriced: number; updated: number; deactivated: number; reactivated: number }
-  categoriesCreated: number
+  services: { repriced: number; updated: number; deactivated: number; reactivated: number }
+  /** Offers whose cost / limits were brought back in line with their provider service. */
+  offers: { synced: number }
   skippedInvalid: number
 }
 
@@ -429,8 +464,8 @@ export interface SyncReport {
 export function emptyProviderReport(provider: string): ProviderSyncReport {
   return {
     provider, status: 'ok', added: 0, updated: 0, deactivated: 0,
-    services: { created: 0, repriced: 0, updated: 0, deactivated: 0, reactivated: 0 },
-    categoriesCreated: 0, skippedInvalid: 0,
+    services: { repriced: 0, updated: 0, deactivated: 0, reactivated: 0 },
+    offers: { synced: 0 }, skippedInvalid: 0,
   }
 }
 
