@@ -10,18 +10,21 @@ import { PriceRulesTab } from './PriceRulesTab'
 import { PricingTab } from './PricingTab'
 import { ProvidersTab } from './ProvidersTab'
 import { ReconciliationTab } from './ReconciliationTab'
+import { SupportTab } from './SupportTab'
 import { TreasuryTab } from './TreasuryTab'
 
-type AdminTab = 'overview' | 'analytics' | 'health' | 'queue' | 'prices' | 'pricing' | 'providers' | 'treasury' | 'controls'
+type AdminTab = 'overview' | 'analytics' | 'support' | 'health' | 'queue' | 'prices' | 'pricing' | 'providers' | 'treasury' | 'controls'
 
 export function AdminScreen({ session }: { session: AuthSession }) {
   const [tab, setTab] = useState<AdminTab>('overview')
   const [problems, setProblems] = useState(0)
+  const [waiting, setWaiting] = useState(0)
   const onProblemCount = useCallback((n: number) => setProblems(n), [])
 
   const tabs: { id: AdminTab; label: string; badge?: number }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'analytics', label: 'Analytics' },
+    { id: 'support', label: 'Support', badge: waiting },
     { id: 'health', label: 'System Health' },
     { id: 'queue', label: 'Reconciliation', badge: problems },
     { id: 'prices', label: 'Price rules' },
@@ -58,6 +61,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
 
       {tab === 'overview' && <OverviewTab session={session} onOpenQueue={() => setTab('queue')} onProblemCount={onProblemCount} />}
       {tab === 'analytics' && <AnalyticsTab session={session} />}
+      {tab === 'support' && <SupportTab session={session} onWaitingCount={setWaiting} />}
       {tab === 'health' && <ObservabilityTab session={session} />}
       {tab === 'queue' && <ReconciliationTab session={session} onProblemCount={onProblemCount} onOpenPayments={() => setTab('treasury')} />}
       {tab === 'prices' && <PriceRulesTab session={session} />}

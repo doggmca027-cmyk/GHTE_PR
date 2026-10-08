@@ -67,6 +67,14 @@ verify_jwt = false
 [functions.referrals]
 verify_jwt = false
 
+# Signed-in customers: authenticates itself by verifying the telegram-auth JWT; the caller is always the JWT user.
+[functions.user-tickets]
+verify_jwt = false
+
+# Admin-only: authenticates itself by verifying the telegram-auth JWT + users.is_admin.
+[functions.admin-tickets]
+verify_jwt = false
+
 # Signed-in users: authenticates itself by verifying the telegram-auth JWT (HS256, JWT_SECRET); the caller is always the JWT user.
 [functions.quote-order]
 verify_jwt = false

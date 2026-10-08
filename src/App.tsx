@@ -9,6 +9,7 @@ import { WalletScreen, type DepositRequest } from '@/components/wallet/WalletScr
 import { OrdersScreen } from '@/components/orders/OrdersScreen'
 import { ServicesScreen } from '@/components/services/ServicesScreen'
 import { SettingsScreen } from '@/components/settings/SettingsScreen'
+import { SupportScreen, type SupportRequest } from '@/components/support/SupportScreen'
 import { useAuth } from '@/context/AuthContext'
 import { bindAnalytics, track } from '@/lib/analytics-client'
 import { WebApp } from '@/lib/webapp'
@@ -29,6 +30,8 @@ export default function App() {
   const [tab, setTab] = useState<TabId>('home')
   const [depositRequest, setDepositRequest] = useState<DepositRequest | null>(null)
   const clearDepositRequest = useCallback(() => setDepositRequest(null), [])
+  const [supportRequest, setSupportRequest] = useState<SupportRequest | null>(null)
+  const clearSupportRequest = useCallback(() => setSupportRequest(null), [])
 
   // Product analytics (after the first paint, never blocking): bind the signed-in session, report the app opening once and the
   // screen the customer lands on. The services screen reports its own catalog views.
@@ -99,8 +102,10 @@ export default function App() {
         </Suspense>
       ) : tab === 'settings' ? (
         <SettingsScreen session={state.session} />
+      ) : tab === 'support' ? (
+        <SupportScreen session={state.session} request={supportRequest} onRequestHandled={clearSupportRequest} />
       ) : tab === 'orders' ? (
-        <OrdersScreen session={state.session} onBrowse={() => setTab('services')} />
+        <OrdersScreen session={state.session} onBrowse={() => setTab('services')} onReportIssue={(order) => { setSupportRequest({ orderId: order.id }); setTab('support') }} />
       ) : (
         <>
           <h1 className="mb-4 text-2xl font-extrabold tracking-tight text-content-primary">{title}</h1>

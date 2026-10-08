@@ -14,6 +14,8 @@ export type NotifyEvent =
   | { type: 'order_completed'; orderId: string; serviceName: string; quantity: number }
   | { type: 'order_canceled'; orderId: string; serviceName: string; quantity: number; refundAmount: number }
   | { type: 'order_partial'; orderId: string; serviceName: string; quantity: number; remains: number; refundAmount: number }
+  /** Support answered a ticket of the customer. */
+  | { type: 'ticket_reply'; ticketId: string; subject: string }
   /** Admin alert from provider-health-monitor: a provider went down ('unavailable') or came back ('healthy'). */
   | { type: 'provider_health'; providerName: string; status: 'unavailable' | 'healthy' }
   /** Admin alert from provider-health-monitor: a provider's balance fell to or below its threshold. */
@@ -59,6 +61,10 @@ const EN: { [K in NotifyEvent['type']]: Template<Extract<NotifyEvent, { type: K 
     `⚠️ <b>Order canceled</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nThe provider could not complete it. <b>${formatUsd(e.refundAmount)}</b> was refunded to your balance.`,
   order_partial: (e) =>
     `ℹ️ <b>Order partially completed</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\n${int(e.quantity - e.remains)} of ${int(e.quantity)} delivered, ${int(e.remains)} not delivered.\n<b>${formatUsd(e.refundAmount)}</b> was refunded to your balance.`,
+  ticket_reply: (e) =>
+    `💬 <b>Support answered your ticket</b>
+#${shortId(e.ticketId)} · ${name(e.subject)}
+Open the app, Support, to read the reply.`,
   provider_health: (e) =>
     e.status === 'unavailable'
       ? `🚨 <b>Provider ${name(e.providerName)} is UNAVAILABLE</b>\nTraffic is routed to fallback.`
@@ -78,6 +84,10 @@ const UK: typeof EN = {
     `⚠️ <b>Замовлення скасовано</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nПостачальник не зміг його виконати. <b>${formatUsd(e.refundAmount)}</b> повернено на ваш баланс.`,
   order_partial: (e) =>
     `ℹ️ <b>Замовлення виконано частково</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nДоставлено ${int(e.quantity - e.remains)} з ${int(e.quantity)}, не доставлено ${int(e.remains)}.\n<b>${formatUsd(e.refundAmount)}</b> повернено на ваш баланс.`,
+  ticket_reply: (e) =>
+    `💬 <b>Підтримка відповіла на ваш запит</b>
+#${shortId(e.ticketId)} · ${name(e.subject)}
+Відкрийте застосунок, розділ «Підтримка», щоб прочитати відповідь.`,
   provider_health: (e) =>
     e.status === 'unavailable'
       ? `🚨 <b>Провайдер ${name(e.providerName)} НЕДОСТУПНИЙ</b>\nТрафік переведено на резервного.`

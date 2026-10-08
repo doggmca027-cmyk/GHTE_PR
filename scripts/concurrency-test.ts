@@ -16,7 +16,8 @@
 //                (the discount engine: a code is never over-redeemed and no order is ever sold under its cost),
 //              S ad postbacks racing the daily cap, T the same postback delivered many times at once, U two networks at once
 //                (process_ad_reward: the 24 h caps cannot be bypassed and a network transaction id is paid once),
-//              V notification outbox claims (overlapping telegram-notifier runs never take the same message).
+//              V notification outbox claims (overlapping telegram-notifier runs never take the same message),
+//              W support ticket cap (20 parallel "new ticket" requests of one customer open at most 5).
 //
 //   CONCURRENCY_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres npm run test:concurrency
 //       Runs against a LOCAL Supabase instead (`npx supabase start`; migrations are applied there by the CLI).
@@ -815,6 +816,20 @@ async function main() {
     check('messages claimed in total (8 runs x 10, capped by the 60 available)', claimedV.length, 60)
     check('messages claimed by more than one run', claimedV.length - new Set(claimedV).size, 0)
     check('every claimed message was leased exactly once', [rowsV.rows[0].n, rowsV.rows[0].mina, rowsV.rows[0].maxa], [60, 1, 1])
+
+    // ---- W. Ticket cap ---------------------------------------------------------------------
+    console.log('\nW. Support: one customer opens 20 tickets at the same moment (the cap is 5 open tickets)')
+    const uW = await seedUser(admin, 1)
+    const ticketOp: RaceOp = (c) => inTx(c, async () => {
+      await c.query(`select support_create_ticket($1::uuid, $2, 'help me', null)`, [uW, `Problem ${randomUUID().slice(0, 6)}`])
+      return 'created'
+    })
+    const rW = await raceOps(pool, Array.from({ length: 20 }, () => ticketOp))
+    const openW = await admin.query<{ n: number; m: number }>(`select (select count(*) from support_tickets where user_id = $1)::int n, (select count(*) from ticket_messages where sender_id = $1)::int m`, [uW])
+    check('tickets opened (never above the cap)', rW.ok.length, 5)
+    check('refused: too many open tickets', rW.errors.filter((e) => /too_many_open_tickets/.test(e)).length, 15)
+    check('any other error (deadlock, unexpected)', rW.errors.filter((e) => !/too_many_open_tickets/.test(e)), [])
+    check('tickets and first messages stored, one each', [openW.rows[0].n, openW.rows[0].m], [5, 5])
 
     // ---- whole-wallet balance ---------------------------------------------------------------------
     const allOrders = [...ordersH, ...ordersI, ...ordersJ, orderK, ...ordersV]

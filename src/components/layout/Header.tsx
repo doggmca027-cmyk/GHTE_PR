@@ -1,4 +1,4 @@
-import { Plus, Settings, ShieldCheck } from 'lucide-react'
+import { LifeBuoy, Plus, Settings, ShieldCheck } from 'lucide-react'
 import { cn, formatMoney } from '@/lib/utils'
 import { Logo } from './Logo'
 
@@ -7,17 +7,18 @@ interface Props {
   currency: string
   onTopUp?: () => void
   onOpenSettings?: () => void
+  onOpenSupport?: () => void
   /** Shows the admin button. Cosmetic only: every admin call is re-checked on the server. */
   isAdmin?: boolean
   onOpenAdmin?: () => void
   /** Which header screen is open, to highlight its button. */
-  active?: 'settings' | 'admin' | null
+  active?: 'settings' | 'support' | 'admin' | null
 }
 
 const iconButton =
   'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-100/70 shadow-sm transition-colors active:scale-95'
 
-export function Header({ balance, currency, onTopUp, onOpenSettings, isAdmin = false, onOpenAdmin, active = null }: Props) {
+export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSupport, isAdmin = false, onOpenAdmin, active = null }: Props) {
   return (
     <header className="flex shrink-0 items-center justify-between gap-2 px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
       <Logo />
@@ -32,6 +33,15 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, isAdmin = f
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-white">
             <Plus size={16} strokeWidth={2} />
           </span>
+        </button>
+        <button
+          type="button"
+          onClick={onOpenSupport}
+          aria-label="Support"
+          aria-pressed={active === 'support'}
+          className={cn(iconButton, active === 'support' ? 'bg-brand text-white' : 'bg-white text-content-secondary')}
+        >
+          <LifeBuoy size={18} strokeWidth={1.75} />
         </button>
         <button
           type="button"

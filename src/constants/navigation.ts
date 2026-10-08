@@ -1,7 +1,7 @@
 import { Home, LayoutGrid, ReceiptText, Wallet, type LucideIcon } from 'lucide-react'
 
-/** 'settings' and 'admin' are opened from the header buttons, not from the tab bar. */
-export type TabId = 'home' | 'services' | 'orders' | 'wallet' | 'settings' | 'admin'
+/** 'settings', 'support' and 'admin' are opened from the header buttons, not from the tab bar. */
+export type TabId = 'home' | 'services' | 'orders' | 'wallet' | 'settings' | 'support' | 'admin'
 
 export interface NavItem {
   id: TabId

@@ -23,9 +23,10 @@ export function Layout({ activeTab, onTabChange, balance, currency, onTopUp, isA
           currency={currency}
           onTopUp={onTopUp}
           onOpenSettings={() => onTabChange('settings')}
+          onOpenSupport={() => onTabChange('support')}
           isAdmin={isAdmin}
           onOpenAdmin={() => onTabChange('admin')}
-          active={activeTab === 'settings' || activeTab === 'admin' ? activeTab : null}
+          active={activeTab === 'settings' || activeTab === 'support' || activeTab === 'admin' ? activeTab : null}
         />
         <main className="flex-1 overflow-y-auto px-5 pb-4">{children}</main>
         <BottomNav active={activeTab} onChange={onTabChange} items={NAV_ITEMS} />

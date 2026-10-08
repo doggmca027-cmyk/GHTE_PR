@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, LifeBuoy } from 'lucide-react'
 import { PlatformIcon } from '@/components/services/PlatformIcon'
 import { copyText } from '@/lib/clipboard'
 import { haptic } from '@/lib/haptics'
@@ -8,7 +8,7 @@ import { deliveredRatio, formatOrderDate, isActiveStatus, truncateUrl } from '@/
 import type { IOrderView } from '@/types/orders'
 import { StatusBadge } from './StatusBadge'
 
-export function OrderCard({ order }: { order: IOrderView }) {
+export function OrderCard({ order, onReportIssue }: { order: IOrderView; onReportIssue?: (order: IOrderView) => void }) {
   const [copied, setCopied] = useState(false)
   const ratio = deliveredRatio(order.quantity, order.remains)
   const showProgress = ratio !== null && isActiveStatus(order.status)
@@ -70,6 +70,16 @@ export function OrderCard({ order }: { order: IOrderView }) {
             ? `Partially completed: ${formatInt(order.remains)} undelivered. ${formatUnits(toUnits(order.refundedAmount))} refunded to your balance.`
             : `${formatUnits(toUnits(order.refundedAmount))} refunded to your balance.`}
         </p>
+      )}
+
+      {onReportIssue && (
+        <button
+          type="button"
+          onClick={() => onReportIssue(order)}
+          className="mt-3 flex h-9 items-center gap-1.5 rounded-full bg-surface-sub px-3.5 text-[13px] font-semibold text-content-secondary active:scale-95"
+        >
+          <LifeBuoy size={14} strokeWidth={1.75} /> Report an issue
+        </button>
       )}
 
       <div className="mt-3 flex items-end justify-between border-t border-blue-100/60 pt-3">

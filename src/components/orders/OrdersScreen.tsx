@@ -17,9 +17,11 @@ const MOCK_POLL_MS = 3_000
 interface Props {
   session: AuthSession
   onBrowse: () => void
+  /** "Report an issue" on a card: open the support form for this order. */
+  onReportIssue?: (order: IOrderView) => void
 }
 
-export function OrdersScreen({ session, onBrowse }: Props) {
+export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
   const { refreshWallet } = useAuth()
   const lastStatuses = useRef<Map<string, string>>(new Map())
   const [orders, setOrders] = useState<IOrderView[] | null>(null)
@@ -119,7 +121,7 @@ export function OrdersScreen({ session, onBrowse }: Props) {
           </Card>
         )}
 
-        {visible.map((order) => <OrderCard key={order.id} order={order} />)}
+        {visible.map((order) => <OrderCard key={order.id} order={order} onReportIssue={onReportIssue} />)}
       </div>
     </>
   )
