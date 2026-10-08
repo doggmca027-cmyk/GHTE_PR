@@ -117,7 +117,7 @@ async function world() {
       ('${A}', 'A', 'https://a', true, true, 'healthy'),
       ('${B}', 'B', 'https://b', true, true, 'healthy'),
       ('${C}', 'C', 'https://c', true, false, 'disabled');   -- routing off: never monitored
-    insert into categories(id, platform, name, slug) values ('00000000-0000-0000-0000-0000000000c1', 'telegram', 'Views', 'views');
+    insert into categories(id, platform_id, name, slug) values ('00000000-0000-0000-0000-0000000000c1', (select id from platforms where slug = 'telegram'), 'Views', 'views');
     insert into provider_services(id, provider_id, external_service_id, name, rate_per_1000, min_quantity, max_quantity) values
       ('${PS[A]}', '${A}', '1', 'A views', 0.1, 100, 50000),
       ('${PS[B]}', '${B}', '9', 'B views', 0.07, 100, 50000);

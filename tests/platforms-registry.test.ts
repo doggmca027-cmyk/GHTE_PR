@@ -29,15 +29,14 @@ describe('platforms registry (real SQL)', () => {
   it('seeds the platforms; the legacy enum values are all present with the same slug', async () => {
     const all = await rows<{ slug: string; category: string }>(`select slug, category from platforms order by sort_order`)
     expect(all.map((p) => p.slug)).toEqual(['telegram', 'instagram', 'tiktok', 'youtube', 'twitter', 'facebook', 'spotify', 'discord', 'reddit', 'website', 'other'])
-    const enumValues = (await rows<{ v: string }>(`select unnest(enum_range(null::platform_enum))::text v`)).map((r) => r.v)
-    expect(all.map((p) => p.slug)).toEqual(expect.arrayContaining(enumValues))
-    expect([...LEGACY_PLATFORM_SLUGS].sort()).toEqual([...enumValues].sort())
+    expect(all.map((p) => p.slug)).toEqual(expect.arrayContaining([...LEGACY_PLATFORM_SLUGS]))
+    expect(await rows(`select 1 from pg_type where typname = 'platform_enum'`)).toHaveLength(0) // the enum is gone: the table is the only source
     expect(Object.fromEntries(all.map((p) => [p.slug, p.category]))).toMatchObject({ spotify: 'music', youtube: 'video', telegram: 'messaging', website: 'web' })
   })
 
-  it('categories still join on platform = slug (backward compatible)', async () => {
-    await db.exec(`insert into categories(platform, name, slug) values ('telegram', 'Views', 'v')`)
-    expect(await rows(`select c.id from categories c join platforms p on p.slug = c.platform::text`)).toHaveLength(1)
+  it('categories reference the registry through platform_id', async () => {
+    await db.exec(`insert into categories(platform_id, name, slug) select id, 'Views', 'v' from platforms where slug = 'telegram'`)
+    expect(await rows(`select c.id from categories c join platforms p on p.id = c.platform_id`)).toHaveLength(1)
   })
 
   it('anyone reads active platforms; only admins see inactive ones', async () => {

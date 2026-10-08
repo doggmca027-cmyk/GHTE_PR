@@ -40,7 +40,7 @@ async function seedScenario(admin: pg.Client, tag: string, o: { customerRate: nu
   if (o.providerBalance !== null) {
     await admin.query(`update providers set provider_balance = $2, last_balance_sync = now() where id = $1`, [provider, o.providerBalance])
   }
-  await admin.query(`insert into categories(id, platform, name, slug) values ($1, 'telegram', $2, $2)`, [category, `race-${tag}-${category.slice(0, 8)}`])
+  await admin.query(`insert into categories(id, platform_id, name, slug) select $1, id, $2, $2 from platforms where slug = 'telegram'`, [category, `race-${tag}-${category.slice(0, 8)}`])
   await admin.query(`insert into provider_services(id, provider_id, external_service_id, name, rate_per_1000, min_quantity, max_quantity) values ($1, $2, '1', 'race', $3, 1, 1000000)`, [providerService, provider, o.costRate])
   await admin.query(`insert into services(id, category_id, name, primary_provider_service_id, customer_rate_per_1000, min_quantity, max_quantity) values ($1, $2, 'race', $3, $4, 1, 1000000)`, [service, category, providerService, o.customerRate])
   const offer = (await admin.query<{ id: string }>(`select id from provider_service_offers where service_id = $1`, [service])).rows[0].id

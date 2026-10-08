@@ -163,10 +163,15 @@ async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[], l
         .map((c) => [c.slug, c.id]),
     )
   let categoryBySlug = await loadCategories()
-  const newCategories = new Map<string, { platform: string; name: string; slug: string; sort_order: number }>()
+  const platformIds = new Map(
+    (must(await db.from('platforms').select('id, slug'), 'load platforms') as { id: string; slug: string }[]).map((p) => [p.slug, p.id]),
+  )
+  const newCategories = new Map<string, { platform_id: string; name: string; slug: string; sort_order: number }>()
   for (const c of resolved.values()) {
     if (!categoryBySlug.has(c.slug) && !newCategories.has(c.slug)) {
-      newCategories.set(c.slug, { ...c, sort_order: 100 })
+      const platformId = platformIds.get(c.platform)
+      if (!platformId) throw new Error(`platform "${c.platform}" is not in the platforms registry`)
+      newCategories.set(c.slug, { platform_id: platformId, name: c.name, slug: c.slug, sort_order: 100 })
     }
   }
   if (newCategories.size > 0) {
@@ -266,10 +271,11 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
     const providers = must(await q, 'load providers') as ProviderRow[]
 
     const rules = (must(
-      await db.from('price_rules').select('id, type, value, platform, category_id, service_id, min_rate, max_rate, priority, is_active').eq('is_active', true),
+      await db.from('price_rules').select('id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, priority, is_active').eq('is_active', true),
       'load price_rules',
-    ) as PriceRule[]).map((r) => ({
+    ) as unknown as (Omit<PriceRule, 'platform'> & { platform: { slug: string } | null })[]).map((r) => ({
       ...r,
+      platform: r.platform?.slug ?? null,
       value: Number(r.value),
       min_rate: r.min_rate == null ? null : Number(r.min_rate),
       max_rate: r.max_rate == null ? null : Number(r.max_rate),

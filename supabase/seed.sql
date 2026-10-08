@@ -8,20 +8,22 @@ values ('Secsers Mock', 'https://secsers.example/api/v2', true, 1000, 10)
 on conflict (name) do nothing;
 
 -- Markup: +200% for Telegram, +150% for everything else (retail = provider rate x3 / x2.5).
-insert into public.price_rules (name, type, value, platform, priority)
-select v.name, v.type::public.price_rule_type_enum, v.value, v.platform::public.platform_enum, v.priority
+insert into public.price_rules (name, type, value, platform_id, priority)
+select v.name, v.type::public.price_rule_type_enum, v.value, (select id from public.platforms where slug = v.platform), v.priority
 from (values
   ('Default +150%',  'percentage', 150.00, null,       0),
   ('Telegram +200%', 'percentage', 200.00, 'telegram', 0)
 ) as v(name, type, value, platform, priority)
 where not exists (select 1 from public.price_rules r where r.name = v.name);
 
-insert into public.categories (platform, name, slug, sort_order)
-values
+insert into public.categories (platform_id, name, slug, sort_order)
+select (select id from public.platforms where slug = v.platform), v.name, v.slug, v.sort_order
+from (values
   ('telegram',  'Telegram Views',      'telegram-views',      10),
   ('telegram',  'Telegram Members',    'telegram-members',    20),
   ('instagram', 'Instagram Followers', 'instagram-followers', 30),
   ('tiktok',    'TikTok Likes',        'tiktok-likes',        40)
+) as v(platform, name, slug, sort_order)
 on conflict (slug) do nothing;
 
 insert into public.provider_services

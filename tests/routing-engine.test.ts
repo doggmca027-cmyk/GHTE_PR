@@ -183,7 +183,14 @@ const PS_B = '00000000-0000-0000-0000-000000000b01'
 
 const SEED = `
   insert into providers(id, name, api_url) values ('${PROV_A}', 'A', 'https://a'), ('${PROV_B}', 'B', 'https://b');
-  insert into categories(id, platform, name, slug) values ('00000000-0000-0000-0000-0000000000c1', 'telegram', 'Views', 'views');
+  -- these fixtures also run against schemas from before the platform registry, so the category is written for either one
+  do $cat$ begin
+    if exists (select 1 from information_schema.columns where table_name = 'categories' and column_name = 'platform_id') then
+      insert into categories(id, platform_id, name, slug) values ('00000000-0000-0000-0000-0000000000c1', (select id from platforms where slug = 'telegram'), 'Views', 'views');
+    else
+      execute $q$insert into categories(id, platform, name, slug) values ('00000000-0000-0000-0000-0000000000c1', 'telegram', 'Views', 'views')$q$;
+    end if;
+  end $cat$;
   insert into provider_services(id, provider_id, external_service_id, name, rate_per_1000, min_quantity, max_quantity) values
     ('${PS_A}', '${PROV_A}', '1', 'A views', 0.1000, 100, 50000),
     ('${PS_B}', '${PROV_B}', '9', 'B views', 0.0700, 500, 20000);

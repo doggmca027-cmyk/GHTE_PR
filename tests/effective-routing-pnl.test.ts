@@ -107,7 +107,7 @@ async function world() {
   await db.exec(`
     insert into providers(id, name, api_url, routing_enabled, health_status) values
       ('${A}', 'Cheap', 'https://a', true, 'healthy'), ('${B}', 'Solid', 'https://b', true, 'healthy');
-    insert into categories(platform, name, slug) values ('telegram', 'Views', 'views');
+    insert into categories(platform_id, name, slug) values ((select id from platforms where slug = 'telegram'), 'Views', 'views');
     insert into provider_services(id, provider_id, external_service_id, name, rate_per_1000, min_quantity, max_quantity) values
       ('${PS_A}', '${A}', '1', 'A', 1.0, 100, 100000), ('${PS_B}', '${B}', '9', 'B', 1.1, 100, 100000);
     insert into services(id, category_id, name, primary_provider_service_id, customer_rate_per_1000, min_quantity, max_quantity)

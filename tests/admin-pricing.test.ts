@@ -125,7 +125,7 @@ describe('get_admin_pricing_view', () => {
     const pC = await q(`insert into providers(name, api_url, priority) values ('C', 'https://c', 1) returning id`)
     await db.query(`update providers set health_status = 'healthy', routing_enabled = true where id in ($1, $2)`, [pA, pB])
     await db.query(`update providers set health_status = 'degraded', routing_enabled = true where id = $1`, [pC])
-    const cat = await q(`insert into categories(platform, name, slug) values ('telegram', 'Views', 'v') returning id`)
+    const cat = await q(`insert into categories(platform_id, name, slug) values ((select id from platforms where slug = 'telegram'), 'Views', 'v') returning id`)
 
     const ps = async (provider: string, ext: string, rate: number) =>
       q(`insert into provider_services(provider_id, external_service_id, name, rate_per_1000, min_quantity, max_quantity) values ($1, $2, 'x', $3, 1, 1000) returning id`, [provider, ext, rate])

@@ -6,9 +6,10 @@ const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 const REQUEST_TIMEOUT_MS = 10_000
 
-interface CategoryRow {
+/** categories row with its platform joined from the registry (platforms.slug). */
+export interface CategoryRow {
   id: string
-  platform: Platform
+  platforms: { slug: Platform }
   name: string
   slug: string
   icon_url: string | null
@@ -40,12 +41,16 @@ async function rest<T>(path: string, token: string): Promise<T> {
  * Active categories and services. Row Level Security already limits both tables to
  * is_active rows; provider tables are not reachable from the client at all.
  */
+export const categoryFromRow = (c: CategoryRow): ICategory => ({
+  id: c.id, platform: c.platforms.slug, name: c.name, slug: c.slug, iconUrl: c.icon_url, sortOrder: c.sort_order,
+})
+
 export async function fetchCatalog(session: AuthSession): Promise<ICatalog> {
   if (session.isMock) return MOCK_CATALOG
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
 
   const [categories, services] = await Promise.all([
-    rest<CategoryRow[]>('categories?select=id,platform,name,slug,icon_url,sort_order&is_active=eq.true&order=sort_order', session.token),
+    rest<CategoryRow[]>('categories?select=id,name,slug,icon_url,sort_order,platforms!inner(slug)&is_active=eq.true&order=sort_order', session.token),
     rest<ServiceRow[]>(
       'services?select=id,category_id,name,description,customer_rate_per_1000,min_quantity,max_quantity,refill_supported,sort_order&is_active=eq.true&order=sort_order,customer_rate_per_1000',
       session.token,
@@ -54,7 +59,7 @@ export async function fetchCatalog(session: AuthSession): Promise<ICatalog> {
 
   return {
     categories: categories.map((c): ICategory => ({
-      id: c.id, platform: c.platform, name: c.name, slug: c.slug, iconUrl: c.icon_url, sortOrder: c.sort_order,
+      ...categoryFromRow(c),
     })),
     services: services.map((s): ICatalogService => ({
       id: s.id,

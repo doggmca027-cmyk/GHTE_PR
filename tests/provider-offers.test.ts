@@ -29,7 +29,14 @@ type Row = Record<string, unknown>
 const SEED = `
   insert into providers(id, name, api_url) values
     ('00000000-0000-0000-0000-0000000000a1', 'A', 'https://a'), ('00000000-0000-0000-0000-0000000000b1', 'B', 'https://b');
-  insert into categories(id, platform, name, slug) values ('00000000-0000-0000-0000-0000000000c1', 'telegram', 'Views', 'views');
+  -- these fixtures also run against schemas from before the platform registry, so the category is written for either one
+  do $cat$ begin
+    if exists (select 1 from information_schema.columns where table_name = 'categories' and column_name = 'platform_id') then
+      insert into categories(id, platform_id, name, slug) values ('00000000-0000-0000-0000-0000000000c1', (select id from platforms where slug = 'telegram'), 'Views', 'views');
+    else
+      execute $q$insert into categories(id, platform, name, slug) values ('00000000-0000-0000-0000-0000000000c1', 'telegram', 'Views', 'views')$q$;
+    end if;
+  end $cat$;
   insert into provider_services(id, provider_id, external_service_id, name, rate_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported) values
     ('00000000-0000-0000-0000-000000000a01', '00000000-0000-0000-0000-0000000000a1', '1', 'A views', 0.1000, 100, 50000, true,  false),
     ('00000000-0000-0000-0000-000000000b01', '00000000-0000-0000-0000-0000000000b1', '9', 'B views', 0.0700, 50,  20000, false, true),

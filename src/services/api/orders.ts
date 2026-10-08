@@ -71,7 +71,7 @@ interface OrderRow {
   start_count: number | null
   partial_refund_amount: number | string
   created_at: string
-  services: { name: string; categories: { platform: Platform } | null } | null
+  services: { name: string; categories: { platforms: { slug: Platform } | null } | null } | null
 }
 
 /** The signed-in user's orders, newest first. Row Level Security scopes the query to auth.uid(). */
@@ -79,7 +79,7 @@ export async function getOrders(session: AuthSession): Promise<IOrderView[]> {
   if (session.isMock) return mockBackend.listOrders()
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
 
-  const select = 'id,target_url,quantity,charge_amount,status,remains,start_count,partial_refund_amount,created_at,services(name,categories(platform))'
+  const select = 'id,target_url,quantity,charge_amount,status,remains,start_count,partial_refund_amount,created_at,services(name,categories(platforms(slug)))'
   const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?select=${select}&status=neq.draft&order=created_at.desc&limit=100`, {
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
     signal: AbortSignal.timeout(READ_TIMEOUT_MS),
@@ -90,7 +90,7 @@ export async function getOrders(session: AuthSession): Promise<IOrderView[]> {
     id: o.id,
     // services is RLS-filtered to active rows, so a retired service falls back to a generic label.
     serviceName: o.services?.name ?? 'Service',
-    platform: o.services?.categories?.platform ?? 'other',
+    platform: o.services?.categories?.platforms?.slug ?? 'other',
     targetUrl: o.target_url,
     quantity: o.quantity,
     chargeAmount: Number(o.charge_amount),

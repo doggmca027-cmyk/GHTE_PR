@@ -168,7 +168,7 @@ describe('Reconciliation Center (real SQL)', () => {
     customer = await q(`insert into users(telegram_id) values (4) returning id`)
     await db.exec(`
       insert into providers(name, api_url) values ('p', 'https://x');
-      insert into categories(platform, name, slug) values ('telegram', 'Views', 'v');
+      insert into categories(platform_id, name, slug) values ((select id from platforms where slug = 'telegram'), 'Views', 'v');
       insert into provider_services(provider_id, external_service_id, name, rate_per_1000, min_quantity, max_quantity)
         select id, '9', 's', 1, 1, 1000000 from providers;
       insert into services(category_id, name, primary_provider_service_id, customer_rate_per_1000, min_quantity, max_quantity)
