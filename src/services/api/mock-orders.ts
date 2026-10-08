@@ -4,7 +4,7 @@
 // (quote -> intent with memo -> simulated payment -> idempotent credit + ledger entry).
 
 import { MOCK_CATALOG, MOCK_SESSION } from '@/constants/dev'
-import { calcPartialRefund, calcTotalUnits, checkBalance, toUnits, UNITS_PER_CURRENCY, validateQuantity, validateTargetUrl } from '@/lib/order-calc'
+import { calcPartialRefund, checkBalance, toUnits, UNITS_PER_CURRENCY, validateQuantity, validateTargetUrl } from '@/lib/order-calc'
 import { DEPOSIT_VALIDITY_SECONDS, generateMemo, quoteDeposit, validateDepositAmountUsd } from '@/lib/ton'
 import { buildMessage, type NotifyEvent } from '../../../supabase/functions/_shared/telegram-notify.ts'
 import type { MetricOrder } from '../../../supabase/functions/_shared/admin-metrics.ts'
@@ -13,6 +13,7 @@ import type { IWallet } from '@/types'
 import type { DepositAsset, DepositIntent, DepositQuote, LedgerEntry, VerifyResult } from '@/types/wallet'
 import { DepositApiError } from './deposit-errors'
 import { OrderApiError } from './order-errors'
+import { mockQuoteUnits } from './mock-quote'
 
 export interface KeyValueStorage {
   getItem(key: string): string | null
@@ -203,7 +204,12 @@ export function createMockBackend(
       if (!qty.ok) throw new OrderApiError('invalid_input', qty.error)
 
       // The total is recomputed here from the catalogue rate, never taken from the caller.
-      const totalUnits = calcTotalUnits(qty.value, service.ratePer1000)
+      let totalUnits: number
+      try {
+        totalUnits = mockQuoteUnits(service.ratePer1000, qty.value, payload.promoCode).final
+      } catch (e) {
+        throw new OrderApiError('promo_not_found', e instanceof Error ? e.message : 'This promo code does not exist.')
+      }
       const check = checkBalance(state.balanceUnits / UNITS_PER_CURRENCY, totalUnits)
       if (!check.sufficient) {
         throw new OrderApiError('insufficient_funds', 'Insufficient balance.', { shortfall: check.shortfallUnits / UNITS_PER_CURRENCY })

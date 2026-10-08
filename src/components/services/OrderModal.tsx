@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, Clock, Link2, Loader2, ShieldCheck, TriangleAlert, X, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Toast, type ToastMessage } from '@/components/ui/Toast'
 import { useAuth } from '@/context/AuthContext'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import { haptic } from '@/lib/haptics'
@@ -17,6 +18,7 @@ import {
   validateQuantity,
   validateTargetUrl,
 } from '@/lib/order-calc'
+import { useQuote } from '@/hooks/useQuote'
 import { cn } from '@/lib/utils'
 import { OrderApiError } from '@/services/api/order-errors'
 import { createOrder } from '@/services/api/orders'
@@ -24,6 +26,8 @@ import type { AuthSession } from '@/services/api/auth'
 import type { ICatalogService, Platform } from '@/types/catalog'
 import type { CreateOrderResult } from '@/types/orders'
 import { PlatformIcon } from './PlatformIcon'
+import { PriceSummary, displayedTotalUnits } from './PriceSummary'
+import { PromoField } from './PromoField'
 
 interface Props {
   service: ICatalogService
@@ -52,7 +56,9 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
 
   const [link, setLink] = useState('')
   const [quantity, setQuantity] = useState(String(service.minQuantity))
+  const [promo, setPromo] = useState('')
   const [linkTouched, setLinkTouched] = useState(false)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
   const [phase, setPhase] = useState<Phase>({ kind: 'form' })
 
   // One key per opened drawer. It is only replaced when the request changes or its outcome is
@@ -73,8 +79,14 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
   // Display-only maths: the server recomputes the real charge from the database.
   const qty = validateQuantity(quantity, service.minQuantity, service.maxQuantity)
   const url = validateTargetUrl(link)
-  const totalUnits = qty.ok ? calcTotalUnits(qty.value, service.ratePer1000) : 0
+  const estimateUnits = qty.ok ? calcTotalUnits(qty.value, service.ratePer1000) : 0
+
+  // The live price (tier + promo applied) from the quote-order function: debounced, one request in flight (see quote-controller).
+  const { state: quoteState, invalidate } = useQuote(session, service.id, qty.ok ? qty.value : null, promo)
+  const { units: totalUnits } = displayedTotalUnits(quoteState, estimateUnits)
   const balance = checkBalance(wallet.balance, totalUnits)
+  const pricing = quoteState.kind === 'loading'
+  const promoRefused = quoteState.kind === 'ready' && quoteState.promoError !== null
 
   const showLinkError = linkTouched && !url.ok
   const showQtyError = quantity !== '' && !qty.ok
@@ -88,7 +100,7 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
   }
 
   async function submit() {
-    if (!qty.ok || !url.ok || submittingRef.current) return
+    if (!qty.ok || !url.ok || submittingRef.current || pricing || promoRefused) return
     submittingRef.current = true
     dirtySinceAttempt.current = true
     setPhase({ kind: 'submitting' })
@@ -99,9 +111,11 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
         targetUrl: url.value,
         quantity: qty.value,
         idempotencyKey: keyRef.current,
+        ...(promo.trim() ? { promoCode: promo.trim().toUpperCase() } : {}),
       })
       if (result.wallet) applyWallet(result.wallet)
       haptic.success()
+      setToast({ kind: 'ok', text: `Order placed: charged ${formatUnits(toUnits(result.order.chargeAmount))}.` })
       setPhase({ kind: 'done', result })
     } catch (e) {
       const err = e instanceof OrderApiError ? e : new OrderApiError('server', 'Something went wrong. Please try again.')
@@ -113,6 +127,7 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
         dirtySinceAttempt.current = false
       }
       haptic.error()
+      if (err.code.startsWith('promo_')) invalidate() // the code's state changed under us: price it again
       setPhase({ kind: 'error', message: err.message })
     } finally {
       submittingRef.current = false
@@ -120,7 +135,7 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
   }
 
   function handleCta() {
-    if (busy || !qty.ok) return
+    if (busy || !qty.ok || pricing || promoRefused) return
     if (!balance.sufficient) {
       haptic.tap()
       onTopUp(balance.shortfallUnits / 10_000)
@@ -138,7 +153,11 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
     ? 'Placing order…'
     : !qty.ok
       ? 'Enter a valid quantity'
-      : balance.sufficient
+      : pricing
+        ? 'Calculating price…'
+        : promoRefused
+          ? 'Fix or remove the promo code'
+          : balance.sufficient
         ? `Order Now (Total ${formatUnits(totalUnits)})`
         : `Top Up Balance (Needs +${formatUnits(balance.shortfallUnits)})`
 
@@ -231,33 +250,18 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
               ))}
             </div>
 
-            {/* Price + balance */}
-            <div className="mt-5 rounded-3xl border border-blue-100/70 bg-surface-sub p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">Total price</p>
-              {qty.ok ? (
-                <>
-                  <p className="mt-1 text-[13px] font-medium text-content-secondary">
-                    {formatInt(qty.value)} × ({formatMoneyAmount(service.ratePer1000)} / 1,000) =
-                  </p>
-                  <p className="text-3xl font-extrabold tracking-tight text-content-primary">{formatUnits(totalUnits)}</p>
-                </>
-              ) : (
-                <p className="mt-1 text-sm font-medium text-content-muted">Enter a valid quantity to see the price.</p>
-              )}
+            <PromoField value={promo} onChange={(v) => { setPromo(v); edited() }} disabled={busy} state={quoteState} />
 
-              <div className="mt-3 flex items-center justify-between border-t border-blue-100/70 pt-3 text-sm">
-                <span className="font-medium text-content-secondary">Your balance</span>
-                <span className="flex items-center gap-1.5 font-bold text-content-primary">
-                  {formatMoneyAmount(wallet.balance)}
-                  {qty.ok && (balance.sufficient
-                    ? <CheckCircle2 size={16} strokeWidth={2} className="text-emerald-500" aria-label="Enough balance" />
-                    : <TriangleAlert size={16} strokeWidth={2} className="text-rose-500" aria-label="Insufficient balance" />)}
-                </span>
-              </div>
-              {qty.ok && !balance.sufficient && (
-                <p className="mt-1.5 text-xs font-medium text-rose-500">You need {formatUnits(balance.shortfallUnits)} more to place this order.</p>
-              )}
-            </div>
+            {/* Price + balance */}
+            <PriceSummary
+              quantity={qty.ok ? qty.value : null}
+              ratePer1000={service.ratePer1000}
+              estimateUnits={estimateUnits}
+              state={quoteState}
+              balance={wallet.balance}
+              sufficient={balance.sufficient}
+              shortfallUnits={balance.shortfallUnits}
+            />
 
             {phase.kind === 'error' && (
               <div className="mt-4 flex gap-2.5 rounded-2xl bg-rose-50 p-3.5 text-[13px] font-medium text-rose-700" role="alert">
@@ -267,8 +271,8 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
             )}
 
             <Button
-              className={cn('mt-5 h-14 w-full text-[15px]', (!qty.ok || busy) && 'cursor-not-allowed opacity-60 hover:bg-brand')}
-              disabled={!qty.ok || busy}
+              className={cn('mt-5 h-14 w-full text-[15px]', (!qty.ok || busy || pricing || promoRefused) && 'cursor-not-allowed opacity-60 hover:bg-brand')}
+              disabled={!qty.ok || busy || pricing || promoRefused}
               aria-busy={busy}
               onClick={handleCta}
             >
@@ -278,6 +282,7 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
           </>
         )}
       </div>
+      <Toast message={toast} onDismiss={() => setToast(null)} />
     </div>
   )
 }

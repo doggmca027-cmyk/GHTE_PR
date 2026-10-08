@@ -9,6 +9,11 @@ export type OrderErrorCode =
   | 'banned'
   | 'unauthorized'
   | 'idempotency_conflict'
+  | 'promo_not_found'
+  | 'promo_expired'
+  | 'promo_exhausted'
+  | 'promo_already_used'
+  | 'promo_not_applicable'
   /** Connection lost / timed out: the order MAY have been created. Retrying with the same key is safe. */
   | 'network'
   | 'server'

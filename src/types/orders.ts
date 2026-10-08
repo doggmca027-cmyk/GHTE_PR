@@ -8,6 +8,8 @@ export interface CreateOrderPayload {
   quantity: number
   /** Generated once per opened drawer; makes retries / double-taps safe. */
   idempotencyKey: string
+  /** Optional promo code; the server validates it and prices the order (the client total is never sent). */
+  promoCode?: string
 }
 
 export interface CreatedOrder {
