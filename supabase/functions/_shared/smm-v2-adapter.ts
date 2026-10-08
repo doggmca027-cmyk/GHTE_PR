@@ -5,58 +5,28 @@
 import type {
   ICreateOrderParams,
   IProviderBalance,
-  IProviderOrderStatus,
   IProviderService,
-  ISMMProviderAdapter,
 } from './types.ts'
+import {
+  assertSupports,
+  normalizeOrderStatus,
+  normalizeRefillStatus,
+  usesDripFeed,
+  SMMProviderError,
+  type IProviderAdapter,
+  type SMMErrorCode,
+  type NormalizedOrderStatus,
+  type ProviderOrderStatusResult,
+  type ProviderCancelResult,
+  type ProviderRefillResult,
+  type ProviderRefillStatusResult,
+} from './providers/contract.ts'
 import { DEFAULT_SMM_V2_CAPABILITIES, type ProviderCapabilities } from './types.ts'
-import type { BatchStatusEntry, OrderStatus } from './types.ts'
+import type { BatchStatusEntry } from './types.ts'
 import { CORRELATION_HEADER, isCorrelationId, type Logger } from './logger.ts'
 
-export type SMMErrorKind =
-  | 'misconfigured'
-  | 'timeout'
-  | 'network'
-  | 'http'
-  | 'api'
-  | 'invalid_response'
-
-export type SMMErrorCode =
-  | 'invalid_api_key'
-  | 'insufficient_provider_balance'
-  | 'invalid_service'
-  | 'invalid_link'
-  | 'invalid_quantity'
-  | 'order_not_found'
-  | 'rate_limited'
-  | 'unknown'
-
-export class SMMProviderError extends Error {
-  readonly kind: SMMErrorKind
-  readonly code: SMMErrorCode
-  /** Safe to retry the same call. */
-  readonly retryable: boolean
-  /**
-   * The outcome is unknown: a state-changing call (`add`) timed out or lost the
-   * connection, so the panel MAY have created the order. Reconcile before retrying.
-   */
-  readonly ambiguous: boolean
-  readonly httpStatus?: number
-
-  constructor(
-    kind: SMMErrorKind,
-    message: string,
-    extra: { code?: SMMErrorCode; retryable?: boolean; ambiguous?: boolean; httpStatus?: number } = {},
-  ) {
-    super(message)
-    this.name = 'SMMProviderError'
-    this.kind = kind
-    this.code = extra.code ?? 'unknown'
-    this.retryable = extra.retryable ?? false
-    this.ambiguous = extra.ambiguous ?? false
-    this.httpStatus = extra.httpStatus
-  }
-}
+// The error type lives in the contract (the core classifies provider errors without knowing any concrete adapter).
+export { SMMProviderError, type SMMErrorCode, type SMMErrorKind } from './providers/contract.ts'
 
 export interface SMMv2AdapterConfig {
   id: string
@@ -88,23 +58,9 @@ export function createSMMv2Adapter(
 
 const DEFAULT_TIMEOUT_MS = 10_000
 
-const STATUS_MAP: Record<string, OrderStatus> = {
-  pending: 'submitted',
-  processing: 'in_progress',
-  'in progress': 'in_progress',
-  inprogress: 'in_progress',
-  completed: 'completed',
-  complete: 'completed',
-  partial: 'partial',
-  canceled: 'canceled',
-  cancelled: 'canceled',
-  fail: 'failed',
-  failed: 'failed',
-  error: 'failed',
-}
-
-export function mapProviderStatus(raw: string): OrderStatus {
-  const mapped = STATUS_MAP[raw.trim().toLowerCase()]
+/** Panel status word -> ours, through the shared table (providers/contract.ts). Unknown words are an error, never a status. */
+export function mapProviderStatus(raw: string): NormalizedOrderStatus {
+  const mapped = normalizeOrderStatus(raw)
   if (!mapped) throw new SMMProviderError('invalid_response', `Unknown order status "${raw}"`)
   return mapped
 }
@@ -140,7 +96,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Maps one status object (single or batch form) to our shape; throws invalid_response if unusable. */
-function parseStatusObject(orderId: string, data: Record<string, unknown>): IProviderOrderStatus {
+function parseStatusObject(orderId: string, data: Record<string, unknown>): ProviderOrderStatusResult {
   if (typeof data.status !== 'string') throw new SMMProviderError('invalid_response', 'status: response has no status')
   return {
     orderId,
@@ -188,7 +144,7 @@ export function parseBatchStatusResponse(data: unknown, requestedIds: string[]):
   return out
 }
 
-export class SMMv2Adapter implements ISMMProviderAdapter {
+export class SMMv2Adapter implements IProviderAdapter {
   readonly id: string
   readonly name: string
   readonly isMock: boolean
@@ -213,6 +169,7 @@ export class SMMv2Adapter implements ISMMProviderAdapter {
     this.fetchImpl = config.fetchImpl ?? ((...args) => fetch(...args))
     this.now = config.now ?? Date.now
     this.capabilities = { ...DEFAULT_SMM_V2_CAPABILITIES, ...config.capabilities }
+    Object.defineProperty(this, 'apiKey', { enumerable: false }) // never serialized / inspected by accident
     this.isMock = config.mockMode === true || this.apiKey === ''
     this.correlationId = isCorrelationId(config.correlationId) ? config.correlationId : undefined
     this.logger = config.logger
@@ -251,6 +208,7 @@ export class SMMv2Adapter implements ISMMProviderAdapter {
   }
 
   async createOrder(params: ICreateOrderParams): Promise<{ orderId: string }> {
+    if (usesDripFeed(params)) assertSupports(this.capabilities, 'dripFeed', this.name)
     if (this.isMock) {
       const orderId = String(this.mockSeq + Math.floor(Math.random() * 9_000_000_000))
       this.mockOrders.set(orderId, this.now())
@@ -267,7 +225,52 @@ export class SMMv2Adapter implements ISMMProviderAdapter {
     return { orderId: String(data.order) }
   }
 
-  async getOrderStatus(orderId: string): Promise<IProviderOrderStatus> {
+  // ---- optional abilities: guarded by the provider's capability flags BEFORE any request ------------------------------------
+
+  /** SMM v2 `refill` (single order). Needs supportsRefill. A refusal comes back as a nested error and is thrown as SMMProviderError. */
+  async createRefill(orderId: string): Promise<ProviderRefillResult> {
+    assertSupports(this.capabilities, 'refill', this.name)
+    if (this.isMock) return { orderId, refillId: `MOCK-R-${orderId}` }
+    const data = await this.call('refill', { order: orderId }, true)
+    if (!isRecord(data)) throw new SMMProviderError('invalid_response', 'refill: expected an object', { ambiguous: true })
+    const refill = data.refill
+    if (isRecord(refill) && typeof refill.error === 'string') throw new SMMProviderError('api', this.sanitize(refill.error), { code: classifyApiError(refill.error) })
+    if (refill === undefined || refill === null || refill === '' || isRecord(refill)) throw new SMMProviderError('invalid_response', 'refill: response has no refill id', { ambiguous: true })
+    return { orderId, refillId: String(refill) }
+  }
+
+  /** SMM v2 `refill_status`. Needs supportsRefill. */
+  async getRefillStatus(refillId: string): Promise<ProviderRefillStatusResult> {
+    assertSupports(this.capabilities, 'refill', this.name)
+    if (this.isMock) return { refillId, status: 'completed', rawStatus: 'Completed' }
+    const data = await this.call('refill_status', { refill: refillId })
+    const raw = isRecord(data) ? data.status : undefined
+    if (isRecord(data) && typeof data.error === 'string') throw new SMMProviderError('api', this.sanitize(data.error), { code: classifyApiError(data.error) })
+    if (typeof raw !== 'string') throw new SMMProviderError('invalid_response', 'refill_status: response has no status')
+    const status = normalizeRefillStatus(raw)
+    if (!status) throw new SMMProviderError('invalid_response', `Unknown refill status "${raw}"`)
+    return { refillId, status, rawStatus: raw }
+  }
+
+  /**
+   * SMM v2 `cancel` (documented as `orders=`, answers an array). Needs supportsCancel. The panel refusing (too late, not
+   * cancellable) is `accepted: false`; a missing answer is an ambiguous error (the cancel may have gone through).
+   */
+  async cancelOrder(orderId: string): Promise<ProviderCancelResult> {
+    assertSupports(this.capabilities, 'cancel', this.name)
+    if (this.isMock) return { orderId, accepted: true }
+    const data = await this.call('cancel', { orders: orderId }, true)
+    const list = Array.isArray(data) ? data : isRecord(data) ? [data] : []
+    const entry = list.find((e) => isRecord(e) && String(e.order) === orderId)
+    if (!isRecord(entry)) throw new SMMProviderError('invalid_response', 'cancel: the panel did not answer for this order', { ambiguous: true })
+    const c = entry.cancel
+    if (c === 1 || c === true || c === '1') return { orderId, accepted: true }
+    if (isRecord(c) && typeof c.error === 'string') return { orderId, accepted: false, reason: this.sanitize(c.error) }
+    if (typeof entry.error === 'string') return { orderId, accepted: false, reason: this.sanitize(entry.error) }
+    throw new SMMProviderError('invalid_response', 'cancel: unrecognised answer', { ambiguous: true })
+  }
+
+  async getOrderStatus(orderId: string): Promise<ProviderOrderStatusResult> {
     if (this.isMock) {
       const created = this.mockOrders.get(orderId)
       if (created === undefined) {

@@ -235,10 +235,16 @@ describe('SMMv2Adapter response mapping', () => {
 
   it('creates an order with extra params and returns the order id as string', async () => {
     const f = fakeFetch(() => jsonRes({ order: 23501 }))
-    const res = await adapterWith(f.impl).createOrder({ serviceId: '7', link: 'https://t.me/x', quantity: 1000, extra: { runs: 3 } })
+    const res = await adapterWith(f.impl, { capabilities: { supportsDripFeed: true } }).createOrder({ serviceId: '7', link: 'https://t.me/x', quantity: 1000, extra: { runs: 3 } })
     expect(res).toEqual({ orderId: '23501' })
     const b = f.calls[0].body
     expect([b.get('action'), b.get('service'), b.get('link'), b.get('quantity'), b.get('runs')]).toEqual(['add', '7', 'https://t.me/x', '1000', '3'])
+  })
+
+  it('refuses drip-feed parameters for a provider that does not support them, without sending anything', async () => {
+    const f = fakeFetch(() => jsonRes({ order: 1 }))
+    await expect(adapterWith(f.impl).createOrder({ serviceId: '7', link: 'https://t.me/x', quantity: 1000, extra: { runs: 3, interval: 10 } })).rejects.toMatchObject({ name: 'NotSupportedError', capability: 'dripFeed' })
+    expect(f.calls).toHaveLength(0)
   })
 
   it('maps order status and normalises the status string', async () => {

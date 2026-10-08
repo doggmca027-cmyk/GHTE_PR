@@ -8,7 +8,7 @@
 //      HOLD (never refund) whenever the outcome is unknown: timeout, network loss, 5xx,
 //      garbled response, or any unexpected error. A held order is flagged `needs_reconciliation`.
 
-import { SMMProviderError } from './smm-v2-adapter.ts'
+import { SMMProviderError } from './providers/contract.ts'
 import type { ISMMProviderAdapter, OrderStatus } from './types.ts'
 
 export const NEEDS_RECONCILIATION = 'needs_reconciliation'

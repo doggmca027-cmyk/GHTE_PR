@@ -7,7 +7,7 @@
 //   * Alerts fire only on a real transition and only for the caller that won the compare-and-set on
 //     providers.health_status, so a cron tick that finds nothing new (or two overlapping runs) sends nothing.
 //   * Routing needs no extra work: selectBestOffer / the pricing view already read providers.health_status.
-import { SMMProviderError } from './smm-v2-adapter.ts'
+import { SMMProviderError } from './providers/contract.ts'
 import type { HealthStatus } from './types.ts'
 
 export const PING_TIMEOUT_MS = 8_000
