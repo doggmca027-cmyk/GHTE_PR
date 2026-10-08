@@ -33,7 +33,9 @@ for (const f of migrations) {
     previous = m[1]
   }
   const sql = readFileSync(join(migrationsDir, f), 'utf8')
-  if (/insert\s+into\s+(public\.)?(users|providers|price_rules|categories|services|provider_services)\b/i.test(sql)) {
+  // seed data is a top-level INSERT; INSERTs inside function bodies ($$ ... $$) are logic, not data
+  const outsideFunctionBodies = sql.replace(/(\$[a-z_]*\$)[\s\S]*?\1/gi, '')
+  if (/insert\s+into\s+(public\.)?(users|providers|price_rules|categories|services|provider_services)\b/i.test(outsideFunctionBodies)) {
     bad(`migration "${f}" inserts data: seed data belongs in supabase/seed.sql (which is never run in production)`)
   }
 }

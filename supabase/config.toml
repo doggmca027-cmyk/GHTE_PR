@@ -54,3 +54,7 @@ verify_jwt = false
 # Admin-only: authenticates itself by verifying the telegram-auth JWT (HS256, JWT_SECRET) + users.is_admin.
 [functions.admin-observability]
 verify_jwt = false
+
+# Admin-only: authenticates itself by verifying the telegram-auth JWT (HS256, JWT_SECRET) + users.is_admin.
+[functions.admin-catalog-mapping]
+verify_jwt = false
