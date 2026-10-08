@@ -1,7 +1,7 @@
 // Binds telegram-notify to Supabase (users + notification_log). Used by Edge Functions.
 // Everything here is best effort: createNotifier()'s function NEVER throws or rejects.
 
-import { notifyUser, resolveLang, type NotifyEvent, type NotifyOutcome } from './telegram-notify.ts'
+import { notifyUser, resolveLang, sendTelegramMessage, type NotifyEvent, type NotifyOutcome } from './telegram-notify.ts'
 
 /** The slice of the supabase-js client we use (kept structural so this file has no npm imports). */
 // deno-lint-ignore no-explicit-any
@@ -16,12 +16,15 @@ export function createNotifier(
     try {
       const { data: user } = await db
         .from('users')
-        .select('telegram_id, language_code, notifications_enabled')
+        .select('telegram_id, language_code, notifications_enabled, bot_blocked_at')
         .eq('id', userId)
         .maybeSingle()
       if (!user) return 'error'
+      // A customer who blocked the bot (Telegram answered 403) is left alone for 30 days; it only costs a refused request otherwise.
+      const blockedRecently = user.bot_blocked_at != null && Date.now() - Date.parse(String(user.bot_blocked_at)) < 30 * 86_400_000
+      let blockedNow = false
 
-      return await notifyUser(
+      const outcome = await notifyUser(
         {
           botToken: env.get('TELEGRAM_BOT_TOKEN'),
           mock: env.get('MOCK_MODE') === 'true',
@@ -33,12 +36,20 @@ export function createNotifier(
           async release(key) {
             await db.from('notification_log').delete().eq('dedupe_key', key)
           },
+          // remember a 403 so the next message does not try again
+          async send(o) {
+            const r = await sendTelegramMessage(o)
+            if (!r.ok && r.reason === 'blocked') blockedNow = true
+            return r
+          },
           log,
         },
-        { chatId: Number(user.telegram_id), lang: resolveLang(user.language_code), enabled: user.notifications_enabled !== false },
+        { chatId: Number(user.telegram_id), lang: resolveLang(user.language_code), enabled: user.notifications_enabled !== false && !blockedRecently },
         event,
         dedupeKey,
       )
+      if (blockedNow) await db.from('users').update({ bot_blocked_at: new Date().toISOString() }).eq('id', userId)
+      return outcome
     } catch {
       return 'error'
     }

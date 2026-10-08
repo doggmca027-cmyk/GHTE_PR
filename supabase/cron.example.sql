@@ -66,3 +66,20 @@ select cron.schedule(
 --   select * from cron.job_run_details order by start_time desc limit 20;
 --   select * from net._http_response order by created desc limit 10;     -- what the functions answered
 --   select cron.unschedule('sync-order-status');
+
+-- Every minute: tell customers on Telegram about finished orders from the durable outbox (retries, rate limits, blocked bots).
+select cron.schedule(
+  'telegram-notifier',
+  '* * * * *',
+  $$
+  select net.http_post(
+    url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/telegram-notifier',
+    headers := jsonb_build_object(
+                 'Content-Type', 'application/json',
+                 'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'cron_secret')
+               ),
+    body    := '{}'::jsonb,
+    timeout_milliseconds := 60000
+  );
+  $$
+);

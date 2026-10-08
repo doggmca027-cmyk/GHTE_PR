@@ -746,7 +746,7 @@ describe('logging discipline', () => {
   })
 
   it('the heartbeat worker names match what the health judge expects', () => {
-    expect(EXPECTED_JOBS.filter((j) => j.worker).map((j) => j.worker).sort()).toEqual(['provider-health-monitor', 'sync-catalog', 'sync-order-status'])
+    expect(EXPECTED_JOBS.filter((j) => j.worker).map((j) => j.worker).sort()).toEqual(['provider-health-monitor', 'sync-catalog', 'sync-order-status', 'telegram-notifier'])
   })
 
   it('admin-observability authenticates, re-checks is_admin and only then reads the snapshot', () => {

@@ -15,7 +15,8 @@
 //              P promo max_uses race, Q stacked discounts under load, R a price drop racing the orders that were priced from it
 //                (the discount engine: a code is never over-redeemed and no order is ever sold under its cost),
 //              S ad postbacks racing the daily cap, T the same postback delivered many times at once, U two networks at once
-//                (process_ad_reward: the 24 h caps cannot be bypassed and a network transaction id is paid once).
+//                (process_ad_reward: the 24 h caps cannot be bypassed and a network transaction id is paid once),
+//              V notification outbox claims (overlapping telegram-notifier runs never take the same message).
 //
 //   CONCURRENCY_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres npm run test:concurrency
 //       Runs against a LOCAL Supabase instead (`npx supabase start`; migrations are applied there by the CLI).
@@ -794,8 +795,29 @@ async function main() {
     await admin.query(`update platform_settings set max_daily_ad_earnings = 1 where id = 1`)
     check('wallets = sum of their ledgers (ad users)', await ledgerConsistent(admin, [uS, uT, uU]), true)
 
+    // ---- V. Notification outbox claims -------------------------------------------------------
+    console.log('\nV. Outbox: 60 finished orders are queued, 8 overlapping notifier runs claim 10 messages each at the same moment')
+    const ordersV: string[] = []
+    for (let i = 0; i < 60; i++) {
+      const order = await seedSubmittedOrder(admin, sR, uR)
+      await admin.query(`update orders set status = 'completed' where id = $1`, [order])
+      ordersV.push(order)
+    }
+    await admin.query(`update notification_outbox set next_attempt_at = now() - interval '1 second' where order_id = any($1::uuid[])`, [ordersV])
+    const claimOp: RaceOp = (c) => inTx(c, async () => {
+      const r = await c.query<{ r: Array<{ order_id: string }> }>(`select claim_notification_batch(10) r`)
+      return JSON.stringify(r.rows[0].r.filter((b) => ordersV.includes(b.order_id)).map((b) => b.order_id))
+    })
+    const rV = await raceOps(pool, Array.from({ length: 8 }, () => claimOp))
+    const claimedV = rV.ok.flatMap((o) => JSON.parse(o) as string[])
+    const rowsV = await admin.query<{ n: number; maxa: number; mina: number }>(`select count(*)::int n, max(attempts)::int maxa, min(attempts)::int mina from notification_outbox where order_id = any($1::uuid[]) and attempts > 0`, [ordersV])
+    check('claim calls answered (none failed, no deadlock)', [rV.ok.length, rV.errors], [8, []])
+    check('messages claimed in total (8 runs x 10, capped by the 60 available)', claimedV.length, 60)
+    check('messages claimed by more than one run', claimedV.length - new Set(claimedV).size, 0)
+    check('every claimed message was leased exactly once', [rowsV.rows[0].n, rowsV.rows[0].mina, rowsV.rows[0].maxa], [60, 1, 1])
+
     // ---- whole-wallet balance ---------------------------------------------------------------------
-    const allOrders = [...ordersH, ...ordersI, ...ordersJ, orderK]
+    const allOrders = [...ordersH, ...ordersI, ...ordersJ, orderK, ...ordersV]
     const charged = allOrders.length * ORDER_CHARGE
     check('wallet = funding - charges + refunds (no unit created or lost)', Math.round((await walletOf()) * 10_000) / 10_000, Math.round((100_000 - charged + num(await sumRefunds(allOrders))) * 10_000) / 10_000)
     check('wallet = sum of its ledger', await ledgerConsistent(admin, [uR]), true)

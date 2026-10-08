@@ -78,3 +78,7 @@ verify_jwt = false
 # Signed-in users: authenticates itself by verifying the telegram-auth JWT (HS256, JWT_SECRET); the caller is always the JWT user.
 [functions.track-event]
 verify_jwt = false
+
+# Scheduler-only: authenticates with the cron secret or the service role key, never a user JWT.
+[functions.telegram-notifier]
+verify_jwt = false

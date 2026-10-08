@@ -33,6 +33,7 @@ export const EXPECTED_JOBS: readonly ExpectedJob[] = [
   { name: 'provider-health-monitor', label: 'Provider health monitor', kind: 'http', everyMinutes: 1, lateAfterMinutes: 5, critical: true, worker: 'provider-health-monitor' },
   { name: 'sync-reconciliation-cases', label: 'Reconciliation detector', kind: 'sql', everyMinutes: 5, lateAfterMinutes: 12, critical: true },
   { name: 'sync-order-status', label: 'Order status sync', kind: 'http', everyMinutes: 1, lateAfterMinutes: 5, critical: true, worker: 'sync-order-status' },
+  { name: 'telegram-notifier', label: 'Customer notifications', kind: 'http', everyMinutes: 1, lateAfterMinutes: 10, critical: false, worker: 'telegram-notifier' },
   { name: 'sync-catalog', label: 'Catalog sync', kind: 'http', everyMinutes: 360, lateAfterMinutes: 420, critical: false, worker: 'sync-catalog' },
 ]
 

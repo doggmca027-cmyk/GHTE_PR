@@ -103,7 +103,7 @@ export function buildMessage(event: NotifyEvent, lang: NotifyLang = 'en'): strin
 
 export type SendResult =
   | { ok: true }
-  | { ok: false; reason: 'blocked' | 'rate_limited' | 'network' | 'timeout' | 'api'; retryable: boolean; status?: number }
+  | { ok: false; reason: 'blocked' | 'rate_limited' | 'network' | 'timeout' | 'api'; retryable: boolean; status?: number; /** Seconds Telegram asked us to wait (429 only). */ retryAfter?: number }
 
 export async function sendTelegramMessage(opts: {
   botToken: string
@@ -122,7 +122,12 @@ export async function sendTelegramMessage(opts: {
     if (res.ok) return { ok: true }
     // The user blocked the bot / deleted the chat: permanent, never retry.
     if (res.status === 403) return { ok: false, reason: 'blocked', retryable: false, status: 403 }
-    if (res.status === 429) return { ok: false, reason: 'rate_limited', retryable: true, status: 429 }
+    if (res.status === 429) {
+      // Telegram says how long to wait: { parameters: { retry_after: <seconds> } }
+      const body = (await res.json().catch(() => null)) as { parameters?: { retry_after?: unknown } } | null
+      const wait = Number(body?.parameters?.retry_after)
+      return { ok: false, reason: 'rate_limited', retryable: true, status: 429, ...(Number.isFinite(wait) && wait > 0 ? { retryAfter: Math.min(Math.ceil(wait), 3600) } : {}) }
+    }
     return { ok: false, reason: 'api', retryable: res.status >= 500, status: res.status }
   } catch (e) {
     // Deliberately not including the error: some runtimes echo the request URL, which holds the token.
