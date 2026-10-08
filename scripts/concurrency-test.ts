@@ -13,7 +13,9 @@
 //              L affiliate withdrawal storm, M many small withdrawals, N same-key retries, O withdrawal against a clawback
 //                (transfer_affiliate_balance_to_wallet: the referral balance can never be spent twice),
 //              P promo max_uses race, Q stacked discounts under load, R a price drop racing the orders that were priced from it
-//                (the discount engine: a code is never over-redeemed and no order is ever sold under its cost).
+//                (the discount engine: a code is never over-redeemed and no order is ever sold under its cost),
+//              S ad postbacks racing the daily cap, T the same postback delivered many times at once, U two networks at once
+//                (process_ad_reward: the 24 h caps cannot be bypassed and a network transaction id is paid once).
 //
 //   CONCURRENCY_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres npm run test:concurrency
 //       Runs against a LOCAL Supabase instead (`npx supabase start`; migrations are applied there by the CLI).
@@ -744,6 +746,53 @@ async function main() {
     check('orders sold under their cost (the price check and the charge see the same price)', lossR.rows[0].n, 0)
     console.log(`  ${rR.ok.filter((o) => o.startsWith('order:')).length} orders went through before the drop, ${rR.errors.length} were refused after it`)
     check('the price drop itself committed', rR.ok.includes('price-drop'), true)
+
+    // ---- S-U. Ad rewards ----------------------------------------------------------------------
+    const adminAd = (await admin.query<{ id: string }>(`insert into users(telegram_id, is_admin) values ($1, true) returning id`, [Math.floor(Math.random() * 9e12) + 1e12])).rows[0].id
+    await admin.query(`select admin_set_ad_provider($1::uuid, 'adsgram', 0.01, 10, true)`, [adminAd])
+    await admin.query(`select admin_set_ad_provider($1::uuid, 'monetag', 0.02, 10, true)`, [adminAd])
+    const rewardOp = (user: string, provider: string, tx: string): RaceOp => (c) =>
+      inTx(c, async () => {
+        const r = await c.query<{ r: { status: string; reason?: string } }>(`select process_ad_reward($1::uuid, $2, $3) r`, [user, provider, tx])
+        return `${r.rows[0].r.status}${r.rows[0].r.reason ? ':' + r.rows[0].r.reason : ''}`
+      })
+    const adStats = async (user: string) => (await admin.query<{ n: number; s: string; w: string }>(
+      `select (select count(*) from user_ad_ledger where user_id = $1 and status = 'credited')::int n,
+              (select coalesce(sum(reward_amount), 0) from user_ad_ledger where user_id = $1 and status = 'credited')::text s,
+              (select balance::text from wallets where user_id = $1) w`, [user])).rows[0]
+
+    // ---- S. Daily cap race ----------------------------------------------------------------------
+    console.log('\nS. Ad cap race: global cap $0.50 per user per 24 h, 80 DIFFERENT postbacks ($0.01 each) for one user arrive at the same moment')
+    await admin.query(`update platform_settings set max_daily_ad_earnings = 0.5 where id = 1`)
+    const uS = await seedUser(admin, 1)
+    const rS = await raceOps(pool, Array.from({ length: 80 }, (_, i) => rewardOp(uS, 'adsgram', `s-${i}-${randomUUID()}`)))
+    const stS = await adStats(uS)
+    check('postbacks answered (none failed)', [rS.ok.length, rS.errors], [80, []])
+    check('credited / softly rejected', [rS.ok.filter((o) => o === 'credited').length, rS.ok.filter((o) => o === 'rejected:daily_limit_reached').length], [50, 30])
+    check('credited total never above the cap, and equals the wallet', [num(stS.s), Math.round((num(stS.w) - 1) * 10_000) / 10_000], [0.5, 0.5])
+
+    // ---- T. The same postback many times at once -------------------------------------------------
+    console.log('\nT. Identical postback: 60 deliveries of ONE network transaction id at the same moment (the network retrying)')
+    await admin.query(`update platform_settings set max_daily_ad_earnings = 5 where id = 1`)
+    const uT = await seedUser(admin, 1)
+    const txT = `t-${randomUUID()}`
+    const rT = await raceOps(pool, Array.from({ length: 60 }, () => rewardOp(uT, 'monetag', txT)))
+    const stT = await adStats(uT)
+    check('deliveries answered (none failed)', [rT.ok.length, rT.errors], [60, []])
+    check('paid / recognised as duplicates', [rT.ok.filter((o) => o === 'credited').length, rT.ok.filter((o) => o === 'duplicate').length], [1, 59])
+    check('credited once', [stT.n, Math.round((num(stT.w) - 1) * 10_000) / 10_000], [1, 0.02])
+
+    // ---- U. Two networks at once, one global cap ---------------------------------------------------
+    console.log('\nU. Two networks, one cap: $0.25 global, 40 adsgram ($0.01) and 40 monetag ($0.02) postbacks at the same moment for one user')
+    await admin.query(`update platform_settings set max_daily_ad_earnings = 0.25 where id = 1`)
+    const uU = await seedUser(admin, 1)
+    const opsU = [...Array.from({ length: 40 }, (_, i) => rewardOp(uU, 'adsgram', `ua-${i}-${randomUUID()}`)), ...Array.from({ length: 40 }, (_, i) => rewardOp(uU, 'monetag', `um-${i}-${randomUUID()}`))]
+    const rU = await raceOps(pool, opsU.sort(() => Math.random() - 0.5))
+    const stU = await adStats(uU)
+    check('postbacks answered (none failed)', [rU.ok.length, rU.errors], [80, []])
+    check('credited total never above the cap (and within one reward of it)', [num(stU.s) <= 0.25 && num(stU.s) >= 0.23, Math.round((num(stU.w) - 1) * 10_000) / 10_000 === num(stU.s)], [true, true])
+    await admin.query(`update platform_settings set max_daily_ad_earnings = 1 where id = 1`)
+    check('wallets = sum of their ledgers (ad users)', await ledgerConsistent(admin, [uS, uT, uU]), true)
 
     // ---- whole-wallet balance ---------------------------------------------------------------------
     const allOrders = [...ordersH, ...ordersI, ...ordersJ, orderK]

@@ -70,3 +70,7 @@ verify_jwt = false
 # Signed-in users: authenticates itself by verifying the telegram-auth JWT (HS256, JWT_SECRET); the caller is always the JWT user.
 [functions.quote-order]
 verify_jwt = false
+
+# Ad networks call this with a signed postback; it authenticates by verifying the signature itself, never by JWT.
+[functions.ad-webhook]
+verify_jwt = false

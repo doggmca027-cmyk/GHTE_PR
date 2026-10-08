@@ -2,7 +2,7 @@ import type { IWallet } from './smm'
 
 export type DepositAsset = 'TON' | 'USDT'
 
-export type LedgerType = 'deposit' | 'purchase' | 'refund' | 'bonus' | 'manual_adjustment'
+export type LedgerType = 'deposit' | 'purchase' | 'refund' | 'bonus' | 'manual_adjustment' | 'ad_reward'
 export type LedgerStatus = 'pending' | 'completed' | 'failed' | 'canceled'
 
 /** A wallet_transactions row (or a pending deposit shown alongside the ledger). */
