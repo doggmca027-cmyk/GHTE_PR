@@ -73,13 +73,12 @@ jobs:
       - run: npm ci
         if: steps.secrets.outputs.ready == 'true'
 
-      # Refuse to deploy a backend that fails its own audit.
+      # Refuse to deploy a backend that fails its own audit (every migration on a fresh database, RLS, grants, function exposure).
+      # The test suite is NOT repeated here: CI runs it on the same commit in parallel (three shards), and `npm run check` passes locally
+      # before every push. Running it twice made every deploy wait five minutes for nothing.
       - name: Supabase audit
         if: steps.secrets.outputs.ready == 'true'
         run: npm run check:supabase
-      - name: Tests
-        if: steps.secrets.outputs.ready == 'true'
-        run: npm test
 
       - uses: supabase/setup-cli@v1
         if: steps.secrets.outputs.ready == 'true'

@@ -14,9 +14,9 @@ concurrency:
 
 jobs:
   verify:
-    name: Test, audit and build
+    name: Audit and build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -36,9 +36,6 @@ jobs:
       - name: Supabase audit
         run: npm run check:supabase
 
-      - name: Tests
-        run: npm test
-
       # Runs verify-env (prebuild) and the bundle secret scan (postbuild). Dummy PUBLIC values only:
       # this build is never deployed, Vercel builds the real one.
       - name: Build
@@ -46,6 +43,29 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://abcdefghijklmnopqrst.supabase.co
           VITE_SUPABASE_ANON_KEY: sb_publishable_ci_placeholder_not_a_real_key
+
+  # The unit and database tests, in three shards on three runners at once (the slowest files start a PGlite database per test, so one runner
+  # needed five minutes; the shards are balanced by vitest, together they take about two).
+  tests:
+    name: Tests (shard ${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tests
+        run: npx vitest run --shard=${{ matrix.shard }}/3
 
   # PGlite (used by `npm test`) runs on one connection and cannot prove row locking. This job starts a real
   # PostgreSQL 17, applies every migration and fires 100 concurrent place_order transactions per scenario
