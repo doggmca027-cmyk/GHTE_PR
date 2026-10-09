@@ -54,6 +54,7 @@ export function parseReferralRequest(body: unknown): ParsedReferralRequest | { e
 
 /** A database error (message of the SQL exception) -> the HTTP answer. 500 means "not a business error". */
 export function mapReferralError(message: string): { status: number; error: string; message: string } {
+  if (/feature_paused/.test(message)) return { status: 503, error: 'feature_paused', message: 'Transfers are temporarily unavailable. Please try again later.' }
   if (/referral_code_not_found/.test(message)) return { status: 404, error: 'referral_code_not_found', message: 'That referral code does not exist.' }
   if (/self_referral/.test(message)) return { status: 409, error: 'self_referral', message: 'You cannot use your own referral code.' }
   if (/circular_referral/.test(message)) return { status: 409, error: 'circular_referral', message: 'This referral link cannot be used.' }

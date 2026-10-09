@@ -12,6 +12,7 @@ import { TelegramAuthError, verifyInitData } from '../_shared/telegram.ts'
 import { signJwt } from '../_shared/jwt.ts'
 import { parseAdminIds } from '../_shared/admin.ts'
 import { corsHeaders, instrument } from '../_shared/http.ts'
+import { signupGate } from '../_shared/signup-gate.ts'
 
 const TOKEN_TTL_SECONDS = 60 * 60
 const MAX_INIT_DATA_LENGTH = 4096
@@ -57,6 +58,16 @@ Deno.serve(instrument('telegram-auth', async (req: Request, { log }): Promise<Re
 
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
   const tg = verified.user
+
+  // Sign-up kill switch: while it is off only people who already have an account get in (see _shared/signup-gate.ts).
+  const { data: known } = await supabase.from('users').select('id').eq('telegram_id', tg.id).maybeSingle()
+  if (!known) {
+    const { data: gate } = await supabase.from('platform_settings').select('global_signups_enabled').eq('id', 1).maybeSingle()
+    if (signupGate(false, gate?.global_signups_enabled) === 'paused') {
+      log.warn('sign-up refused: new registrations are switched off', { error_code: 'signups_paused' })
+      return json({ error: 'signups_paused' }, 403)
+    }
+  }
 
   // is_banned is deliberately not part of the payload, so an upsert never un-bans anyone.
   const { data: user, error: userError } = await supabase

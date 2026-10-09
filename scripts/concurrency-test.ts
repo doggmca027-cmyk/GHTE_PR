@@ -17,7 +17,9 @@
 //              S ad postbacks racing the daily cap, T the same postback delivered many times at once, U two networks at once
 //                (process_ad_reward: the 24 h caps cannot be bypassed and a network transaction id is paid once),
 //              V notification outbox claims (overlapping telegram-notifier runs never take the same message),
-//              W support ticket cap (20 parallel "new ticket" requests of one customer open at most 5).
+//              W support ticket cap (20 parallel "new ticket" requests of one customer open at most 5),
+//              X worker lease (30 scheduler ticks start the same worker: exactly one runs; an expired lease is taken over once),
+//              Y circuit breaker counters (overlapping runs reporting a failing provider lose no failure).
 //
 //   CONCURRENCY_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres npm run test:concurrency
 //       Runs against a LOCAL Supabase instead (`npx supabase start`; migrations are applied there by the CLI).
@@ -830,6 +832,56 @@ async function main() {
     check('refused: too many open tickets', rW.errors.filter((e) => /too_many_open_tickets/.test(e)).length, 15)
     check('any other error (deadlock, unexpected)', rW.errors.filter((e) => !/too_many_open_tickets/.test(e)), [])
     check('tickets and first messages stored, one each', [openW.rows[0].n, openW.rows[0].m], [5, 5])
+
+    // ---- X. Worker lease -------------------------------------------------------------------------
+    console.log('\nX. Worker lease: 30 scheduler ticks try to start the same worker at the same moment')
+    const lockOp = (name: string): RaceOp => (c) => inTx(c, async () => {
+      const r = await c.query<{ t: string | null }>(`select try_acquire_worker_lock($1, 60) t`, [name])
+      return r.rows[0].t ?? 'busy'
+    })
+    const rX = await raceOps(pool, Array.from({ length: 30 }, () => lockOp('race-x')))
+    const winnersX = rX.ok.filter((t) => t !== 'busy')
+    check('acquire calls answered (none failed, no deadlock)', [rX.ok.length, rX.errors], [30, []])
+    check('runs that got the lease', winnersX.length, 1)
+    check('the lease is held by that run only', (await admin.query<{ token: string }>(`select token::text from worker_locks where name = 'race-x'`)).rows[0].token, winnersX[0])
+    // the run dies without releasing: after the lease expires, 30 more ticks again produce exactly one new holder
+    await admin.query(`update worker_locks set locked_until = now() - interval '1 second' where name = 'race-x'`)
+    const rX2 = await raceOps(pool, Array.from({ length: 30 }, () => lockOp('race-x')))
+    const winnersX2 = rX2.ok.filter((t) => t !== 'busy')
+    check('after expiry: runs that took the lease over', [winnersX2.length, rX2.errors], [1, []])
+    check('the new holder is not the dead one', winnersX2[0] !== winnersX[0], true)
+    // a release by the dead run (stale token) racing a release by the live one: only the live one frees it
+    const releaseOp = (token: string): RaceOp => (c) => inTx(c, async () => {
+      const r = await c.query<{ ok: boolean }>(`select release_worker_lock('race-x', $1::uuid) ok`, [token])
+      return r.rows[0].ok ? 'released' : 'ignored'
+    })
+    const rX3 = await raceOps(pool, [releaseOp(winnersX[0]), releaseOp(winnersX2[0]), releaseOp(winnersX[0])])
+    check('releases that took effect (only the holder\'s)', rX3.ok.filter((o) => o === 'released').length, 1)
+    const rX4 = await raceOps(pool, Array.from({ length: 10 }, () => lockOp('race-x')))
+    check('after the holder released, the next tick gets in (exactly one)', rX4.ok.filter((t) => t !== 'busy').length, 1)
+
+    // ---- Y. Circuit breaker counters ---------------------------------------------------------------
+    console.log('\nY. Circuit breaker: 12 overlapping worker runs report a failed poll of the same provider at the same moment')
+    const provY = sD.provider
+    await admin.query(`update providers set sync_failure_count = 0, sync_backoff_until = null where id = $1`, [provY])
+    const failOp: RaceOp = (c) => inTx(c, async () => {
+      await c.query(`select record_provider_sync_result($1::uuid, false)`, [provY])
+      return 'failed'
+    })
+    const rY = await raceOps(pool, Array.from({ length: 12 }, () => failOp))
+    const stY = (await admin.query<{ n: number; mins: string }>(`select sync_failure_count n, (extract(epoch from sync_backoff_until - now()) / 60)::text mins from providers where id = $1`, [provY])).rows[0]
+    check('reports recorded (none failed, no deadlock)', [rY.ok.length, rY.errors], [12, []])
+    check('no failure lost: the count is exactly 12', stY.n, 12)
+    check('the pause is capped at an hour (and is a pause)', num(stY.mins) > 55 && num(stY.mins) <= 60, true)
+    const rY2 = await raceOps(pool, Array.from({ length: 30 }, () => failOp))
+    check('more failures than the cap: the counter stops at its ceiling of 20', [rY2.errors, (await admin.query<{ n: number }>(`select sync_failure_count n from providers where id = $1`, [provY])).rows[0].n], [[], 20])
+    const okOp: RaceOp = (c) => inTx(c, async () => {
+      await c.query(`select record_provider_sync_result($1::uuid, true)`, [provY])
+      return 'ok'
+    })
+    const rY3 = await raceOps(pool, [...Array.from({ length: 10 }, () => failOp), ...Array.from({ length: 10 }, () => okOp)].sort(() => Math.random() - 0.5), 20)
+    const stY3 = (await admin.query<{ n: number; b: boolean }>(`select sync_failure_count n, sync_backoff_until is not null b from providers where id = $1`, [provY])).rows[0]
+    check('failures racing successes: no error, and the state is one of the two coherent ones', [rY3.errors, (stY3.n === 0 && !stY3.b) || (stY3.n >= 1 && stY3.b)], [[], true])
 
     // ---- whole-wallet balance ---------------------------------------------------------------------
     const allOrders = [...ordersH, ...ordersI, ...ordersJ, orderK, ...ordersV]

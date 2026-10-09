@@ -188,6 +188,9 @@ export interface SyncStats {
   idsRecovered: number
   retriedRefunds: number
   providerLost: number
+  /** Status queries (one per chunk of provider order ids) that answered / that failed as a whole (timeout, network, 5xx, bad key). */
+  statusQueriesOk: number
+  statusQueryFailures: number
   unchanged: number
   conflicts: number
   errors: { orderId: string; message: string }[]
@@ -195,7 +198,7 @@ export interface SyncStats {
 
 export const emptySyncStats = (): SyncStats => ({
   checked: 0, completed: 0, progressed: 0, canceledRefunded: 0, partial: 0, partialRefundedUnits: 0,
-  heldForReconciliation: 0, idsRecovered: 0, retriedRefunds: 0, providerLost: 0, unchanged: 0, conflicts: 0, errors: [],
+  heldForReconciliation: 0, idsRecovered: 0, retriedRefunds: 0, providerLost: 0, statusQueriesOk: 0, statusQueryFailures: 0, unchanged: 0, conflicts: 0, errors: [],
 })
 
 export function mergeSyncStats(into: SyncStats, from: SyncStats): SyncStats {
@@ -218,6 +221,16 @@ export interface SyncOptions {
 }
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 300)
+
+/**
+ * Did this provider's poll fail as a whole? Every status query it made failed (and at least one was made). That is the signal for the
+ * circuit breaker; a provider that answered even once, or an order the provider merely does not know, is not an outage.
+ * null = nothing was asked, so there is nothing to learn.
+ */
+export function providerPollOutcome(s: Pick<SyncStats, 'statusQueriesOk' | 'statusQueryFailures'>): 'ok' | 'failed' | null {
+  if (s.statusQueriesOk > 0) return 'ok'
+  return s.statusQueryFailures > 0 ? 'failed' : null
+}
 
 /** Syncs a batch of orders that all belong to ONE provider (the adapter's panel). */
 export async function syncProviderOrders(
@@ -304,9 +317,11 @@ export async function syncProviderOrders(
   for (const ids of chunkArray([...byProviderId.keys()], options.chunkSize ?? STATUS_QUERY_CHUNK)) {
     try {
       const result = await adapter.getOrdersStatus(ids)
+      stats.statusQueriesOk++
       for (const id of ids) if (result[id]) entries.set(id, result[id])
     } catch (e) {
       // The whole answer is missing: change nothing, never refund. Retry next run.
+      stats.statusQueryFailures++
       for (const id of ids) {
         const order = byProviderId.get(id)!
         stats.errors.push({ orderId: order.id, message: `status query failed: ${msg(e)}` })

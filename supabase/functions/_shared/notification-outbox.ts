@@ -14,15 +14,18 @@ import { notifyUser, resolveLang, sendTelegramMessage, type NotifyEvent, type No
 
 export interface OutboxRow {
   id: string
-  kind: 'completed' | 'partial' | 'canceled'
+  kind: 'completed' | 'partial' | 'canceled' | 'admin_alert'
   dedupe_key: string
   attempts: number
-  order_id: string
-  order_status: string
-  quantity: number
+  /** null for an admin alert (nothing to do with one order). */
+  order_id: string | null
+  order_status: string | null
+  quantity: number | null
   remains: number | null
-  charge_amount: number | string
-  partial_refund_amount: number | string
+  charge_amount: number | string | null
+  partial_refund_amount: number | string | null
+  /** admin_alert only: { headline, detail }. */
+  payload?: { headline?: unknown; detail?: unknown } | null
   service_name: string | null
   user_id: string
   telegram_id: number | string
@@ -40,10 +43,13 @@ export type Completion =
 
 /** The Telegram message for a row. Amounts come from the order as it is NOW (the refund is booked by the time it is sent). */
 export function eventFor(row: OutboxRow): NotifyEvent {
-  const base = { orderId: row.order_id, serviceName: row.service_name ?? 'Order', quantity: Number(row.quantity) }
+  if (row.kind === 'admin_alert') {
+    return { type: 'admin_alert', headline: String(row.payload?.headline ?? 'Alert').slice(0, 120), detail: String(row.payload?.detail ?? '').slice(0, 600) }
+  }
+  const base = { orderId: String(row.order_id), serviceName: row.service_name ?? 'Order', quantity: Number(row.quantity) }
   if (row.kind === 'completed') return { type: 'order_completed', ...base }
-  if (row.kind === 'partial') return { type: 'order_partial', ...base, remains: Number(row.remains ?? 0), refundAmount: Number(row.partial_refund_amount) }
-  return { type: 'order_canceled', ...base, refundAmount: Number(row.charge_amount) - Number(row.partial_refund_amount) }
+  if (row.kind === 'partial') return { type: 'order_partial', ...base, remains: Number(row.remains ?? 0), refundAmount: Number(row.partial_refund_amount ?? 0) }
+  return { type: 'order_canceled', ...base, refundAmount: Number(row.charge_amount ?? 0) - Number(row.partial_refund_amount ?? 0) }
 }
 
 /**
@@ -51,6 +57,7 @@ export function eventFor(row: OutboxRow): NotifyEvent {
  * (completed / partial are final; a completed or partial order refunded later by an admin was still completed / partial when announced.)
  */
 export function isReady(row: OutboxRow): boolean {
+  if (row.kind === 'admin_alert') return true
   if (row.kind === 'canceled') return row.order_status === 'refunded'
   if (row.kind === 'partial') return row.order_status === 'partial' || row.order_status === 'refunded'
   return row.order_status === 'completed' || row.order_status === 'refunded'

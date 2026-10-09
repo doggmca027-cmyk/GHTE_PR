@@ -19,7 +19,7 @@ export interface AuthSession {
   isMock: boolean
 }
 
-export type AuthErrorCode = 'not_in_telegram' | 'not_configured' | 'network' | 'user_banned' | 'rejected' | 'server'
+export type AuthErrorCode = 'not_in_telegram' | 'not_configured' | 'network' | 'user_banned' | 'signups_paused' | 'rejected' | 'server'
 
 export class AuthError extends Error {
   readonly code: AuthErrorCode
@@ -67,6 +67,7 @@ export async function authenticateWithTelegram(): Promise<AuthSession> {
   if (!res.ok || !body || 'error' in body) {
     const code = body && 'error' in body ? body.error : undefined
     if (code === 'user_banned') throw new AuthError('user_banned', 'Your account is suspended.')
+    if (code === 'signups_paused') throw new AuthError('signups_paused', 'New registrations are temporarily closed. Please try again later.')
     if (res.status === 401) throw new AuthError('rejected', 'Your Telegram session is invalid or expired. Reopen the app.')
     throw new AuthError('server', 'Something went wrong on our side. Please try again.')
   }

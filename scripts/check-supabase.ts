@@ -86,6 +86,22 @@ if (applied === migrations.length) {
     if (!READABLE[g.grantee].includes(g.table_name)) bad(`${g.grantee} can SELECT public.${g.table_name} (private table: provider costs, markup, audit or notification data)`)
   }
 
+  // Column-level leaks: RLS hides ROWS, not columns. These columns hold the platform's internals (cost, profit, provider, internal
+  // notes, which provider service sits behind a storefront service) and must never be selectable by a client role.
+  const PRIVATE_COLUMNS: Record<string, string[]> = {
+    orders: ['cost_amount', 'profit_amount', 'provider_id', 'provider_offer_id', 'provider_order_id', 'provider_reservation', 'error_message', 'routing_score_snapshot', 'idempotency_key', 'list_price_amount', 'tier_discount_amount', 'promo_discount_amount', 'promo_code_id', 'discount_capped'],
+    order_status_history: ['comment'],
+    services: ['primary_provider_service_id', 'fallback_provider_service_id'],
+  }
+  for (const [table, columns] of Object.entries(PRIVATE_COLUMNS)) {
+    for (const role of ['anon', 'authenticated']) {
+      for (const column of columns) {
+        const r = await rows<{ ok: boolean }>(`select has_column_privilege('${role}', 'public.${table}', '${column}', 'select') as ok`)
+        if (r[0].ok) bad(`${role} can SELECT public.${table}.${column}: a private column is readable through the API (grant the allow-listed columns only)`)
+      }
+    }
+  }
+
   const ADMIN_RPCS = ['get_admin_metrics', 'admin_provider_status', 'admin_reconciliation_queue', 'admin_force_refund', 'admin_mark_resolved', 'admin_list_price_rules', 'admin_update_price_rule', 'get_admin_pricing_view', 'get_profit_analytics', 'update_platform_settings', 'admin_set_provider_payout', 'admin_set_treasury_reserve', 'admin_list_providers', 'admin_update_provider_config', 'admin_upsert_platform']
   const fns = await rows<{ proname: string; anon: boolean; authed: boolean }>(`select p.proname, has_function_privilege('anon', p.oid, 'execute') as anon, has_function_privilege('authenticated', p.oid, 'execute') as authed from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prokind = 'f' and p.prorettype <> 'trigger'::regtype`)
   for (const f of fns) {

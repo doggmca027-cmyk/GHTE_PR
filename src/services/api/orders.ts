@@ -75,12 +75,18 @@ interface OrderRow {
   services: { name: string; categories: { platforms: { slug: Platform } | null } | null } | null
 }
 
+/**
+ * The only columns of `orders` the app reads. They are also the only ones the database lets a customer read (column grants in
+ * 20261111000000_rls_hardening.sql): cost, profit, provider and internal notes are private. Name the columns explicitly: a wildcard select is refused.
+ */
+export const ORDER_COLUMNS = ['id', 'target_url', 'quantity', 'charge_amount', 'status', 'remains', 'start_count', 'partial_refund_amount', 'created_at'] as const
+
 /** The signed-in user's orders, newest first. Row Level Security scopes the query to auth.uid(). */
 export async function getOrders(session: AuthSession): Promise<IOrderView[]> {
   if (session.isMock) return mockBackend.listOrders()
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
 
-  const select = 'id,target_url,quantity,charge_amount,status,remains,start_count,partial_refund_amount,created_at,services(name,categories(platforms(slug)))'
+  const select = [...ORDER_COLUMNS, 'services(name,categories(platforms(slug)))'].join(',')
   const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?select=${select}&status=neq.draft&order=created_at.desc&limit=100`, {
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
     signal: AbortSignal.timeout(READ_TIMEOUT_MS),

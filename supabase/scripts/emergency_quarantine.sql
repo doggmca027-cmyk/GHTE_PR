@@ -9,7 +9,9 @@
 --   1. Remembers the current switches and the treasury reserve in admin_audit_log ('emergency_quarantine'), so lifting the
 --      quarantine restores exactly what was there (docs/RUNBOOK.md, "Lifting the quarantine").
 --   2. Kill switches: global_orders_enabled = false, global_payments_enabled = false, maintenance_mode = true.
---      New orders and new deposits are refused (fail closed). Orders already at a provider keep being synced, refunds still
+--      New orders and new deposits are refused (fail closed). The newer vectors are paused too: global_tickets_enabled = false (no
+--      new support tickets), global_referral_transfers_enabled = false (no moving affiliate earnings to a wallet) and
+--      global_signups_enabled = false (no NEW accounts; existing customers still sign in). Orders already at a provider keep being synced, refunds still
 --      happen, deposits already paid on-chain are still credited: refusing those would hurt customers, not attackers.
 --   3. Freezes provider payments:
 --        * minimum_treasury_reserve = 999999999: validate_provider_payment() (the only way money leaves the treasury)
@@ -31,12 +33,16 @@ select null, 'emergency_quarantine', 'platform_settings',
            'global_orders_enabled', s.global_orders_enabled,
            'global_payments_enabled', s.global_payments_enabled,
            'maintenance_mode', s.maintenance_mode,
-           'minimum_treasury_reserve', s.minimum_treasury_reserve),
+           'minimum_treasury_reserve', s.minimum_treasury_reserve,
+           'global_tickets_enabled', s.global_tickets_enabled,
+           'global_referral_transfers_enabled', s.global_referral_transfers_enabled,
+           'global_signups_enabled', s.global_signups_enabled),
          'by', session_user,
          'at', now())
   from public.platform_settings s
  where s.id = 1
-   and not (s.maintenance_mode and not s.global_orders_enabled and not s.global_payments_enabled and s.minimum_treasury_reserve >= 999999999);
+   and not (s.maintenance_mode and not s.global_orders_enabled and not s.global_payments_enabled and s.minimum_treasury_reserve >= 999999999
+            and not s.global_tickets_enabled and not s.global_referral_transfers_enabled and not s.global_signups_enabled);
 
 -- 2. kill switches  +  3a. payout freeze (the reserve no balance can satisfy)
 update public.platform_settings
@@ -44,6 +50,9 @@ update public.platform_settings
        global_payments_enabled  = false,
        maintenance_mode         = true,
        minimum_treasury_reserve = 999999999,
+       global_tickets_enabled            = false,
+       global_referral_transfers_enabled = false,
+       global_signups_enabled            = false,
        updated_by               = null,
        updated_at               = now()
  where id = 1;
@@ -58,7 +67,8 @@ select p.id as canceled_payment, p.status as was, p.amount,
 commit;
 
 -- 4. the result
-select global_orders_enabled, global_payments_enabled, maintenance_mode, minimum_treasury_reserve, updated_at
+select global_orders_enabled, global_payments_enabled, maintenance_mode, minimum_treasury_reserve,
+       global_tickets_enabled, global_referral_transfers_enabled, global_signups_enabled, updated_at
   from public.platform_settings where id = 1;
 
 -- in-flight payments a human must check against the chain (nothing automatic happens to them)

@@ -309,7 +309,7 @@ describe('incident SQL (real migrations on PGlite)', () => {
       expect(await treasury()).toBe(t)
       const points = await q<{ d: { previous: R } }>(`select details d from admin_audit_log where action = 'emergency_quarantine'`)
       expect(points).toHaveLength(1)
-      expect(points[0].d.previous).toEqual({ global_orders_enabled: true, global_payments_enabled: true, maintenance_mode: false, minimum_treasury_reserve: 25 })
+      expect(points[0].d.previous).toEqual({ global_orders_enabled: true, global_payments_enabled: true, maintenance_mode: false, minimum_treasury_reserve: 25, global_tickets_enabled: true, global_referral_transfers_enabled: true, global_signups_enabled: true })
       expect((await q(`select 1 from treasury_transactions where reference_id like 'payment-reversal:%'`))).toHaveLength(1)
     })
 

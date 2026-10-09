@@ -28,6 +28,9 @@ interface ServiceRow {
   sort_order: number
 }
 
+/** The only columns of `services` the app reads (the database also hides the provider-service ids from customers). */
+export const SERVICE_COLUMNS = ['id', 'category_id', 'name', 'description', 'customer_rate_per_1000', 'min_quantity', 'max_quantity', 'refill_supported', 'sort_order'] as const
+
 async function rest<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: { apikey: SUPABASE_ANON_KEY!, Authorization: `Bearer ${token || SUPABASE_ANON_KEY}` },
@@ -52,7 +55,7 @@ export async function fetchCatalog(session: AuthSession): Promise<ICatalog> {
   const [categories, services] = await Promise.all([
     rest<CategoryRow[]>('categories?select=id,name,slug,icon_url,sort_order,platforms!inner(slug)&is_active=eq.true&order=sort_order', session.token),
     rest<ServiceRow[]>(
-      'services?select=id,category_id,name,description,customer_rate_per_1000,min_quantity,max_quantity,refill_supported,sort_order&is_active=eq.true&order=sort_order,customer_rate_per_1000',
+      `services?select=${SERVICE_COLUMNS.join(',')}&is_active=eq.true&order=sort_order,customer_rate_per_1000`,
       session.token,
     ),
   ])

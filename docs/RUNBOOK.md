@@ -45,6 +45,9 @@ and when can be traced afterwards.
 
 * sets `global_orders_enabled = false`, `global_payments_enabled = false` and `maintenance_mode = true`, so new orders and new
   deposits are refused;
+* pauses the newer vectors too: `global_tickets_enabled = false` (no new support tickets; replies to open ones still work),
+  `global_referral_transfers_enabled = false` (affiliate earnings cannot be moved to a wallet; a transfer that already happened
+  is still answered) and `global_signups_enabled = false` (no NEW accounts; customers who already have one still sign in);
 * raises `minimum_treasury_reserve` to 999999999, so every new provider payment and top-up approval is refused under its row
   lock;
 * cancels the payments that cannot have been sent yet (`PROPOSED`, `APPROVED`, `VALIDATED`), which returns their amount to the
@@ -68,6 +71,10 @@ update public.platform_settings s
        global_payments_enabled  = (q.details -> 'previous' ->> 'global_payments_enabled')::boolean,
        maintenance_mode         = (q.details -> 'previous' ->> 'maintenance_mode')::boolean,
        minimum_treasury_reserve = (q.details -> 'previous' ->> 'minimum_treasury_reserve')::numeric,
+       -- a restore point written before these switches existed has no value for them: they come back ON
+       global_tickets_enabled            = coalesce((q.details -> 'previous' ->> 'global_tickets_enabled')::boolean, true),
+       global_referral_transfers_enabled = coalesce((q.details -> 'previous' ->> 'global_referral_transfers_enabled')::boolean, true),
+       global_signups_enabled            = coalesce((q.details -> 'previous' ->> 'global_signups_enabled')::boolean, true),
        updated_by = null, updated_at = now()
   from (select details from public.admin_audit_log
          where action = 'emergency_quarantine' order by created_at desc limit 1) q

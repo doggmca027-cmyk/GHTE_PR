@@ -3,7 +3,13 @@
 // Polls the SMM providers for orders that are still moving and keeps our database in step:
 //   Completed -> completed | Pending/In progress -> progress fields | Canceled/Fail -> full refund
 //   Partial -> exact partial refund | stuck `processing` orders -> recover id or refund after 1 h.
-// All money movement goes through idempotent DB functions, so overlapping or repeated runs are safe.
+// All money movement goes through idempotent DB functions, so overlapping or repeated runs are safe, and on top of that only ONE run
+// works at a time (a lease in worker_locks: a run that finds it taken answers 200 "skipped" and does nothing).
+//
+// Circuit breaker: a provider whose every status query fails is left alone for 1, 2, 4 ... 60 minutes (providers.sync_backoff_until,
+// record_provider_sync_result); its orders drop out of the work list (get_order_sync_batch) until the time is up, then ONE probe
+// decides: success closes the breaker, failure doubles the pause. Orders held for a human (processing, no provider order id) are not
+// polled at all: there is nobody to ask.
 //
 // Auth: header `x-cron-secret: $CRON_SECRET` or `Authorization: Bearer <service role key>`.
 // Secrets: CRON_SECRET, PROVIDER_KEY_SECRET / PROVIDER_<NAME>_API_KEY, MOCK_MODE (dev only),
@@ -16,6 +22,7 @@ import {
   emptySyncStats,
   groupOrdersByProvider,
   mergeSyncStats,
+  providerPollOutcome,
   syncProviderOrders,
   type SyncEvent,
   type OrderProviderRef,
@@ -23,6 +30,7 @@ import {
   type SyncPorts,
 } from '../_shared/order-sync.ts'
 import { recordHeartbeat } from '../_shared/heartbeat.ts'
+import { withWorkerLock } from '../_shared/worker-lock.ts'
 import { instrument } from '../_shared/http.ts'
 import { registerSecret, type Logger } from '../_shared/logger.ts'
 import { createNotifier } from '../_shared/notify-db.ts'
@@ -130,18 +138,19 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
   const mockMode = Deno.env.get('MOCK_MODE') === 'true'
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
-  // Oldest-checked first. Three kinds of work: live orders with a provider id, held `processing`
-  // orders (id recovery / reconciliation), and refunds that previously failed (needs_refund).
-  const { data: rows, error } = await db
-    .from('orders')
-    .select('id, user_id, service_id, provider_id, provider_order_id, status, quantity, charge_amount, remains, start_count, error_message, created_at, offer:provider_service_offers(provider_id)')
-    .or(
-      'and(status.in.(submitted,in_progress),provider_order_id.not.is.null),' +
-        'status.eq.processing,' +
-        'and(status.in.(canceled,failed),error_message.like.needs_refund*)',
-    )
-    .order('updated_at', { ascending: true })
-    .limit(batchSize)
+  // Only one run at a time. A second copy (the scheduler fires every minute, a run can take longer) would poll the same orders and,
+  // during a provider outage, double the load on a provider that is already failing.
+  const locked = await withWorkerLock(db, 'sync-order-status', () => runSync())
+  if (!locked.acquired) {
+    log.info('another sync run holds the lease; skipping this one', { error_code: 'sync_busy' })
+    return json({ success: true, skipped: 'another_run_in_progress' })
+  }
+  return locked.value
+
+  async function runSync(): Promise<Response> {
+  // The work list comes from SQL (get_order_sync_batch): oldest-checked first; in-flight orders, recoverable held orders and owed
+  // refunds; NOT providers in backoff, NOT orders waiting for a human.
+  const { data: rows, error } = await db.rpc('get_order_sync_batch', { p_limit: batchSize })
   if (error) {
     log.error('batch query failed', { err: error, error_code: 'batch_query_failed' })
     await recordHeartbeat(db, 'sync-order-status', { ok: false, startedAt: started, error }, log)
@@ -150,12 +159,10 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
 
   // An order is polled at the panel that ACCEPTED it: the provider of its offer (failover picks the offer, and with it the
   // provider, before the order exists). orders.provider_id is only the fallback for orders that have no offer.
-  type RawRow = SyncOrder & { provider_id: string | null; offer: { provider_id: string } | { provider_id: string }[] | null }
   type Row = SyncOrder & OrderProviderRef
-  const orders = ((rows ?? []) as unknown as RawRow[]).map(({ offer, ...o }): Row => ({
+  const orders = ((rows ?? []) as unknown as (SyncOrder & { provider_id: string | null; offer_provider_id: string | null; updated_at: string })[]).map((o): Row => ({
     ...o,
     charge_amount: Number(o.charge_amount),
-    offer_provider_id: (Array.isArray(offer) ? offer[0]?.provider_id : offer?.provider_id) ?? null,
   }))
   const { byProvider, unassigned, mismatched } = groupOrdersByProvider(orders)
   for (const o of mismatched) {
@@ -201,7 +208,21 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
         { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log },
         { MOCK_MODE: Deno.env.get('MOCK_MODE') },
       )
-      mergeSyncStats(stats, await syncProviderOrders(batch, adapter, ports))
+      const result = await syncProviderOrders(batch, adapter, ports)
+      mergeSyncStats(stats, result)
+
+      // The circuit breaker. A provider that answered (even to say "I do not know this order") closes it; one whose every status query
+      // failed opens it for 1, 2, 4 ... 60 minutes. Nothing was asked (only refunds to finish) = nothing to learn.
+      const outcome = providerPollOutcome(result)
+      if (outcome) {
+        const { data: breaker, error: breakerError } = await db.rpc('record_provider_sync_result', { p_provider_id: provider.id, p_ok: outcome === 'ok' })
+        if (breakerError) log.warn('could not record the provider poll result', { err: breakerError, providerId: provider.id, error_code: 'breaker_update_failed' })
+        else if (outcome === 'failed') {
+          const b = breaker as { failures: number; backoff_until: string }
+          log.warn('provider status polling failed; backing off', { providerId: provider.id, provider: provider.name, failures: b.failures, backoffUntil: b.backoff_until, error_code: 'provider_poll_backoff' })
+          skippedProviders.push({ provider: provider.name, reason: `status queries failed; paused until ${b.backoff_until}` })
+        }
+      }
     }
   }
 
@@ -217,4 +238,5 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
   })
   await recordHeartbeat(db, 'sync-order-status', { ok: true, startedAt: started }, log)
   return json({ ...stats, notifications: notified, partialRefunded: stats.partialRefundedUnits / 10_000, skippedProviders, durationMs: Date.now() - started })
+  }
 }))
