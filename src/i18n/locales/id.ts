@@ -282,6 +282,9 @@ const id: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': 'Pesanan Anda diterima dan sedang dikonfirmasi. Tidak perlu tindakan apa pun: Anda akan melihatnya di pesanan Anda.',
   'Your orders will show up here as soon as you place your first one.': 'Pesanan Anda akan muncul di sini setelah Anda membuat yang pertama.',
   'Your Telegram session is invalid or expired. Reopen the app.': 'Sesi Telegram Anda tidak valid atau sudah kedaluwarsa. Buka kembali aplikasi.',
+  'Waiting to be connected': 'Menunggu penyambungan',
+  'Paid, waiting to be connected': 'Dibayar, menunggu penyambungan',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': 'Pesanan Anda sudah dibayar. Layanan sedang disambungkan dan ini bisa memakan waktu hingga {hours} jam. Jika tidak dapat dimulai tepat waktu, seluruh jumlah dikembalikan otomatis ke saldo Anda.',
 }
 
 export default id

@@ -10,8 +10,8 @@ const TONES: Record<StatusTone, { pill: string; dot: string }> = {
   danger: { pill: 'bg-rose-50 text-rose-700', dot: 'bg-rose-500' },
 }
 
-export function StatusBadge({ status }: { status: OrderStatus }) {
-  const meta = statusMeta(status)
+export function StatusBadge({ status, waiting = false }: { status: OrderStatus; /** Paid and waiting for the service to be connected. */ waiting?: boolean }) {
+  const meta = statusMeta(status, waiting)
   const tone = TONES[meta.tone]
   return (
     <span className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold', tone.pill)}>

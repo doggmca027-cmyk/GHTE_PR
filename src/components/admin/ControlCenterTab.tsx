@@ -4,13 +4,14 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useLoader } from '@/hooks/useLoader'
 import { haptic } from '@/lib/haptics'
-import { timeAgoRu } from '@/lib/admin-view'
+import { timeAgoRu, usd } from '@/lib/admin-view'
+import { UnfundedCard } from './UnfundedCard'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { getPlatformSettings, updatePlatformSettings } from '@/services/api/admin'
 import type { PlatformSettingsPatch, PlatformSettingsView } from '@/types/admin'
 
-type SwitchKey = 'orders' | 'payments' | 'maintenance'
+type SwitchKey = 'orders' | 'payments' | 'maintenance' | 'deferred'
 
 interface SwitchSpec {
   key: SwitchKey
@@ -24,16 +25,17 @@ interface SwitchSpec {
 const SWITCHES: SwitchSpec[] = [
   { key: 'orders', title: 'Приём заказов', on: 'Клиенты могут создавать новые заказы.', off: 'Новые заказы не принимаются. Уже созданные заказы продолжают выполняться.' },
   { key: 'payments', title: 'Приём платежей', on: 'Клиенты могут пополнять баланс.', off: 'Новые пополнения не принимаются. Уже оплаченные в сети пополнения всё равно зачисляются.' },
+  { key: 'deferred', title: 'Отложенное подключение', on: '', off: 'Если у провайдера нет денег, заказ не принимается и клиент ничего не платит.' },
   { key: 'maintenance', title: 'Технические работы', on: 'Идут технические работы: заказы И пополнения отключены для всех.', off: 'Выключено. Платформа работает в обычном режиме.', danger: true },
 ]
 
 /** Whether the *service* is running for this switch (maintenance is "running" when it is OFF). */
 function running(key: SwitchKey, s: PlatformSettingsView): boolean {
-  return key === 'orders' ? s.globalOrdersEnabled : key === 'payments' ? s.globalPaymentsEnabled : !s.maintenanceMode
+  return key === 'orders' ? s.globalOrdersEnabled : key === 'payments' ? s.globalPaymentsEnabled : key === 'deferred' ? s.deferredOrdersEnabled : !s.maintenanceMode
 }
 
 function patchFor(key: SwitchKey, turnOn: boolean): PlatformSettingsPatch {
-  return key === 'orders' ? { ordersEnabled: turnOn } : key === 'payments' ? { paymentsEnabled: turnOn } : { maintenanceMode: turnOn }
+  return key === 'orders' ? { ordersEnabled: turnOn } : key === 'payments' ? { paymentsEnabled: turnOn } : key === 'deferred' ? { deferredOrdersEnabled: turnOn } : { maintenanceMode: turnOn }
 }
 
 export function ControlCenterTab({ session }: { session: AuthSession }) {
@@ -60,7 +62,7 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
     try {
       await updatePlatformSettings(session, patchFor(spec.key, turnOn))
       haptic.success()
-      setMessage({ kind: 'ok', text: `${spec.title}: ${spec.key === 'maintenance' ? (turnOn ? 'ВКЛЮЧЕНО' : 'ВЫКЛЮЧЕНО') : (turnOn ? 'включено' : 'остановлено')}.` })
+      setMessage({ kind: 'ok', text: `${spec.title}: ${spec.key === 'maintenance' ? (turnOn ? 'ВКЛЮЧЕНО' : 'ВЫКЛЮЧЕНО') : spec.key === 'deferred' ? (turnOn ? 'включено' : 'выключено') : (turnOn ? 'включено' : 'остановлено')}.` })
     } catch (e) {
       haptic.error()
       setMessage({ kind: 'error', text: e instanceof Error ? e.message : 'Не удалось сохранить.' })
@@ -91,7 +93,11 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
         const isRunning = running(spec.key, data)
         // The switch is "on" when the thing it names is active: orders/payments flowing, maintenance engaged.
         const checked = spec.key === 'maintenance' ? data.maintenanceMode : isRunning
-        const stopping = spec.key === 'maintenance' ? !data.maintenanceMode : isRunning // the click that would pause or engage
+        // the click that would pause or engage; stopping deferred funding only stops taking NEW waiting orders, so it needs no confirmation
+        const stopping = spec.key === 'deferred' ? false : spec.key === 'maintenance' ? !data.maintenanceMode : isRunning
+        const onText = spec.key === 'deferred'
+          ? `Если у провайдера нет денег, заказ всё равно принимается и оплачивается, а уходит после вашего пополнения. Одновременно ждут не больше ${usd(data.deferredOrdersCap)}, не дольше ${data.deferredOrdersTtlHours} ч, потом клиенту возврат.`
+          : spec.on
         return (
           <article
             key={spec.key}
@@ -103,7 +109,7 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className={cn('text-[15px] font-bold leading-snug', spec.danger ? 'text-rose-700' : 'text-content-primary')}>{spec.title}</h3>
-                <p className="mt-1 text-xs text-content-secondary">{checked ? spec.on : spec.off}</p>
+                <p className="mt-1 text-xs text-content-secondary">{checked ? onText : spec.off}</p>
               </div>
               <button
                 type="button"
@@ -136,6 +142,8 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
           </article>
         )
       })}
+
+      <UnfundedCard unfunded={data.unfunded} ttlHours={data.deferredOrdersTtlHours} />
 
       <p className="px-1 text-xs text-content-secondary">{data.updatedAt ? `Последнее изменение: ${timeAgoRu(data.updatedAt)}.` : 'Ещё не менялось.'}</p>
     </div>

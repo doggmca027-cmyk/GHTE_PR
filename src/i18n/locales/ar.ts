@@ -282,6 +282,9 @@ const ar: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': 'تم استلام طلبك وجارٍ تأكيده. لا حاجة لأي إجراء: ستراه في طلباتك.',
   'Your orders will show up here as soon as you place your first one.': 'ستظهر طلباتك هنا بمجرد إنشاء أول طلب.',
   'Your Telegram session is invalid or expired. Reopen the app.': 'جلسة تيليجرام غير صالحة أو منتهية. أعد فتح التطبيق.',
+  'Waiting to be connected': 'بانتظار الربط',
+  'Paid, waiting to be connected': 'تم الدفع، بانتظار الربط',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': 'تم دفع طلبك. يجري ربط الخدمة وقد يستغرق ذلك حتى {hours} ساعة. إذا تعذّر بدء الطلب في الوقت المناسب، يُعاد المبلغ بالكامل تلقائيًا إلى رصيدك.',
 }
 
 export default ar

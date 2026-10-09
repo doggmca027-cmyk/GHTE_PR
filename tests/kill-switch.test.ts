@@ -16,7 +16,7 @@ import { createMockSettings } from '../src/services/api/mock-settings'
 import { AdminApiError } from '../src/services/api/mock-admin'
 
 const settings = (over: Partial<PlatformSettings> = {}): PlatformSettings => ({
-  globalOrdersEnabled: true, globalPaymentsEnabled: true, maintenanceMode: false, updatedAt: null, ...over,
+  globalOrdersEnabled: true, globalPaymentsEnabled: true, maintenanceMode: false, deferredOrdersEnabled: false, deferredOrdersCap: 200, deferredOrdersTtlHours: 24, updatedAt: null, ...over,
 })
 
 // ---------------------------------------------------------------------------
@@ -66,7 +66,14 @@ describe('assertSwitchOn', () => {
 describe('settingsFromRow', () => {
   it('maps a good row', () => {
     expect(settingsFromRow({ global_orders_enabled: true, global_payments_enabled: false, maintenance_mode: true, updated_at: 't' }))
-      .toEqual({ globalOrdersEnabled: true, globalPaymentsEnabled: false, maintenanceMode: true, updatedAt: 't' })
+      .toEqual({ globalOrdersEnabled: true, globalPaymentsEnabled: false, maintenanceMode: true, deferredOrdersEnabled: false, deferredOrdersCap: 0, deferredOrdersTtlHours: 24, updatedAt: 't' })
+  })
+  it('reads the deferred-funding settings, and a missing or odd value means off / the safe default', () => {
+    const base = { global_orders_enabled: true, global_payments_enabled: true, maintenance_mode: false }
+    expect(settingsFromRow({ ...base, deferred_orders_enabled: true, deferred_orders_cap: '200.0000', deferred_orders_ttl_hours: 24 }))
+      .toMatchObject({ deferredOrdersEnabled: true, deferredOrdersCap: 200, deferredOrdersTtlHours: 24 })
+    expect(settingsFromRow({ ...base, deferred_orders_enabled: 'yes', deferred_orders_cap: 'x', deferred_orders_ttl_hours: 0 }))
+      .toMatchObject({ deferredOrdersEnabled: false, deferredOrdersCap: 0, deferredOrdersTtlHours: 24 })
   })
   it('never guesses: a missing row or a non-boolean flag is "unknown"', () => {
     expect(settingsFromRow(null)).toBeNull()
@@ -124,7 +131,7 @@ describe('enforcement inside the Edge Functions (source order)', () => {
     const src = read('supabase/functions/place-order/index.ts')
     const check = src.indexOf("assertSwitchOn(settings, 'orders')")
     expect(check).toBeGreaterThan(0)
-    for (const later of ['buildCandidates(', 'resolveOffer(', 'executePlaceOrder(', 'buildPorts(db)', "from('provider_service_offers')"]) {
+    for (const later of ['buildCandidates(', 'resolveOffer(', 'executePlaceOrder(', 'buildOrderPorts(db)', "from('provider_service_offers')"]) {
       const at = src.indexOf(later, src.indexOf('Deno.serve'))
       expect(at, later).toBeGreaterThan(check)
     }
@@ -167,12 +174,13 @@ describe('parseSettingsRequest', () => {
     expect(parseSettingsRequest({ action: 'get' })).toEqual({ action: 'GET' })
   })
   it('accepts partial updates; absent switches stay null (unchanged)', () => {
-    expect(parseSettingsRequest({ action: 'UPDATE', ordersEnabled: false })).toEqual({ action: 'UPDATE', ordersEnabled: false, paymentsEnabled: null, maintenanceMode: null })
-    expect(parseSettingsRequest({ action: 'update', maintenanceMode: true, paymentsEnabled: true })).toEqual({ action: 'UPDATE', ordersEnabled: null, paymentsEnabled: true, maintenanceMode: true })
+    expect(parseSettingsRequest({ action: 'UPDATE', ordersEnabled: false })).toEqual({ action: 'UPDATE', ordersEnabled: false, paymentsEnabled: null, maintenanceMode: null, deferredOrdersEnabled: null })
+    expect(parseSettingsRequest({ action: 'update', maintenanceMode: true, paymentsEnabled: true })).toEqual({ action: 'UPDATE', ordersEnabled: null, paymentsEnabled: true, maintenanceMode: true, deferredOrdersEnabled: null })
+    expect(parseSettingsRequest({ action: 'UPDATE', deferredOrdersEnabled: true })).toEqual({ action: 'UPDATE', ordersEnabled: null, paymentsEnabled: null, maintenanceMode: null, deferredOrdersEnabled: true })
   })
   it.each([
     [[]], ['x'], [{ action: 'DROP' }], [{ action: 'UPDATE' }], [{ action: 'UPDATE', ordersEnabled: 'false' }], [{ action: 'UPDATE', maintenanceMode: 1 }],
-    [{ action: 'UPDATE', ordersEnabled: null }],
+    [{ action: 'UPDATE', ordersEnabled: null }], [{ action: 'UPDATE', deferredOrdersEnabled: 'on' }],
   ])('rejects %j', (body) => {
     expect(parseSettingsRequest(body)).toHaveProperty('error')
   })

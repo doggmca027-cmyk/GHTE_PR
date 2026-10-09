@@ -222,13 +222,35 @@ export interface PlatformSettingsView {
   globalOrdersEnabled: boolean
   globalPaymentsEnabled: boolean
   maintenanceMode: boolean
+  /** Orders the provider cannot pay for yet are accepted, kept and sent when it has been topped up (refunded after the limit). */
+  deferredOrdersEnabled: boolean
+  /** USD of customer charges that may wait at any time. */
+  deferredOrdersCap: number
+  /** Hours after which a waiting order is refunded in full. */
+  deferredOrdersTtlHours: number
+  /** Paid orders waiting for a provider top-up right now. */
+  unfunded: UnfundedSummary
   updatedAt: string | null
 }
+
+/** Paid orders waiting for a provider to be funded (unfunded_orders_summary). */
+export interface UnfundedSummary {
+  count: number
+  /** What the customers paid for them. */
+  charge: number
+  /** What the providers will charge: the amount to transfer. */
+  cost: number
+  oldest: string | null
+  providers: { id: string; name: string; count: number; cost: number; balance: number; oldest: string | null }[]
+}
+
+export const NO_UNFUNDED: UnfundedSummary = { count: 0, charge: 0, cost: 0, oldest: null, providers: [] }
 
 export interface PlatformSettingsPatch {
   ordersEnabled?: boolean
   paymentsEnabled?: boolean
   maintenanceMode?: boolean
+  deferredOrdersEnabled?: boolean
 }
 
 /** An open reconciliation case (admin-reconciliation). Today only orders are detected. */

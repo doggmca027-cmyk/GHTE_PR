@@ -113,7 +113,7 @@ describe('discount engine (SQL)', () => {
 
   describe('access and shape', () => {
     it('only the service role may execute the engine; the tables are closed to clients', async () => {
-      for (const fn of ['place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text)', 'calculate_order_price(uuid, uuid, integer, numeric, text)',
+      for (const fn of ['place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text, boolean)', 'calculate_order_price(uuid, uuid, integer, numeric, text)',
         'quote_order_price(uuid, uuid, integer, text)', 'recalculate_user_tiers()', 'admin_upsert_promo_code(uuid, text, promo_discount_type, numeric, integer, timestamptz, boolean)']) {
         const g = (await rows(`select has_function_privilege('anon', '${fn}', 'execute') a, has_function_privilege('authenticated', '${fn}', 'execute') u`))[0]
         expect([g.a, g.u]).toEqual([false, false])
@@ -245,7 +245,7 @@ describe('discount engine (SQL)', () => {
     })
 
     it('the engine reads the price and cost under share locks, and the promo under an exclusive one (the SQL says so)', async () => {
-      const def = await one<string>(`select pg_get_functiondef('place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text)'::regprocedure) v`)
+      const def = await one<string>(`select pg_get_functiondef('place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text, boolean)'::regprocedure) v`)
       expect(def).toMatch(/from services where id = p_service_id and is_active for share/)
       expect(def).toMatch(/is_active for share;/)
       expect(def).toMatch(/from promo_codes where code = v_code for update/)

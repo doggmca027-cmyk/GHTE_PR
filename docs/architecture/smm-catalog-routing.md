@@ -111,6 +111,25 @@ An order points at what actually served it: `service_id` (what was bought), `pro
 4. **Sync** (`sync-order-status`, every minute) follows the order at the provider and settles refunds. Unknown outcomes go to
    the Reconciliation Center.
 
+## 3b. Orders that wait for the provider to be funded (deferred funding)
+
+A new shop has no money at its providers. With `platform_settings.deferred_orders_enabled` on (Admin -> Управление -> «Отложенное подключение»), an order
+that every provider turns down only because its cached balance cannot cover the cost is still accepted:
+
+1. `place-order` retries the best offer with `p_allow_unfunded`; `place_order()` checks the switch and the cap (`deferred_orders_cap`, USD of customer
+   charges waiting at any time, default 200) and charges the wallet as usual. The order stays `paid` with `awaiting_funds_since`; nothing is
+   reserved at the provider and nothing is sent. The customer is told the order is paid and waits to be connected (HTTP 202, `awaitingFunds`).
+2. The owner is told by Telegram (`notify_admin_anomalies`, every 5 minutes: what to transfer to which provider) and sees a card in the admin.
+3. After the top-up the health monitor reads the new balance. The next run of `sync-order-status` (every minute) runs the funded-orders stage
+   (`_shared/funded-orders.ts`): `claim_funded_orders()` reserves each cost (oldest first, first come first served per provider, only for healthy
+   routing-enabled providers, never when the provider's price has risen above what the customer paid), flips `paid -> processing` exactly like a normal
+   claim, and the order is sent through `submitClaimedOrder()`, the same code a fresh order uses: a definitive refusal refunds, an unknown outcome is held
+   for reconciliation, never refunded and never sent twice.
+4. An order still waiting after `deferred_orders_ttl_hours` (default 24) is canceled and refunded in full (`expire_unfunded_orders()`); the customer's
+   message comes from the usual outcome trigger.
+
+Everything is service role only; a customer can read only the `awaiting_funds_since` of their own orders.
+
 ## 4. Legacy: `services.primary_provider_service_id` and `fallback_provider_service_id`
 
 These two columns are the **old routing**: a service named one primary and one fallback provider service. They are still in the

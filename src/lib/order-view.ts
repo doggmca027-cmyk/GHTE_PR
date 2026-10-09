@@ -35,7 +35,8 @@ export interface StatusMeta {
   pulse: boolean
 }
 
-export function statusMeta(status: OrderStatus): StatusMeta {
+export function statusMeta(status: OrderStatus, awaitingFunds = false): StatusMeta {
+  if (status === 'paid' && awaitingFunds) return { label: t('Waiting to be connected'), tone: 'warning', pulse: true }
   switch (status) {
     case 'completed': return { label: t('Completed'), tone: 'success', pulse: false }
     case 'partial': return { label: t('Partial'), tone: 'success', pulse: false }

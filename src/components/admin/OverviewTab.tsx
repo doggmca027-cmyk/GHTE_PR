@@ -8,9 +8,10 @@ import { formatInt } from '@/lib/order-calc'
 import { plural, timeAgoRu, usd } from '@/lib/admin-view'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
-import { getAdminMetrics, getProviderStatus } from '@/services/api/admin'
+import { getAdminMetrics, getPlatformSettings, getProviderStatus } from '@/services/api/admin'
 import { MetricCard } from './MetricCard'
 import { ProfitPanel } from './ProfitPanel'
+import { UnfundedCard } from './UnfundedCard'
 
 interface Props {
   session: AuthSession
@@ -22,8 +23,9 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
   const [refreshKey, setRefreshKey] = useState(0)
   const { data, error, loading, reload } = useLoader(
     async () => {
-      const [metrics, providers] = await Promise.all([getAdminMetrics(session), getProviderStatus(session)])
-      return { metrics, providers }
+      // the waiting-for-funds card is extra: if its request fails the rest of the screen still shows
+      const [metrics, providers, settings] = await Promise.all([getAdminMetrics(session), getProviderStatus(session), getPlatformSettings(session).catch(() => null)])
+      return { metrics, providers, settings }
     },
     [session.token, session.isMock],
   )
@@ -51,7 +53,7 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
     )
   }
 
-  const { metrics: m, providers } = data
+  const { metrics: m, providers, settings } = data
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -65,6 +67,8 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
           <RefreshCw size={16} strokeWidth={1.75} className={cn(loading && 'animate-spin')} />
         </button>
       </div>
+
+      {settings && <UnfundedCard unfunded={settings.unfunded} ttlHours={settings.deferredOrdersTtlHours} />}
 
       <ProfitPanel session={session} refreshKey={refreshKey} />
 

@@ -282,6 +282,9 @@ const uk: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': 'Замовлення отримано та підтверджується. Нічого робити не потрібно: воно з’явиться у списку замовлень.',
   'Your orders will show up here as soon as you place your first one.': 'Ваші замовлення з’являться тут, щойно ви оформите перше.',
   'Your Telegram session is invalid or expired. Reopen the app.': 'Сесія Telegram недійсна або завершилась. Відкрийте застосунок заново.',
+  'Waiting to be connected': 'Очікує підключення',
+  'Paid, waiting to be connected': 'Сплачено, очікує підключення',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': 'Замовлення сплачено. Послуга підключається, це може тривати до {hours} год. Якщо запустити замовлення вчасно не вийде, вся сума автоматично повернеться на ваш баланс.',
 }
 
 export default uk

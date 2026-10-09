@@ -282,6 +282,9 @@ const hi: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': 'आपका ऑर्डर मिल गया है और उसकी पुष्टि हो रही है। कुछ करने की ज़रूरत नहीं: वह आपके ऑर्डर में दिखेगा।',
   'Your orders will show up here as soon as you place your first one.': 'पहला ऑर्डर देते ही आपके ऑर्डर यहाँ दिखेंगे।',
   'Your Telegram session is invalid or expired. Reopen the app.': 'आपका Telegram सत्र अमान्य है या समाप्त हो गया है। ऐप दोबारा खोलें।',
+  'Waiting to be connected': 'कनेक्शन की प्रतीक्षा',
+  'Paid, waiting to be connected': 'भुगतान हो गया, कनेक्शन की प्रतीक्षा',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': 'आपका ऑर्डर भुगतान हो चुका है। सेवा जोड़ी जा रही है और इसमें {hours} घंटे तक लग सकते हैं। अगर ऑर्डर समय पर शुरू नहीं हो सका, तो पूरी राशि अपने आप आपके बैलेंस में लौटा दी जाएगी।',
 }
 
 export default hi

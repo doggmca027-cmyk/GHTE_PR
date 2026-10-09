@@ -1,4 +1,5 @@
 import type { AuthSession } from '@/services/api/auth'
+import { NO_UNFUNDED, type UnfundedSummary } from '@/types/admin'
 import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingPage, PricingQuery, PromoInput, PromoView, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayment, ProviderPaymentAction, ProviderPayoutInput, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, SystemHealth, PlatformSettingsView, ReconCase, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
 import { createMockPricing } from './mock-pricing'
 import { createMockObservability } from './mock-observability'
@@ -386,6 +387,16 @@ export async function getProfitAnalytics(session: AuthSession, range: AnalyticsR
   throw new AdminApiError('server', 'Something went wrong. Please try again.')
 }
 
+/** unfunded_orders_summary() as the screens use it (numerics arrive as numbers or strings; no summary at all means nothing is waiting). */
+export function unfundedFromRpc(raw: Record<string, unknown> | null | undefined): UnfundedSummary {
+  if (!raw) return NO_UNFUNDED
+  const providers = Array.isArray(raw.providers) ? (raw.providers as Record<string, unknown>[]) : []
+  return {
+    count: num(raw.count), charge: num(raw.charge), cost: num(raw.cost), oldest: (raw.oldest as string | null) ?? null,
+    providers: providers.map((p) => ({ id: String(p.id), name: String(p.name), count: num(p.count), cost: num(p.cost), balance: num(p.balance), oldest: (p.oldest as string | null) ?? null })),
+  }
+}
+
 // ---- Emergency controls (admin-settings Edge Function) ----------------------------------------------
 
 let mockSettingsStore: ReturnType<typeof createMockSettings> | undefined
@@ -404,8 +415,8 @@ async function callSettings(session: AuthSession, body: Record<string, unknown>)
   } catch {
     throw new AdminApiError('network', 'Connection lost. Please try again.')
   }
-  const data = (await res.json().catch(() => null)) as { success?: boolean; settings?: PlatformSettingsView; message?: string } | null
-  if (res.ok && data?.success && data.settings) return data.settings
+  const data = (await res.json().catch(() => null)) as { success?: boolean; settings?: Omit<PlatformSettingsView, 'unfunded'>; unfunded?: Record<string, unknown> | null; message?: string } | null
+  if (res.ok && data?.success && data.settings) return { ...data.settings, unfunded: unfundedFromRpc(data.unfunded) }
   if (res.status === 401 || res.status === 403) throw new AdminApiError('forbidden', 'Admin access required.')
   if (res.status === 400) throw new AdminApiError('invalid_input', data?.message ?? 'Invalid input.')
   throw new AdminApiError('server', 'Something went wrong. Please try again.')

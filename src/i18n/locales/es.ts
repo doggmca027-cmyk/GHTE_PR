@@ -282,6 +282,9 @@ const es: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': 'Hemos recibido tu pedido y se está confirmando. No necesitas hacer nada: lo verás en tus pedidos.',
   'Your orders will show up here as soon as you place your first one.': 'Tus pedidos aparecerán aquí en cuanto hagas el primero.',
   'Your Telegram session is invalid or expired. Reopen the app.': 'Tu sesión de Telegram no es válida o ha caducado. Vuelve a abrir la aplicación.',
+  'Waiting to be connected': 'Esperando conexión',
+  'Paid, waiting to be connected': 'Pagado, esperando conexión',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': 'Tu pedido está pagado. El servicio se está conectando y puede tardar hasta {hours} horas. Si no se puede iniciar a tiempo, el importe completo se devuelve automáticamente a tu saldo.',
 }
 
 export default es

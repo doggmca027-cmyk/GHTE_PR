@@ -282,6 +282,9 @@ const ru: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': 'Заказ получен и подтверждается. Ничего делать не нужно: он появится в списке заказов.',
   'Your orders will show up here as soon as you place your first one.': 'Ваши заказы появятся здесь, как только вы оформите первый.',
   'Your Telegram session is invalid or expired. Reopen the app.': 'Сессия Telegram недействительна или истекла. Откройте приложение заново.',
+  'Waiting to be connected': 'Ждёт подключения',
+  'Paid, waiting to be connected': 'Оплачено, ждёт подключения',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': 'Заказ оплачен. Услуга подключается, это может занять до {hours} ч. Если запустить заказ вовремя не получится, вся сумма автоматически вернётся на ваш баланс.',
 }
 
 export default ru

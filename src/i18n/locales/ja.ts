@@ -282,6 +282,9 @@ const ja: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': '注文を受け付け、確認中です。操作は不要です。「注文」に表示されます。',
   'Your orders will show up here as soon as you place your first one.': '最初の注文をすると、ここに表示されます。',
   'Your Telegram session is invalid or expired. Reopen the app.': 'Telegramのセッションが無効か期限切れです。アプリを開き直してください。',
+  'Waiting to be connected': '接続待ち',
+  'Paid, waiting to be connected': '支払い済み・接続待ち',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': 'ご注文のお支払いが完了しました。サービスを接続中で、最大 {hours} 時間かかる場合があります。期限内に開始できなかった場合は、全額が自動的に残高へ返金されます。',
 }
 
 export default ja

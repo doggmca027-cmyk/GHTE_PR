@@ -1,6 +1,9 @@
 // Supabase Edge Function (Deno): POST /sync-order-status   (call every minute from pg_cron / a scheduler)
 //
-// Polls the SMM providers for orders that are still moving and keeps our database in step:
+// First, the funded-orders stage (_shared/funded-orders.ts): orders that were paid while their provider had no money are sent as soon as the
+// provider has been topped up, and refunded when they have waited past the limit. It does nothing (one cheap count) when none is waiting.
+//
+// Then it polls the SMM providers for orders that are still moving and keeps our database in step:
 //   Completed -> completed | Pending/In progress -> progress fields | Canceled/Fail -> full refund
 //   Partial -> exact partial refund | stuck `processing` orders -> recover id or refund after 1 h.
 // All money movement goes through idempotent DB functions, so overlapping or repeated runs are safe, and on top of that only ONE run
@@ -29,6 +32,8 @@ import {
   type SyncOrder,
   type SyncPorts,
 } from '../_shared/order-sync.ts'
+import { emptyFundedReport, releaseFundedOrders, type FundedOrder, type FundedRunReport } from '../_shared/funded-orders.ts'
+import { buildOrderPorts } from '../_shared/order-ports.ts'
 import { recordHeartbeat } from '../_shared/heartbeat.ts'
 import { withWorkerLock } from '../_shared/worker-lock.ts'
 import { instrument } from '../_shared/http.ts'
@@ -147,7 +152,55 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
   }
   return locked.value
 
+  /** Orders paid while the provider had no money: send the ones that can go now, refund the ones that waited too long. Never throws. */
+  async function runFundedStage(): Promise<FundedRunReport> {
+    const none = emptyFundedReport()
+    try {
+      const { data: waiting, error } = await db.rpc('unfunded_orders_summary')
+      if (error) throw new Error(error.message)
+      if (!Number((waiting as { count?: number } | null)?.count)) return none
+      return await releaseFundedOrders({
+        async expire() {
+          const { data, error: e } = await db.rpc('expire_unfunded_orders')
+          if (e) throw new Error(`expire_unfunded_orders: ${e.message}`)
+          const r = data as { refunded: number; failed: number }
+          return { refunded: Number(r.refunded), failed: Number(r.failed) }
+        },
+        async claim(limit, providerIds) {
+          const { data, error: e } = await db.rpc('claim_funded_orders', { p_limit: limit, p_provider_ids: providerIds })
+          if (e) throw new Error(`claim_funded_orders: ${e.message}`)
+          return (data ?? []) as FundedOrder[]
+        },
+        async adapters() {
+          const { data, error: e } = await db.from('providers').select('id, name, api_url, api_key_encrypted').eq('is_active', true).eq('routing_enabled', true)
+          if (e) throw new Error(`load providers: ${e.message}`)
+          const map = new Map<string, IProviderAdapter>()
+          for (const provider of (data ?? []) as ProviderRow[]) {
+            let apiKey = ''
+            try {
+              apiKey = await resolveProviderApiKey(provider, Deno.env)
+            } catch (err) {
+              log.error('cannot decrypt the provider key', { err, providerId: provider.id, error_code: 'key_decrypt_failed' })
+            }
+            if (!apiKey && !mockMode) continue
+            registerSecret(apiKey)
+            map.set(provider.id, createSMMv2Adapter(
+              { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log },
+              { MOCK_MODE: Deno.env.get('MOCK_MODE') },
+            ))
+          }
+          return map
+        },
+        orders: buildOrderPorts(db),
+      }, log)
+    } catch (e) {
+      log.error('funded orders stage failed', { err: e, error_code: 'funded_stage_failed' })
+      return { ...none, errors: 1 }
+    }
+  }
+
   async function runSync(): Promise<Response> {
+  const funded = await runFundedStage()
   // The work list comes from SQL (get_order_sync_batch): oldest-checked first; in-flight orders, recoverable held orders and owed
   // refunds; NOT providers in backoff, NOT orders waiting for a human.
   const { data: rows, error } = await db.rpc('get_order_sync_batch', { p_limit: batchSize })
@@ -237,6 +290,6 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
     partial: stats.partial, held: stats.heldForReconciliation, errors: stats.errors.length, skippedProviders: skippedProviders.length,
   })
   await recordHeartbeat(db, 'sync-order-status', { ok: true, startedAt: started }, log)
-  return json({ ...stats, notifications: notified, partialRefunded: stats.partialRefundedUnits / 10_000, skippedProviders, durationMs: Date.now() - started })
+  return json({ ...stats, funded, notifications: notified, partialRefunded: stats.partialRefundedUnits / 10_000, skippedProviders, durationMs: Date.now() - started })
   }
 }))

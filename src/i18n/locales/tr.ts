@@ -282,6 +282,9 @@ const tr: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': 'Siparişiniz alındı ve doğrulanıyor. Bir işlem yapmanız gerekmiyor: siparişlerinizde göreceksiniz.',
   'Your orders will show up here as soon as you place your first one.': 'İlk siparişinizi verir vermez siparişleriniz burada görünecek.',
   'Your Telegram session is invalid or expired. Reopen the app.': 'Telegram oturumunuz geçersiz veya süresi dolmuş. Uygulamayı yeniden açın.',
+  'Waiting to be connected': 'Bağlantı bekleniyor',
+  'Paid, waiting to be connected': 'Ödendi, bağlantı bekleniyor',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': 'Siparişin ödendi. Hizmet bağlanıyor ve bu {hours} saate kadar sürebilir. Zamanında başlatılamazsa tutarın tamamı otomatik olarak bakiyene iade edilir.',
 }
 
 export default tr

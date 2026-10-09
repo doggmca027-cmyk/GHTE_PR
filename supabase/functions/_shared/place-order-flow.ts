@@ -4,7 +4,9 @@
 // Money safety rules:
 //   1. The wallet is debited atomically by the DB (place_order) BEFORE the provider is called.
 //   2. Only ONE caller may submit an order: the paid -> processing transition is an atomic claim.
-//   3. REFUND only on a definitive "the provider did not create it" signal.
+//   3. An order the provider cannot pay for yet (deferred funding, see migration 20261115000000) is charged and left `paid` with awaiting_funds_since:
+//      nothing is sent now; the funded-orders worker claims it when the provider has been topped up, or the order is refunded after the limit.
+//   4. REFUND only on a definitive "the provider did not create it" signal.
 //      HOLD (never refund) whenever the outcome is unknown: timeout, network loss, 5xx,
 //      garbled response, or any unexpected error. A held order is flagged `needs_reconciliation`.
 
@@ -28,6 +30,8 @@ export interface OrderRecord {
   /** Routing snapshot written by place_order (null only on orders created before Phase 1C). */
   provider_offer_id?: string | null
   provider_id?: string | null
+  /** Set while a paid order waits for its provider to be funded (nothing reserved, nothing sent). */
+  awaiting_funds_since?: string | null
 }
 
 export class PlaceOrderDbError extends Error {
@@ -59,6 +63,8 @@ export interface PlaceOrderArgs {
   costAmount: number
   /** Promo code typed by the customer; place_order validates it, prices the order and redeems it atomically. */
   promoCode?: string | null
+  /** Accept the order even though the provider's balance cannot cover it (place_order checks the switch and the cap itself). */
+  allowUnfunded?: boolean
 }
 
 export interface PlaceOrderPorts {
@@ -88,6 +94,8 @@ export type PlaceOrderResult =
   | { kind: 'refund_failed'; order: OrderRecord; message: string }
   /** Idempotent replay (or lost claim race): nothing was sent to the provider by this call. */
   | { kind: 'replayed'; order: OrderRecord }
+  /** Charged, and waiting for the provider to be funded: nothing was sent and nothing is reserved. */
+  | { kind: 'awaiting_funds'; order: OrderRecord }
 
 export interface ProviderErrorClass {
   outcome: 'refund' | 'hold'
@@ -130,6 +138,7 @@ export interface PlaceOrderRequest {
   providerServiceId: string
   costAmount: number
   promoCode?: string | null
+  allowUnfunded?: boolean
   /** The provider's own id for the service, read from the database (never from the client). */
   externalServiceId: string
 }
@@ -149,16 +158,32 @@ export async function executePlaceOrder(
   const { externalServiceId: _external, ...placeArgs } = req
   const order = await ports.placeOrder(placeArgs)
   if (order.status !== 'paid') return { kind: 'replayed', order }
+  // Charged but the provider has no money for it yet: the funded-orders worker takes it from here.
+  if (order.awaiting_funds_since) return { kind: 'awaiting_funds', order }
 
   // 2. Exactly one caller wins the right to talk to the provider.
   const claimed = await ports.claim(order.id)
   if (!claimed) return { kind: 'replayed', order: await ports.get(order.id) }
 
+  return submitClaimedOrder(claimed, req.externalServiceId, ports, adapter, log)
+}
+
+/**
+ * Steps 3 and 4 for an order this caller has CLAIMED (paid -> processing): send it to the provider and settle the outcome. Shared by the
+ * place-order function and the funded-orders worker, so a waiting order is sent under exactly the same money-safety rules as a fresh one.
+ */
+export async function submitClaimedOrder(
+  claimed: OrderRecord,
+  externalServiceId: string,
+  ports: PlaceOrderPorts,
+  adapter: Pick<ISMMProviderAdapter, 'createOrder'>,
+  log: Logger = console,
+): Promise<PlaceOrderResult> {
   // 3. Submit.
   let providerOrderId: string
   try {
     providerOrderId = (
-      await adapter.createOrder({ serviceId: req.externalServiceId, link: claimed.target_url, quantity: claimed.quantity })
+      await adapter.createOrder({ serviceId: externalServiceId, link: claimed.target_url, quantity: claimed.quantity })
     ).orderId
   } catch (e) {
     const cls = classifyProviderError(e)

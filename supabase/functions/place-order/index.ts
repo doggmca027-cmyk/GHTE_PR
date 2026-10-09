@@ -16,7 +16,6 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { verifyJwt } from '../_shared/jwt.ts'
 import { deriveIdempotencyKey, parsePlaceOrderBody, validateQuantity } from '../_shared/order-validation.ts'
 import {
-  IN_FLIGHT_NOTE,
   PlaceOrderDbError,
   PreSendRejection,
   executePlaceOrder,
@@ -24,9 +23,9 @@ import {
   isPreSendRejection,
   mapDbError,
   type OrderRecord,
-  type PlaceOrderPorts,
   type PlaceOrderResult,
 } from '../_shared/place-order-flow.ts'
+import { buildOrderPorts } from '../_shared/order-ports.ts'
 import {
   OFFER_SELECT,
   ServiceUnavailableError,
@@ -64,57 +63,6 @@ const publicOrder = (o: OrderRecord) => ({
   quantity: o.quantity,
   targetUrl: o.target_url,
 })
-
-function buildPorts(db: Db): PlaceOrderPorts {
-  const one = (res: { data: unknown; error: { message: string; code?: string } | null }, what: string): OrderRecord => {
-    if (res.error || !res.data) throw new PlaceOrderDbError(res.error?.message ?? `${what}: no data`, res.error?.code)
-    return res.data as OrderRecord
-  }
-  return {
-    async placeOrder(a) {
-      return one(
-        await db.rpc('place_order', {
-          p_user_id: a.userId,
-          p_service_id: a.serviceId,
-          p_target_url: a.targetUrl,
-          p_quantity: a.quantity,
-          p_provider_offer_id: a.providerOfferId,
-          p_provider_id: a.providerId,
-          p_provider_service_id: a.providerServiceId,
-          p_cost_amount: a.costAmount,
-          p_idempotency_key: a.idempotencyKey,
-          p_promo_code: a.promoCode ?? null,
-        }),
-        'place_order',
-      )
-    },
-    async claim(orderId) {
-      // Atomic: only the caller that flips paid -> processing gets a row back.
-      const { data, error } = await db
-        .from('orders')
-        .update({ status: 'processing', error_message: IN_FLIGHT_NOTE })
-        .eq('id', orderId)
-        .eq('status', 'paid')
-        .select('*')
-        .maybeSingle()
-      if (error) throw new PlaceOrderDbError(error.message, error.code)
-      return (data as OrderRecord | null) ?? null
-    },
-    async get(orderId) {
-      return one(await db.from('orders').select('*').eq('id', orderId).single(), 'get order')
-    },
-    async update(orderId, patch) {
-      return one(await db.from('orders').update(patch).eq('id', orderId).select('*').single(), 'update order')
-    },
-    async refund(orderId, comment) {
-      return one(await db.rpc('refund_order', { p_order_id: orderId, p_amount: null, p_comment: comment }), 'refund_order')
-    },
-    async releaseReservation(orderId) {
-      const { error } = await db.rpc('release_provider_reservation', { p_order_id: orderId })
-      if (error) throw new PlaceOrderDbError(error.message, error.code)
-    },
-  }
-}
 
 async function walletOf(db: Db, userId: string) {
   const { data } = await db.from('wallets').select('balance, currency').eq('user_id', userId).maybeSingle()
@@ -209,9 +157,7 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   // 4. Execute. Failover to the next offer happens ONLY on a refusal before anything was sent or charged (no API key,
   //    provider balance cannot cover the cost). Once a request reached a provider, its outcome is final for this call:
   //    an unknown outcome is held for reconciliation, never re-sent elsewhere.
-  let result: PlaceOrderResult
-  try {
-    result = await firstAcceptingOffer(offers, async (offer) => {
+  const attempt = async (offer: IProviderServiceOffer, allowUnfunded: boolean): Promise<PlaceOrderResult> => {
       const details = candidates.details.get(offer.id)!
       const provider = candidates.providers.find((p) => p.id === offer.providerId)!
       let apiKey = ''
@@ -238,12 +184,25 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
           providerServiceId: offer.providerServiceId,
           costAmount: costForQuantity(offer.costPer1000, input.quantity),
           promoCode: input.promoCode ?? null,
+          allowUnfunded,
           externalServiceId: details.externalServiceId,
         },
-        buildPorts(db),
+        buildOrderPorts(db),
         adapter,
       )
-    })
+  }
+  let result: PlaceOrderResult
+  try {
+    try {
+      result = await firstAcceptingOffer(offers, (offer) => attempt(offer, false))
+    } catch (e) {
+      // Every offer was turned down before anything was charged or sent. If the owner has switched deferred funding on and the reason is the
+      // provider's balance, the order is still accepted on the best offer: the customer pays now, the order waits for the provider to be funded
+      // (place_order checks the switch and the cap itself and refuses again if there is no room).
+      const noMoney = e instanceof PlaceOrderDbError && /insufficient_provider_balance/.test(e.message)
+      if (!(noMoney && settings?.deferredOrdersEnabled && !existing?.provider_offer_id)) throw e
+      result = await attempt(offers[0], true)
+    }
   } catch (e) {
     if (isPreSendRejection(e)) {
       log.warn('no offer could take the order before sending', { err: e, error_code: 'pre_send_rejection', serviceId: input.serviceId })
@@ -263,6 +222,9 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   switch (result.kind) {
     case 'submitted':
       return json({ success: true, order, wallet })
+    case 'awaiting_funds':
+      // Charged, not sent yet: it starts by itself when the provider has been topped up, or the customer is refunded after the limit.
+      return json({ success: true, pending: true, awaitingFunds: true, deferredTtlHours: settings?.deferredOrdersTtlHours ?? 24, order, wallet }, 202)
     case 'replayed': {
       const s = result.order.status
       if (s === 'refunded' || s === 'failed' || s === 'canceled') {

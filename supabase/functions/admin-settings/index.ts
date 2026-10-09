@@ -1,9 +1,11 @@
 // Supabase Edge Function (Deno): POST /admin-settings   (admins only)
 //   Authorization: Bearer <JWT issued by telegram-auth>
 //   { action: "GET" }
-//       -> { success, settings: { globalOrdersEnabled, globalPaymentsEnabled, maintenanceMode, updatedAt } }
-//   { action: "UPDATE", ordersEnabled?, paymentsEnabled?, maintenanceMode? }   (booleans; absent = unchanged)
+//       -> { success, settings: { globalOrdersEnabled, globalPaymentsEnabled, maintenanceMode, deferredOrdersEnabled, deferredOrdersCap,
+//                                 deferredOrdersTtlHours, updatedAt }, unfunded: { count, charge, cost, oldest, providers: [...] } }
+//   { action: "UPDATE", ordersEnabled?, paymentsEnabled?, maintenanceMode?, deferredOrdersEnabled? }   (booleans; absent = unchanged)
 //       -> same payload after the change. Audited in admin_audit_log.
+//   unfunded = paid orders waiting for a provider top-up (deferred funding): how many, what they cost, and per provider what to transfer.
 //
 // The switches take effect immediately: place-order and create-deposit read platform_settings on every call.
 //
@@ -51,21 +53,35 @@ Deno.serve(instrument('admin-settings', async (req: Request, { log }): Promise<R
     if ('error' in parsed) return fail(400, 'invalid_input', parsed.error)
 
     if (parsed.action === 'UPDATE') {
-      const asUser: Db = createClient(supabaseUrl, anonKey, {
-        auth: { persistSession: false },
-        global: { headers: { Authorization: req.headers.get('authorization') ?? '' } },
-      })
-      const { error } = await asUser.rpc('update_platform_settings', {
-        p_orders_enabled: parsed.ordersEnabled,
-        p_payments_enabled: parsed.paymentsEnabled,
-        p_maintenance_mode: parsed.maintenanceMode,
-      })
-      if (error) throw new Error(`update_platform_settings: ${error.message}`)
+      if (parsed.ordersEnabled !== null || parsed.paymentsEnabled !== null || parsed.maintenanceMode !== null) {
+        const asUser: Db = createClient(supabaseUrl, anonKey, {
+          auth: { persistSession: false },
+          global: { headers: { Authorization: req.headers.get('authorization') ?? '' } },
+        })
+        const { error } = await asUser.rpc('update_platform_settings', {
+          p_orders_enabled: parsed.ordersEnabled,
+          p_payments_enabled: parsed.paymentsEnabled,
+          p_maintenance_mode: parsed.maintenanceMode,
+        })
+        if (error) throw new Error(`update_platform_settings: ${error.message}`)
+      }
+      if (parsed.deferredOrdersEnabled !== null) {
+        // the admin was verified above (is_admin, not banned); the change is audited like the others
+        const before = await loadPlatformSettings(db)
+        const { error } = await db.from('platform_settings').update({ deferred_orders_enabled: parsed.deferredOrdersEnabled, updated_by: userId, updated_at: new Date().toISOString() }).eq('id', 1)
+        if (error) throw new Error(`update deferred_orders_enabled: ${error.message}`)
+        const { error: auditError } = await db.from('admin_audit_log').insert({
+          admin_id: userId, action: 'update_platform_settings', target_id: '1',
+          details: { deferred_orders_enabled: [before?.deferredOrdersEnabled ?? null, parsed.deferredOrdersEnabled] },
+        })
+        if (auditError) throw new Error(`audit log: ${auditError.message}`)
+      }
     }
 
     const settings = await loadPlatformSettings(db)
     if (!settings) throw new Error('platform_settings could not be read')
-    return json({ success: true, settings })
+    const { data: unfunded } = await db.rpc('unfunded_orders_summary')
+    return json({ success: true, settings, unfunded: unfunded ?? null })
   } catch (e) {
     log.error('request failed', { err: e, error_code: 'server_error' })
     return fail(500, 'server_error', 'Something went wrong. Please try again.')

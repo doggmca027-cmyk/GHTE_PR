@@ -325,15 +325,18 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
 function SuccessPanel({ result, onViewOrders, onClose }: { result: CreateOrderResult; onViewOrders: () => void; onClose: () => void }) {
   const t = useT()
   const pending = result.pending
+  const waiting = result.awaitingFunds === true
   const Icon = pending ? Clock : CheckCircle2
   return (
     <div className="pb-1 text-center" role="status">
       <span className={cn('mx-auto flex h-16 w-16 items-center justify-center rounded-full', pending ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600')}>
         <Icon size={32} strokeWidth={1.75} />
       </span>
-      <h3 className="mt-4 text-xl font-extrabold text-content-primary">{pending ? t('Confirming with provider') : t('Order placed!')}</h3>
+      <h3 className="mt-4 text-xl font-extrabold text-content-primary">{waiting ? t('Paid, waiting to be connected') : pending ? t('Confirming with provider') : t('Order placed!')}</h3>
       <p className="mx-auto mt-1.5 max-w-xs text-sm text-content-secondary">
-        {pending
+        {waiting
+          ? t('Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.', { hours: result.deferredTtlHours ?? 24 })
+          : pending
           ? t('Your order was received and is being confirmed. No action is needed: you will see it in your orders.')
           : t('Your order has been sent for delivery. You can follow its progress in your orders.')}
       </p>

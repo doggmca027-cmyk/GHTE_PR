@@ -282,6 +282,9 @@ const it: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': 'Abbiamo ricevuto il tuo ordine ed è in fase di conferma. Non serve fare nulla: lo vedrai tra i tuoi ordini.',
   'Your orders will show up here as soon as you place your first one.': 'I tuoi ordini compariranno qui non appena ne effettuerai il primo.',
   'Your Telegram session is invalid or expired. Reopen the app.': 'La tua sessione Telegram non è valida o è scaduta. Riapri l’app.',
+  'Waiting to be connected': 'In attesa di collegamento',
+  'Paid, waiting to be connected': 'Pagato, in attesa di collegamento',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': 'Il tuo ordine è pagato. Il servizio è in fase di collegamento e può richiedere fino a {hours} ore. Se non può essere avviato in tempo, l\'intero importo viene riaccreditato automaticamente sul tuo saldo.',
 }
 
 export default it

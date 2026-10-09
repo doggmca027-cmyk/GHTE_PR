@@ -24,6 +24,9 @@ export interface CreateOrderResult {
   order: CreatedOrder
   /** True when the provider outcome is still being confirmed (funds are held, nothing to retry). */
   pending: boolean
+  /** The order is paid and waits for the provider to be funded (deferred funding): it starts by itself or is refunded after `deferredTtlHours`. */
+  awaitingFunds?: boolean
+  deferredTtlHours?: number
   /** Fresh wallet from the server, when available. */
   wallet?: IWallet
 }
@@ -41,5 +44,7 @@ export interface IOrderView {
   startCount: number | null
   /** Money already returned for undelivered units (partial refund) or a cancellation. */
   refundedAmount: number
+  /** Paid, and waiting for the service to be connected (the provider is being funded). */
+  awaitingFunds: boolean
   createdAt: string
 }

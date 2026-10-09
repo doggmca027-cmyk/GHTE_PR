@@ -34,7 +34,7 @@ export function OrderCard({ order, onReportIssue }: { order: IOrderView; onRepor
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-content-primary">{order.serviceName}</h3>
-            <StatusBadge status={order.status} />
+            <StatusBadge status={order.status} waiting={order.awaitingFunds} />
           </div>
           <p className="mt-0.5 text-xs text-content-muted">{formatOrderDate(order.createdAt)}</p>
         </div>

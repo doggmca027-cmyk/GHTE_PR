@@ -282,6 +282,9 @@ const vi: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': 'Đã nhận đơn hàng và đang xác nhận. Bạn không cần làm gì: đơn sẽ hiện trong phần đơn hàng.',
   'Your orders will show up here as soon as you place your first one.': 'Đơn hàng của bạn sẽ hiện ở đây ngay khi bạn đặt đơn đầu tiên.',
   'Your Telegram session is invalid or expired. Reopen the app.': 'Phiên Telegram của bạn không hợp lệ hoặc đã hết hạn. Hãy mở lại ứng dụng.',
+  'Waiting to be connected': 'Đang chờ kết nối',
+  'Paid, waiting to be connected': 'Đã thanh toán, đang chờ kết nối',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': 'Đơn hàng của bạn đã được thanh toán. Dịch vụ đang được kết nối và việc này có thể mất tới {hours} giờ. Nếu không thể bắt đầu kịp thời, toàn bộ số tiền sẽ tự động được hoàn lại vào số dư của bạn.',
 }
 
 export default vi

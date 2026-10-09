@@ -282,6 +282,9 @@ const zh: Record<string, string> = {
   'Your order was received and is being confirmed. No action is needed: you will see it in your orders.': '已收到您的订单，正在确认。无需任何操作：您会在“订单”中看到它。',
   'Your orders will show up here as soon as you place your first one.': '下第一单后，您的订单就会显示在这里。',
   'Your Telegram session is invalid or expired. Reopen the app.': '您的 Telegram 会话无效或已过期。请重新打开应用。',
+  'Waiting to be connected': '等待接通',
+  'Paid, waiting to be connected': '已付款，等待接通',
+  'Your order is paid. The service is being connected and this can take up to {hours} hours. If it cannot be started in time, the full amount is returned to your balance automatically.': '您的订单已付款。服务正在接通，最长可能需要 {hours} 小时。如果无法及时开始，全部金额将自动退回到您的余额。',
 }
 
 export default zh

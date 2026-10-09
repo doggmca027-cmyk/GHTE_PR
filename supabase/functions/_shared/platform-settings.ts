@@ -14,6 +14,12 @@ export interface PlatformSettings {
   globalOrdersEnabled: boolean
   globalPaymentsEnabled: boolean
   maintenanceMode: boolean
+  /** Accept orders the provider cannot pay for yet and send them when it is funded (migration 20261115000000). Off unless the owner switches it on. */
+  deferredOrdersEnabled: boolean
+  /** USD of customer charges that may wait for provider funding at any time. */
+  deferredOrdersCap: number
+  /** A waiting order is refunded in full after this many hours. */
+  deferredOrdersTtlHours: number
   updatedAt: string | null
 }
 
@@ -30,7 +36,14 @@ export function settingsFromRow(row: Record<string, unknown> | null | undefined)
   if (!row) return null
   const { global_orders_enabled: o, global_payments_enabled: p, maintenance_mode: m } = row
   if (typeof o !== 'boolean' || typeof p !== 'boolean' || typeof m !== 'boolean') return null
-  return { globalOrdersEnabled: o, globalPaymentsEnabled: p, maintenanceMode: m, updatedAt: typeof row.updated_at === 'string' ? row.updated_at : null }
+  return {
+    globalOrdersEnabled: o, globalPaymentsEnabled: p, maintenanceMode: m,
+    // the deferred settings are optional for the fail-closed rule: a missing or odd value means "off" / the safe default, never a guess in favour of money
+    deferredOrdersEnabled: row.deferred_orders_enabled === true,
+    deferredOrdersCap: Number.isFinite(Number(row.deferred_orders_cap)) ? Number(row.deferred_orders_cap) : 0,
+    deferredOrdersTtlHours: Number.isInteger(Number(row.deferred_orders_ttl_hours)) && Number(row.deferred_orders_ttl_hours) > 0 ? Number(row.deferred_orders_ttl_hours) : 24,
+    updatedAt: typeof row.updated_at === 'string' ? row.updated_at : null,
+  }
 }
 
 /** Throws ServiceUnavailableError (with a message that is safe to show to users) when the switch is off. */
@@ -49,7 +62,7 @@ export async function loadPlatformSettings(db: DbLike, log: Pick<Logger, 'error'
   try {
     const { data, error } = await db
       .from('platform_settings')
-      .select('global_orders_enabled, global_payments_enabled, maintenance_mode, updated_at')
+      .select('global_orders_enabled, global_payments_enabled, maintenance_mode, deferred_orders_enabled, deferred_orders_cap, deferred_orders_ttl_hours, updated_at')
       .eq('id', 1)
       .maybeSingle()
     if (error) {
@@ -74,7 +87,7 @@ export async function enforceKillSwitch(db: DbLike, which: KillSwitch): Promise<
 
 export type SettingsRequest =
   | { action: 'GET' }
-  | { action: 'UPDATE'; ordersEnabled: boolean | null; paymentsEnabled: boolean | null; maintenanceMode: boolean | null }
+  | { action: 'UPDATE'; ordersEnabled: boolean | null; paymentsEnabled: boolean | null; maintenanceMode: boolean | null; deferredOrdersEnabled: boolean | null }
 
 /** Strict body validation: every switch is a real boolean or absent; an update must change at least one. */
 export function parseSettingsRequest(body: unknown): SettingsRequest | { error: string } {
@@ -93,7 +106,8 @@ export function parseSettingsRequest(body: unknown): SettingsRequest | { error: 
   const ordersEnabled = flag('ordersEnabled')
   const paymentsEnabled = flag('paymentsEnabled')
   const maintenanceMode = flag('maintenanceMode')
-  if (ordersEnabled === 'invalid' || paymentsEnabled === 'invalid' || maintenanceMode === 'invalid') return { error: 'Switches must be true or false.' }
-  if (ordersEnabled === null && paymentsEnabled === null && maintenanceMode === null) return { error: 'Nothing to update.' }
-  return { action: 'UPDATE', ordersEnabled, paymentsEnabled, maintenanceMode }
+  const deferredOrdersEnabled = flag('deferredOrdersEnabled')
+  if (ordersEnabled === 'invalid' || paymentsEnabled === 'invalid' || maintenanceMode === 'invalid' || deferredOrdersEnabled === 'invalid') return { error: 'Switches must be true or false.' }
+  if (ordersEnabled === null && paymentsEnabled === null && maintenanceMode === null && deferredOrdersEnabled === null) return { error: 'Nothing to update.' }
+  return { action: 'UPDATE', ordersEnabled, paymentsEnabled, maintenanceMode, deferredOrdersEnabled }
 }

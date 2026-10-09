@@ -15,6 +15,8 @@ const READ_TIMEOUT_MS = 10_000
 interface PlaceOrderResponse {
   success: boolean
   pending?: boolean
+  awaitingFunds?: boolean
+  deferredTtlHours?: number
   error?: OrderErrorCode
   message?: string
   shortfall?: number
@@ -60,7 +62,10 @@ export async function createOrder(session: AuthSession, payload: CreateOrderPayl
       wallet: body.wallet,
     })
   }
-  return { order: body.order, pending: body.pending === true || res.status === 202, wallet: body.wallet }
+  return {
+    order: body.order, pending: body.pending === true || res.status === 202, wallet: body.wallet,
+    ...(body.awaitingFunds === true ? { awaitingFunds: true, deferredTtlHours: body.deferredTtlHours ?? 24 } : {}),
+  }
 }
 
 interface OrderRow {
@@ -72,6 +77,7 @@ interface OrderRow {
   remains: number | null
   start_count: number | null
   partial_refund_amount: number | string
+  awaiting_funds_since: string | null
   created_at: string
   services: { name: string; categories: { platforms: { slug: Platform } | null } | null } | null
 }
@@ -80,7 +86,7 @@ interface OrderRow {
  * The only columns of `orders` the app reads. They are also the only ones the database lets a customer read (column grants in
  * 20261111000000_rls_hardening.sql): cost, profit, provider and internal notes are private. Name the columns explicitly: a wildcard select is refused.
  */
-export const ORDER_COLUMNS = ['id', 'target_url', 'quantity', 'charge_amount', 'status', 'remains', 'start_count', 'partial_refund_amount', 'created_at'] as const
+export const ORDER_COLUMNS = ['id', 'target_url', 'quantity', 'charge_amount', 'status', 'remains', 'start_count', 'partial_refund_amount', 'awaiting_funds_since', 'created_at'] as const
 
 /** The signed-in user's orders, newest first. Row Level Security scopes the query to auth.uid(). */
 export async function getOrders(session: AuthSession): Promise<IOrderView[]> {
@@ -106,6 +112,7 @@ export async function getOrders(session: AuthSession): Promise<IOrderView[]> {
     remains: o.remains,
     startCount: o.start_count,
     refundedAmount: Number(o.partial_refund_amount ?? 0),
+    awaitingFunds: o.status === 'paid' && o.awaiting_funds_since != null,
     createdAt: o.created_at,
   }))
 }
