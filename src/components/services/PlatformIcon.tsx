@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Send } from 'lucide-react'
 import { platformColor, platformInitials } from '@/constants/platforms'
+import { logoFailed, logoLoaded, logoUrl, markLogoFailed, markLogoLoaded } from '@/lib/platform-logo'
 import type { Platform } from '@/types/catalog'
 
 interface Props {
@@ -50,15 +52,39 @@ export function PlatformIcon({ platform, name, size = 20, strokeWidth = 1.75, cl
   }
 }
 
-/** A coloured tile with the platform's initials (its brand colour when it has one): the platform list. */
+/**
+ * The platform's tile in the list. It starts as a coloured tile with the platform's initials; the brand logo is requested from the
+ * SimpleIcons CDN (nothing is bundled) and replaces the initials only once it has actually loaded. If the request fails (offline,
+ * blocked, no such brand: 404) or no logo exists for the platform, the tile simply stays. A failed logo is remembered for the session.
+ */
 export function PlatformBadge({ slug, name, size = 44 }: { slug: string; name: string; size?: number }) {
+  const url = logoUrl(slug, name)
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'failed'>(url === null || logoFailed(url) ? 'failed' : logoLoaded(url) ? 'loaded' : 'loading')
+  const loaded = status === 'loaded'
   return (
     <span
       aria-hidden="true"
-      className="flex shrink-0 items-center justify-center rounded-2xl font-extrabold text-white shadow-sm"
-      style={{ width: size, height: size, backgroundColor: platformColor(slug), fontSize: Math.round(size * 0.36), letterSpacing: '-0.02em' }}
+      data-logo={status}
+      className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl font-extrabold text-white shadow-sm"
+      style={{
+        width: size, height: size, fontSize: Math.round(size * 0.36), letterSpacing: '-0.02em',
+        backgroundColor: loaded ? '#FFFFFF' : platformColor(slug), border: loaded ? '1px solid rgb(219 234 254 / 0.9)' : undefined,
+      }}
     >
-      {platformInitials(name)}
+      {!loaded && platformInitials(name)}
+      {url !== null && status !== 'failed' && (
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          draggable={false}
+          onLoad={() => { markLogoLoaded(url); setStatus('loaded') }}
+          onError={() => { markLogoFailed(url); setStatus('failed') }}
+          className={loaded ? 'h-[58%] w-[58%] object-contain' : 'absolute inset-0 h-full w-full opacity-0'}
+        />
+      )}
     </span>
   )
 }

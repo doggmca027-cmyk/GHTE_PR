@@ -35,6 +35,7 @@ const ja: Record<string, string> = {
   'Canceled / Refunded': 'キャンセル / 返金',
   'Category': 'カテゴリ',
   'Charged': '請求額',
+  'Clear search': '検索をクリア',
   'Close': '閉じる',
   'Closed': 'クローズ',
   'Completed': '完了',

@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { ChevronRight, Search, SearchX } from 'lucide-react'
+import { ChevronRight, Search, SearchX, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { haptic } from '@/lib/haptics'
 import { useT } from '@/i18n'
+import { searchPlatforms } from '@/lib/platform-search'
 import { PlatformBadge } from './PlatformIcon'
 
 export interface PlatformEntry {
@@ -21,36 +22,48 @@ interface Props {
 export function PlatformList({ platforms, onSelect }: Props) {
   const t = useT()
   const [query, setQuery] = useState('')
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return q === '' ? platforms : platforms.filter((p) => p.name.toLowerCase().includes(q) || p.slug.includes(q))
-  }, [platforms, query])
+  // in memory and instant: the list is already on the device, typing never makes a request
+  const shown = useMemo(() => searchPlatforms(platforms, query), [platforms, query])
 
   return (
     <>
-      <label className="relative block">
-        <span className="sr-only">{t('Search platforms')}</span>
-        <Search size={16} strokeWidth={1.75} className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-content-muted" />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('Search platforms')}
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          className="w-full rounded-2xl border border-blue-100/70 bg-white py-3 pe-4 ps-10 text-[15px] font-medium text-content-primary outline-none transition-colors placeholder:text-content-muted focus:border-brand"
-        />
-      </label>
+      {/* stays at the top of the scrolling screen while the list moves under it; the background matches the screen's, so it looks seamless */}
+      <div data-testid="platform-search" className="sticky top-0 z-10 -mx-5 bg-[#EDF4FD] px-5 pb-2 pt-1">
+        <label className="relative block">
+          <span className="sr-only">{t('Search platforms')}</span>
+          <Search size={16} strokeWidth={1.75} className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-content-muted" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('Search platforms')}
+            enterKeyHint="search"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            className="h-12 w-full rounded-2xl border border-blue-100/70 bg-white pe-11 ps-10 text-[16px] font-medium text-content-primary outline-none transition-colors placeholder:text-content-muted focus:border-brand [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query !== '' && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label={t('Clear search')}
+              className="absolute end-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-content-muted active:scale-90"
+            >
+              <X size={16} strokeWidth={2} />
+            </button>
+          )}
+        </label>
+      </div>
 
       {shown.length === 0 ? (
-        <Card className="mt-3 space-y-2 py-10 text-center">
+        <Card className="mt-1 space-y-2 py-10 text-center">
           <SearchX size={28} strokeWidth={1.75} className="mx-auto text-content-muted" />
           <p className="text-sm font-semibold text-content-primary">{t('No platforms found')}</p>
           <p className="text-xs text-content-secondary">{t('Try another name.')}</p>
         </Card>
       ) : (
-        <ul className="mt-3 space-y-2" aria-label={t('Platforms')}>
+        <ul className="mt-1 space-y-2" aria-label={t('Platforms')}>
           {shown.map((p) => (
             <li key={p.slug}>
               <button

@@ -35,6 +35,7 @@ const ru: Record<string, string> = {
   'Canceled / Refunded': 'Отменённые / возвраты',
   'Category': 'Категория',
   'Charged': 'Списано',
+  'Clear search': 'Очистить поиск',
   'Close': 'Закрыть',
   'Closed': 'Закрыто',
   'Completed': 'Выполнен',

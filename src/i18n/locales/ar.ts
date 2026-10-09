@@ -35,6 +35,7 @@ const ar: Record<string, string> = {
   'Canceled / Refunded': 'ملغاة / مستردة',
   'Category': 'الفئة',
   'Charged': 'تم الخصم',
+  'Clear search': 'مسح البحث',
   'Close': 'إغلاق',
   'Closed': 'مغلق',
   'Completed': 'مكتمل',

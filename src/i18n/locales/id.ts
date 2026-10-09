@@ -35,6 +35,7 @@ const id: Record<string, string> = {
   'Canceled / Refunded': 'Dibatalkan / dikembalikan',
   'Category': 'Kategori',
   'Charged': 'Ditagih',
+  'Clear search': 'Hapus pencarian',
   'Close': 'Tutup',
   'Closed': 'Ditutup',
   'Completed': 'Selesai',

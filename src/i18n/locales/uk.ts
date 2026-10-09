@@ -35,6 +35,7 @@ const uk: Record<string, string> = {
   'Canceled / Refunded': 'Скасовані / повернення',
   'Category': 'Категорія',
   'Charged': 'Списано',
+  'Clear search': 'Очистити пошук',
   'Close': 'Закрити',
   'Closed': 'Закрито',
   'Completed': 'Виконано',

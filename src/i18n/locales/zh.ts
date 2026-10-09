@@ -35,6 +35,7 @@ const zh: Record<string, string> = {
   'Canceled / Refunded': '已取消 / 已退款',
   'Category': '分类',
   'Charged': '已扣款',
+  'Clear search': '清除搜索',
   'Close': '关闭',
   'Closed': '已关闭',
   'Completed': '已完成',

@@ -35,6 +35,7 @@ const hi: Record<string, string> = {
   'Canceled / Refunded': 'रद्द / रिफ़ंड',
   'Category': 'श्रेणी',
   'Charged': 'काटा गया',
+  'Clear search': 'खोज साफ़ करें',
   'Close': 'बंद करें',
   'Closed': 'बंद',
   'Completed': 'पूरा हुआ',

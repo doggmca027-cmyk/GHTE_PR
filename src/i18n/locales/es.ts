@@ -35,6 +35,7 @@ const es: Record<string, string> = {
   'Canceled / Refunded': 'Cancelados / reembolsados',
   'Category': 'Categoría',
   'Charged': 'Cobrado',
+  'Clear search': 'Borrar búsqueda',
   'Close': 'Cerrar',
   'Closed': 'Cerrado',
   'Completed': 'Completado',

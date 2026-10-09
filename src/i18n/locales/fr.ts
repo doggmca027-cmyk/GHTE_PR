@@ -35,6 +35,7 @@ const fr: Record<string, string> = {
   'Canceled / Refunded': 'Annulées / remboursées',
   'Category': 'Catégorie',
   'Charged': 'Débité',
+  'Clear search': 'Effacer la recherche',
   'Close': 'Fermer',
   'Closed': 'Fermée',
   'Completed': 'Terminée',

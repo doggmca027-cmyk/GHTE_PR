@@ -35,6 +35,7 @@ const tr: Record<string, string> = {
   'Canceled / Refunded': 'İptal / iade',
   'Category': 'Kategori',
   'Charged': 'Tahsil edildi',
+  'Clear search': 'Aramayı temizle',
   'Close': 'Kapat',
   'Closed': 'Kapalı',
   'Completed': 'Tamamlandı',

@@ -35,6 +35,7 @@ const vi: Record<string, string> = {
   'Canceled / Refunded': 'Đã hủy / hoàn tiền',
   'Category': 'Danh mục',
   'Charged': 'Đã trừ',
+  'Clear search': 'Xóa tìm kiếm',
   'Close': 'Đóng',
   'Closed': 'Đã đóng',
   'Completed': 'Hoàn thành',
