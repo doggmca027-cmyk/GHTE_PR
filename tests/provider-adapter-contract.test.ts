@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   MockProviderAdapter,
   NORMALIZED_ORDER_STATUSES,
@@ -124,6 +124,31 @@ describe('SMMv2Adapter: the panel\'s own text about a service', () => {
     expect('description' in out[2]).toBe(false)
     expect('description' in out[3]).toBe(false)
     expect('description' in out[4]).toBe(false)
+  })
+})
+
+describe('SMMv2Adapter: a big catalogue gets a longer timeout than an order or a balance', () => {
+  const slowPanel = (body: unknown, delayMs: number) => (async (_url: unknown, init?: RequestInit) =>
+    new Promise<Response>((resolve, reject) => {
+      const t = setTimeout(() => resolve(new Response(JSON.stringify(body), { status: 200 })), delayMs)
+      init?.signal?.addEventListener('abort', () => { clearTimeout(t); reject(Object.assign(new Error('aborted'), { name: 'AbortError' })) })
+    })) as unknown as typeof fetch
+  const adapter = (fetchImpl: typeof fetch) => new SMMv2Adapter({ id: 'smm', name: 'Panel', apiUrl: 'https://panel.example/api/v2', apiKey: KEY, mockMode: false, fetchImpl, capabilities: DEFAULT_SMM_V2_CAPABILITIES })
+
+  it('waits 20 s for `services` (RootPanel takes that long) but still gives up on `balance` after the normal 10 s', async () => {
+    vi.useFakeTimers()
+    try {
+      const services = adapter(slowPanel([{ service: 1, name: 'A', type: 'Default', rate: '1', min: 10, max: 100, category: 'c' }], 20_000)).getServices()
+      await vi.advanceTimersByTimeAsync(20_001)
+      expect(await services).toHaveLength(1)
+
+      const balance = adapter(slowPanel({ balance: '1', currency: 'USD' }, 20_000)).getBalance()
+      const failed = expect(balance).rejects.toMatchObject({ kind: 'timeout', message: 'balance: no response within 10000ms' })
+      await vi.advanceTimersByTimeAsync(10_001)
+      await failed
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

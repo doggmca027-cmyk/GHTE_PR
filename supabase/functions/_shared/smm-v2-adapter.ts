@@ -57,6 +57,8 @@ export function createSMMv2Adapter(
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000
+/** A catalogue can be tens of thousands of services (RootPanel: 35,000, about 11 MB, ~20 s): the `services` call gets a longer leash than an order or a status. */
+const CATALOG_TIMEOUT_MS = 60_000
 
 /** Panel status word -> ours, through the shared table (providers/contract.ts). Unknown words are an error, never a status. */
 export function mapProviderStatus(raw: string): NormalizedOrderStatus {
@@ -344,8 +346,9 @@ export class SMMv2Adapter implements IProviderAdapter {
     const body = new URLSearchParams({ key: this.apiKey, action })
     for (const [k, v] of Object.entries(params)) if (v !== undefined) body.set(k, String(v))
 
+    const timeoutMs = action === 'services' ? Math.max(this.timeoutMs, CATALOG_TIMEOUT_MS) : this.timeoutMs
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs)
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
     let text: string
     let status: number
     try {
@@ -363,7 +366,7 @@ export class SMMv2Adapter implements IProviderAdapter {
       text = await res.text()
     } catch (e) {
       if (controller.signal.aborted || (e instanceof Error && e.name === 'AbortError')) {
-        throw new SMMProviderError('timeout', `${action}: no response within ${this.timeoutMs}ms`, {
+        throw new SMMProviderError('timeout', `${action}: no response within ${timeoutMs}ms`, {
           retryable: !stateChanging,
           ambiguous: stateChanging,
         })
