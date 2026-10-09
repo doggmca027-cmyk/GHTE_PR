@@ -1,16 +1,19 @@
-import { Layers, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
+import { platformColor, platformInitials } from '@/constants/platforms'
 import type { Platform } from '@/types/catalog'
 
 interface Props {
   platform: Platform
+  /** The platform's display name: its initials are shown for platforms without a drawn glyph. */
+  name?: string
   size?: number
   strokeWidth?: number
   className?: string
 }
 
 // lucide-react no longer ships brand logos, so these are minimal outline glyphs drawn to
-// match lucide's 24px grid and stroke style.
-export function PlatformIcon({ platform, size = 20, strokeWidth = 1.75, className }: Props) {
+// match lucide's 24px grid and stroke style. Platforms without one show their initials.
+export function PlatformIcon({ platform, name, size = 20, strokeWidth = 1.75, className }: Props) {
   if (platform === 'telegram') return <Send size={size} strokeWidth={strokeWidth} className={className} />
 
   const svg = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, className, 'aria-hidden': true }
@@ -39,6 +42,23 @@ export function PlatformIcon({ platform, size = 20, strokeWidth = 1.75, classNam
         </svg>
       )
     default:
-      return <Layers size={size} strokeWidth={strokeWidth} className={className} />
+      return (
+        <span aria-hidden="true" className={className} style={{ fontSize: Math.round(size * 0.62), lineHeight: 1, fontWeight: 800, letterSpacing: '-0.02em' }}>
+          {platformInitials(name ?? platform.replace(/-/g, ' '))}
+        </span>
+      )
   }
+}
+
+/** A coloured tile with the platform's initials (its brand colour when it has one): the platform list. */
+export function PlatformBadge({ slug, name, size = 44 }: { slug: string; name: string; size?: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex shrink-0 items-center justify-center rounded-2xl font-extrabold text-white shadow-sm"
+      style={{ width: size, height: size, backgroundColor: platformColor(slug), fontSize: Math.round(size * 0.36), letterSpacing: '-0.02em' }}
+    >
+      {platformInitials(name)}
+    </span>
+  )
 }

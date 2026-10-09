@@ -3,6 +3,8 @@ import { CheckCircle2, Clock, Link2, Loader2, ShieldCheck, TriangleAlert, X, Zap
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Toast, type ToastMessage } from '@/components/ui/Toast'
+import { tr, useT } from '@/i18n'
+import { tm } from '@/i18n/messages'
 import { useAuth } from '@/context/AuthContext'
 import { track } from '@/lib/analytics-client'
 import { newIdempotencyKey } from '@/lib/idempotency'
@@ -33,6 +35,7 @@ import { PromoField } from './PromoField'
 interface Props {
   service: ICatalogService
   platform: Platform
+  platformName?: string
   session: AuthSession
   onClose: () => void
   onTopUp: (shortfallUsd: number) => void
@@ -51,7 +54,8 @@ const inputClass = (invalid: boolean) =>
     invalid ? 'border-rose-300 focus:border-rose-400' : 'border-blue-100/70 focus:border-brand',
   )
 
-export function OrderModal({ service, platform, session, onClose, onTopUp, onViewOrders }: Props) {
+export function OrderModal({ service, platform, platformName, session, onClose, onTopUp, onViewOrders }: Props) {
+  const t = useT()
   const { applyWallet } = useAuth()
   const wallet = session.wallet
 
@@ -131,10 +135,10 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
       })
       if (result.wallet) applyWallet(result.wallet)
       haptic.success()
-      setToast({ kind: 'ok', text: `Order placed: charged ${formatUnits(toUnits(result.order.chargeAmount))}.` })
+      setToast({ kind: 'ok', text: t('Order placed: charged {amount}.', { amount: formatUnits(toUnits(result.order.chargeAmount)) }) })
       setPhase({ kind: 'done', result })
     } catch (e) {
-      const err = e instanceof OrderApiError ? e : new OrderApiError('server', 'Something went wrong. Please try again.')
+      const err = e instanceof OrderApiError ? e : new OrderApiError('server', tr('Something went wrong. Please try again.'))
       if (err.wallet) applyWallet(err.wallet)
       // A definitive answer (rejected / refunded / invalid) closes that key. Network errors keep it
       // so a retry is deduplicated by the server.
@@ -144,7 +148,7 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
       }
       haptic.error()
       if (err.code.startsWith('promo_')) invalidate() // the code's state changed under us: price it again
-      setPhase({ kind: 'error', message: err.message })
+      setPhase({ kind: 'error', message: tm(err.message) })
     } finally {
       submittingRef.current = false
     }
@@ -166,27 +170,27 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
   }
 
   const ctaLabel = busy
-    ? 'Placing order…'
+    ? t('Placing order…')
     : !qty.ok
-      ? 'Enter a valid quantity'
+      ? t('Enter a valid quantity')
       : pricing
-        ? 'Calculating price…'
+        ? t('Calculating price…')
         : promoRefused
-          ? 'Fix or remove the promo code'
+          ? t('Fix or remove the promo code')
           : balance.sufficient
-        ? `Order Now (Total ${formatUnits(totalUnits)})`
-        : `Top Up Balance (Needs +${formatUnits(balance.shortfallUnits)})`
+        ? t('Order Now (Total {total})', { total: formatUnits(totalUnits) })
+        : t('Top Up Balance (Needs +{amount})', { amount: formatUnits(balance.shortfallUnits) })
 
   return (
-    <div className="absolute inset-0 z-50 flex items-end animate-fade-in" role="dialog" aria-modal="true" aria-label="Configure order">
-      <button type="button" aria-label="Close" onClick={() => !busy && onClose()} className="absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]" />
+    <div className="absolute inset-0 z-50 flex items-end animate-fade-in" role="dialog" aria-modal="true" aria-label={t('Configure order')}>
+      <button type="button" aria-label={t('Close')} onClick={() => !busy && onClose()} className="absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]" />
 
       <div className="relative z-10 max-h-[92%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-white px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]">
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-blue-100" />
 
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-extrabold text-content-primary">{done ? 'Order received' : 'Configure order'}</h2>
-          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-sub text-content-secondary active:scale-90 disabled:opacity-40">
+          <h2 className="text-lg font-extrabold text-content-primary">{done ? t('Order received') : t('Configure order')}</h2>
+          <button type="button" onClick={onClose} disabled={busy} aria-label={t('Close')} className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-sub text-content-secondary active:scale-90 disabled:opacity-40">
             <X size={18} strokeWidth={2} />
           </button>
         </div>
@@ -198,16 +202,16 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
             {/* Service summary */}
             <div className="flex items-start gap-3 rounded-3xl border border-blue-100/70 bg-surface-sub p-4">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-light text-brand">
-                <PlatformIcon platform={platform} size={22} />
+                <PlatformIcon platform={platform} name={platformName} size={22} />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-[15px] font-bold leading-snug text-content-primary">{service.name}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Badge><Zap size={12} strokeWidth={2} /> {deriveSpeed(service.name)}</Badge>
-                  {service.refillSupported && <Badge><ShieldCheck size={12} strokeWidth={2} /> Refill</Badge>}
+                  <Badge><Zap size={12} strokeWidth={2} /> {t(deriveSpeed(service.name))}</Badge>
+                  {service.refillSupported && <Badge><ShieldCheck size={12} strokeWidth={2} /> {t('Refill')}</Badge>}
                 </div>
                 <p className="mt-2 text-xs font-medium text-content-secondary">
-                  {formatMoneyAmount(service.ratePer1000)} per 1,000 · {formatInt(service.minQuantity)} – {formatInt(service.maxQuantity)}
+                  {t('{rate} per 1,000 · {min} – {max}', { rate: formatMoneyAmount(service.ratePer1000), min: formatInt(service.minQuantity), max: formatInt(service.maxQuantity) })}
                 </p>
               </div>
             </div>
@@ -215,7 +219,7 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
             {/* Link */}
             <label className="mt-5 block">
               <span className="mb-1.5 flex items-center gap-1.5 text-sm font-bold text-content-primary">
-                <Link2 size={16} strokeWidth={1.75} className="text-brand" /> Target link
+                <Link2 size={16} strokeWidth={1.75} className="text-brand" /> {t('Target link')}
               </span>
               <input
                 type="url"
@@ -231,12 +235,12 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
                 aria-invalid={showLinkError}
                 className={inputClass(showLinkError)}
               />
-              {showLinkError && !url.ok && <p className="mt-1.5 text-xs font-medium text-rose-500">{url.error}</p>}
+              {showLinkError && !url.ok && <p className="mt-1.5 text-xs font-medium text-rose-500">{tm(url.error)}</p>}
             </label>
 
             {/* Quantity */}
             <label className="mt-4 block">
-              <span className="mb-1.5 block text-sm font-bold text-content-primary">Quantity</span>
+              <span className="mb-1.5 block text-sm font-bold text-content-primary">{t('Quantity')}</span>
               <input
                 type="text"
                 inputMode="numeric"
@@ -247,7 +251,7 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
                 aria-invalid={showQtyError}
                 className={inputClass(showQtyError)}
               />
-              {showQtyError && !qty.ok && <p className="mt-1.5 text-xs font-medium text-rose-500">{qty.error}</p>}
+              {showQtyError && !qty.ok && <p className="mt-1.5 text-xs font-medium text-rose-500">{tm(qty.error)}</p>}
             </label>
             <div className="mt-2.5 flex flex-wrap gap-2">
               {quantityPresets(service.minQuantity, service.maxQuantity).map((preset) => (
@@ -304,6 +308,7 @@ export function OrderModal({ service, platform, session, onClose, onTopUp, onVie
 }
 
 function SuccessPanel({ result, onViewOrders, onClose }: { result: CreateOrderResult; onViewOrders: () => void; onClose: () => void }) {
+  const t = useT()
   const pending = result.pending
   const Icon = pending ? Clock : CheckCircle2
   return (
@@ -311,23 +316,23 @@ function SuccessPanel({ result, onViewOrders, onClose }: { result: CreateOrderRe
       <span className={cn('mx-auto flex h-16 w-16 items-center justify-center rounded-full', pending ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600')}>
         <Icon size={32} strokeWidth={1.75} />
       </span>
-      <h3 className="mt-4 text-xl font-extrabold text-content-primary">{pending ? 'Confirming with provider' : 'Order placed!'}</h3>
+      <h3 className="mt-4 text-xl font-extrabold text-content-primary">{pending ? t('Confirming with provider') : t('Order placed!')}</h3>
       <p className="mx-auto mt-1.5 max-w-xs text-sm text-content-secondary">
         {pending
-          ? 'Your order was received and is being confirmed. No action is needed: you will see it in your orders.'
-          : 'Your order has been sent for delivery. You can follow its progress in your orders.'}
+          ? t('Your order was received and is being confirmed. No action is needed: you will see it in your orders.')
+          : t('Your order has been sent for delivery. You can follow its progress in your orders.')}
       </p>
 
       <div className="mt-5 rounded-3xl border border-blue-100/70 bg-surface-sub p-4 text-left text-sm">
-        <div className="flex justify-between"><span className="text-content-secondary">Quantity</span><span className="font-bold">{formatInt(result.order.quantity)}</span></div>
-        <div className="mt-2 flex justify-between"><span className="text-content-secondary">Charged</span><span className="font-bold">{formatUnits(toUnits(result.order.chargeAmount))}</span></div>
+        <div className="flex justify-between"><span className="text-content-secondary">{t('Quantity')}</span><span className="font-bold">{formatInt(result.order.quantity)}</span></div>
+        <div className="mt-2 flex justify-between"><span className="text-content-secondary">{t('Charged')}</span><span className="font-bold">{formatUnits(toUnits(result.order.chargeAmount))}</span></div>
         {result.wallet && (
-          <div className="mt-2 flex justify-between border-t border-blue-100/70 pt-2"><span className="text-content-secondary">New balance</span><span className="font-bold">{formatMoneyAmount(result.wallet.balance)}</span></div>
+          <div className="mt-2 flex justify-between border-t border-blue-100/70 pt-2"><span className="text-content-secondary">{t('New balance')}</span><span className="font-bold">{formatMoneyAmount(result.wallet.balance)}</span></div>
         )}
       </div>
 
-      <Button className="mt-5 h-14 w-full text-[15px]" onClick={() => { haptic.tap(); onViewOrders() }}>View my orders</Button>
-      <button type="button" onClick={onClose} className="mt-2 w-full rounded-2xl py-3 text-sm font-semibold text-content-secondary active:scale-95">Done</button>
+      <Button className="mt-5 h-14 w-full text-[15px]" onClick={() => { haptic.tap(); onViewOrders() }}>{t('View my orders')}</Button>
+      <button type="button" onClick={onClose} className="mt-2 w-full rounded-2xl py-3 text-sm font-semibold text-content-secondary active:scale-95">{t('Done')}</button>
     </div>
   )
 }

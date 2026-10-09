@@ -1,10 +1,12 @@
 import { Link2Off, Wallet } from 'lucide-react'
+import { useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
 import { shortAddress } from '@/lib/ton'
 import type { TonWallet } from '@/hooks/useTonWallet'
 
 /** "Connect Tonkeeper" before connecting; a pill with the short address (tap to disconnect) after. */
 export function TonWalletButton({ wallet }: { wallet: TonWallet }) {
+  const t = useT()
   if (!wallet.connected) {
     return (
       <button
@@ -12,7 +14,7 @@ export function TonWalletButton({ wallet }: { wallet: TonWallet }) {
         onClick={() => { haptic.tap(); wallet.connect() }}
         className="flex h-11 items-center gap-2 rounded-full border border-brand/30 bg-white px-4 text-sm font-bold text-brand shadow-sm transition-all hover:bg-brand-light active:scale-95"
       >
-        <Wallet size={18} strokeWidth={1.75} /> Connect Tonkeeper
+        <Wallet size={18} strokeWidth={1.75} /> {t('Connect Tonkeeper')}
       </button>
     )
   }
@@ -20,8 +22,8 @@ export function TonWalletButton({ wallet }: { wallet: TonWallet }) {
     <button
       type="button"
       onClick={() => { haptic.select(); void wallet.disconnect() }}
-      aria-label="Disconnect wallet"
-      title="Tap to disconnect"
+      aria-label={t('Disconnect wallet')}
+      title={t('Tap to disconnect')}
       className="group flex h-11 items-center gap-2 rounded-full bg-brand-light px-4 text-sm font-bold text-brand-text transition-all active:scale-95"
     >
       <span className="h-2 w-2 rounded-full bg-emerald-500" />

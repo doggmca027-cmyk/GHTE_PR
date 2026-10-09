@@ -1,4 +1,5 @@
 import { ArrowDownLeft, ArrowUpRight, Clock, RotateCcw, Sparkles } from 'lucide-react'
+import { useT } from '@/i18n'
 import { formatUnits, toUnits } from '@/lib/order-calc'
 import { formatOrderDate } from '@/lib/order-view'
 import { LEDGER_LABELS } from '@/lib/ledger-view'
@@ -15,6 +16,7 @@ const ICONS: Record<LedgerType, typeof ArrowDownLeft> = {
 }
 
 export function LedgerRow({ entry }: { entry: LedgerEntry }) {
+  const t = useT()
   const pending = entry.status === 'pending'
   const credit = entry.amount > 0
   const Icon = pending ? Clock : ICONS[entry.type]
@@ -29,7 +31,7 @@ export function LedgerRow({ entry }: { entry: LedgerEntry }) {
         <Icon size={20} strokeWidth={1.75} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[14px] font-bold text-content-primary">{LEDGER_LABELS[entry.type]}</p>
+        <p className="text-[14px] font-bold text-content-primary">{t(LEDGER_LABELS[entry.type])}</p>
         <p className="truncate text-xs text-content-secondary">{entry.description ?? ''}</p>
         <p className="text-[11px] text-content-muted">{formatOrderDate(entry.createdAt)}</p>
       </div>
@@ -38,7 +40,7 @@ export function LedgerRow({ entry }: { entry: LedgerEntry }) {
           {credit ? '+' : '−'}{formatUnits(Math.abs(toUnits(entry.amount)))}
         </p>
         <p className="text-[11px] font-medium text-content-muted">
-          {pending ? 'Pending' : entry.balanceAfter !== null ? `Bal ${formatUnits(toUnits(entry.balanceAfter))}` : ''}
+          {pending ? t('Pending') : entry.balanceAfter !== null ? t('Bal {amount}', { amount: formatUnits(toUnits(entry.balanceAfter)) }) : ''}
         </p>
       </div>
     </li>

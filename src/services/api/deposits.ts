@@ -1,3 +1,4 @@
+import { tr } from '@/i18n'
 import type { AuthSession } from '@/services/api/auth'
 import type { IWallet } from '@/types'
 import type { DepositAsset, DepositIntent, DepositQuote, LedgerEntry, LedgerType, VerifyResult } from '@/types/wallet'
@@ -27,12 +28,12 @@ async function callFunction(session: AuthSession, name: string, payload: unknown
       signal: AbortSignal.timeout(FUNCTION_TIMEOUT_MS),
     })
   } catch {
-    throw new DepositApiError('network', 'Connection lost. Please check your connection and try again.')
+    throw new DepositApiError('network', tr('Connection lost. Please check your connection and try again.'))
   }
   const body = (await res.json().catch(() => null)) as FnResponse | null
-  if (!body) throw new DepositApiError('server', 'Unexpected response from the server.')
+  if (!body) throw new DepositApiError('server', tr('Unexpected response from the server.'))
   if (body.success === false || !res.ok && res.status !== 202) {
-    throw new DepositApiError(body.error ?? (res.status === 401 ? 'unauthorized' : 'server'), body.message ?? 'Something went wrong. Please try again.')
+    throw new DepositApiError(body.error ?? (res.status === 401 ? 'unauthorized' : 'server'), body.message ?? tr('Something went wrong. Please try again.'))
   }
   return { status: res.status, body }
 }

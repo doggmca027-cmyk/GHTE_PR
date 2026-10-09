@@ -28,7 +28,9 @@ describe('platforms registry (real SQL)', () => {
 
   it('seeds the platforms; the legacy enum values are all present with the same slug', async () => {
     const all = await rows<{ slug: string; category: string }>(`select slug, category from platforms order by sort_order`)
-    expect(all.map((p) => p.slug)).toEqual(['telegram', 'instagram', 'tiktok', 'youtube', 'twitter', 'facebook', 'spotify', 'discord', 'reddit', 'website', 'other'])
+    // the first registry migration's eleven, in their order (later migrations add more platforms between and after them)
+    const first = ['telegram', 'instagram', 'tiktok', 'youtube', 'twitter', 'facebook', 'spotify', 'discord', 'reddit', 'website', 'other']
+    expect(all.map((p) => p.slug).filter((s) => first.includes(s))).toEqual(first)
     expect(all.map((p) => p.slug)).toEqual(expect.arrayContaining([...LEGACY_PLATFORM_SLUGS]))
     expect(await rows(`select 1 from pg_type where typname = 'platform_enum'`)).toHaveLength(0) // the enum is gone: the table is the only source
     expect(Object.fromEntries(all.map((p) => [p.slug, p.category]))).toMatchObject({ spotify: 'music', youtube: 'video', telegram: 'messaging', website: 'web' })
@@ -42,7 +44,13 @@ describe('platforms registry (real SQL)', () => {
   it('anyone reads active platforms; only admins see inactive ones', async () => {
     await db.exec(`update platforms set active = false where slug = 'reddit'`)
     await as('anon', null)
-    expect((await rows(`select 1 from platforms`)).length).toBe(10)
+    const visible = (await rows<{ slug: string }>(`select slug from platforms`)).map((p) => p.slug)
+    expect(visible).not.toContain('reddit')
+    expect(visible).not.toContain('onlyfans') // added switched off by 20261112000000_more_platforms.sql
+    expect(visible).toContain('telegram')
+    await db.exec('reset role')
+    expect(visible).toHaveLength((await rows<{ n: number }>(`select count(*)::int n from platforms where active`))[0].n)
+    await as('anon', null)
     await as('authenticated', user)
     expect((await rows(`select 1 from platforms where slug = 'reddit'`)).length).toBe(0)
     await as('authenticated', banned)
@@ -77,24 +85,24 @@ describe('platforms registry (real SQL)', () => {
   })
 
   it('admin_upsert_platform: admins only, validates, audits, never deletes', async () => {
-    const up = (slug: string, name = 'Snapchat', cat = 'social') => db.query(`select admin_upsert_platform($1, $2, $3, 'snap', true, 110)`, [slug, name, cat])
+    const up = (slug: string, name = 'Bandcamp', cat = 'music') => db.query(`select admin_upsert_platform($1, $2, $3, 'snap', true, 110)`, [slug, name, cat])
     await as('anon', null)
-    await expect(up('snapchat')).rejects.toThrow(/permission denied/)
+    await expect(up('bandcamp')).rejects.toThrow(/permission denied/)
     await as('authenticated', user)
-    await expect(up('snapchat')).rejects.toThrow(/forbidden/)
+    await expect(up('bandcamp')).rejects.toThrow(/forbidden/)
     await as('authenticated', banned)
-    await expect(up('snapchat')).rejects.toThrow(/forbidden/)
+    await expect(up('bandcamp')).rejects.toThrow(/forbidden/)
     await as('authenticated', admin)
-    await up(' Snapchat ')
-    await up('snapchat', 'Snapchat 2')
+    await up(' Bandcamp ')
+    await up('bandcamp', 'Bandcamp 2')
     await expect(up('bad slug!')).rejects.toThrow()
-    await expect(up('snapchat', 'S', 'nonsense')).rejects.toThrow()
+    await expect(up('bandcamp', 'S', 'nonsense')).rejects.toThrow()
     await db.exec('reset role')
-    expect(await rows(`select name, icon, sort_order from platforms where slug = 'snapchat'`)).toEqual([{ name: 'Snapchat 2', icon: 'snap', sort_order: 110 }])
+    expect(await rows(`select name, icon, sort_order from platforms where slug = 'bandcamp'`)).toEqual([{ name: 'Bandcamp 2', icon: 'snap', sort_order: 110 }])
     const audit = await rows<{ details: { before: unknown } }>(`select details from admin_audit_log where action = 'upsert_platform' order by created_at`)
     expect(audit).toHaveLength(2)
     expect(audit[0].details.before).toBeNull()
-    expect(audit[1].details.before).toMatchObject({ name: 'Snapchat' })
+    expect(audit[1].details.before).toMatchObject({ name: 'Bandcamp' })
   })
 
   it('updated_at moves on update; slugs are unique', async () => {

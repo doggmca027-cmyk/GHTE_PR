@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Check, Copy, LifeBuoy } from 'lucide-react'
 import { PlatformIcon } from '@/components/services/PlatformIcon'
+import { useT } from '@/i18n'
 import { copyText } from '@/lib/clipboard'
 import { haptic } from '@/lib/haptics'
 import { formatInt, formatUnits, toUnits } from '@/lib/order-calc'
@@ -9,6 +10,7 @@ import type { IOrderView } from '@/types/orders'
 import { StatusBadge } from './StatusBadge'
 
 export function OrderCard({ order, onReportIssue }: { order: IOrderView; onReportIssue?: (order: IOrderView) => void }) {
+  const t = useT()
   const [copied, setCopied] = useState(false)
   const ratio = deliveredRatio(order.quantity, order.remains)
   const showProgress = ratio !== null && isActiveStatus(order.status)
@@ -45,7 +47,7 @@ export function OrderCard({ order, onReportIssue }: { order: IOrderView; onRepor
         <button
           type="button"
           onClick={handleCopy}
-          aria-label={copied ? 'Link copied' : 'Copy link'}
+          aria-label={copied ? t('Link copied') : t('Copy link')}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-content-secondary shadow-sm active:scale-90"
         >
           {copied ? <Check size={14} strokeWidth={2} className="text-emerald-500" /> : <Copy size={14} strokeWidth={1.75} />}
@@ -55,7 +57,7 @@ export function OrderCard({ order, onReportIssue }: { order: IOrderView; onRepor
       {showProgress && order.remains !== null && (
         <div className="mt-3">
           <div className="mb-1 flex justify-between text-xs font-medium text-content-secondary">
-            <span>Remaining</span>
+            <span>{t('Remaining')}</span>
             <span>{formatInt(order.remains)} / {formatInt(order.quantity)}</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-blue-100/70" role="progressbar" aria-valuenow={Math.round((ratio ?? 0) * 100)} aria-valuemin={0} aria-valuemax={100}>
@@ -67,8 +69,8 @@ export function OrderCard({ order, onReportIssue }: { order: IOrderView; onRepor
       {order.refundedAmount > 0 && (
         <p className="mt-3 rounded-2xl bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-700">
           {order.status === 'partial' && order.remains !== null
-            ? `Partially completed: ${formatInt(order.remains)} undelivered. ${formatUnits(toUnits(order.refundedAmount))} refunded to your balance.`
-            : `${formatUnits(toUnits(order.refundedAmount))} refunded to your balance.`}
+            ? t('Partially completed: {n} undelivered. {amount} refunded to your balance.', { n: formatInt(order.remains), amount: formatUnits(toUnits(order.refundedAmount)) })
+            : t('{amount} refunded to your balance.', { amount: formatUnits(toUnits(order.refundedAmount)) })}
         </p>
       )}
 
@@ -78,12 +80,12 @@ export function OrderCard({ order, onReportIssue }: { order: IOrderView; onRepor
           onClick={() => onReportIssue(order)}
           className="mt-3 flex h-9 items-center gap-1.5 rounded-full bg-surface-sub px-3.5 text-[13px] font-semibold text-content-secondary active:scale-95"
         >
-          <LifeBuoy size={14} strokeWidth={1.75} /> Report an issue
+          <LifeBuoy size={14} strokeWidth={1.75} /> {t('Report an issue')}
         </button>
       )}
 
       <div className="mt-3 flex items-end justify-between border-t border-blue-100/60 pt-3">
-        <p className="text-xs font-medium text-content-secondary">Qty <span className="font-bold text-content-primary">{formatInt(order.quantity)}</span></p>
+        <p className="text-xs font-medium text-content-secondary">{t('Qty')} <span className="font-bold text-content-primary">{formatInt(order.quantity)}</span></p>
         <p className="text-lg font-extrabold leading-none text-content-primary">{formatUnits(toUnits(order.chargeAmount))}</p>
       </div>
     </article>

@@ -1,3 +1,4 @@
+import { tr } from '@/i18n'
 // Client of the user-tickets Edge Function (the signed-in customer's own tickets).
 import type { AuthSession } from '@/services/api/auth'
 import { mockTickets } from './mock-tickets'
@@ -22,7 +23,7 @@ export async function callTickets<T>(fn: 'user-tickets' | 'admin-tickets', sessi
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
   } catch {
-    throw new TicketApiError('network', 'Connection lost. Please try again.')
+    throw new TicketApiError('network', tr('Connection lost. Please try again.'))
   }
   const data = (await res.json().catch(() => null)) as (T & { success?: boolean; error?: string; message?: string }) | null
   if (res.ok && data?.success) return data

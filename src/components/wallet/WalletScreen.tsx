@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useAuth } from '@/context/AuthContext'
 import { useTonWallet } from '@/hooks/useTonWallet'
+import { useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
 import { LEDGER_FILTERS, matchesLedgerFilter } from '@/lib/ledger-view'
 import { cn } from '@/lib/utils'
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export function WalletScreen({ session, depositRequest, onRequestHandled }: Props) {
+  const t = useT()
   const { applyWallet } = useAuth()
   const tonWallet = useTonWallet()
   const [entries, setEntries] = useState<LedgerEntry[] | null>(null)
@@ -88,26 +90,26 @@ export function WalletScreen({ session, depositRequest, onRequestHandled }: Prop
   return (
     <>
       <div className="mb-3 flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold tracking-tight text-content-primary">Wallet</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-content-primary">{t('Wallet')}</h1>
         <TonWalletButton wallet={tonWallet} />
       </div>
 
       <BalanceCard wallet={session.wallet} onTopUp={() => { haptic.tap(); setInitialAmount(undefined); setDepositOpen(true) }} />
 
       <div className="mb-1 mt-6 flex items-center justify-between">
-        <h2 className="text-base font-extrabold text-content-primary">Transactions</h2>
+        <h2 className="text-base font-extrabold text-content-primary">{t('Transactions')}</h2>
         <button
           type="button"
           onClick={() => { haptic.tap(); void load() }}
           disabled={refreshing}
-          aria-label="Refresh transactions"
+          aria-label={t('Refresh transactions')}
           className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100/70 bg-white text-content-secondary shadow-sm active:scale-90"
         >
           <RefreshCw size={16} strokeWidth={1.75} className={cn(refreshing && 'animate-spin')} />
         </button>
       </div>
 
-      <div role="tablist" aria-label="Transaction filter" className="no-scrollbar -mx-5 flex gap-1.5 overflow-x-auto px-5 py-1">
+      <div role="tablist" aria-label={t('Transaction filter')} className="no-scrollbar -mx-5 flex gap-1.5 overflow-x-auto px-5 py-1">
         {LEDGER_FILTERS.map(({ id, label }) => (
           <button
             key={id}
@@ -117,7 +119,7 @@ export function WalletScreen({ session, depositRequest, onRequestHandled }: Prop
             onClick={() => { if (filter !== id) haptic.select(); setFilter(id) }}
             className={cn('shrink-0 rounded-2xl px-3.5 py-2 text-[13px] font-semibold transition-colors active:scale-95', filter === id ? 'bg-brand-light text-brand-text' : 'bg-white/70 text-content-secondary hover:bg-white')}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
@@ -129,8 +131,8 @@ export function WalletScreen({ session, depositRequest, onRequestHandled }: Prop
           <li>
             <Card className="space-y-3 text-center">
               <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
-              <p className="text-sm font-medium text-content-secondary">Couldn't load your transactions.</p>
-              <Button className="w-full" onClick={() => void load()}>Retry</Button>
+              <p className="text-sm font-medium text-content-secondary">{t("Couldn't load your transactions.")}</p>
+              <Button className="w-full" onClick={() => void load()}>{t('Retry')}</Button>
             </Card>
           </li>
         )}
@@ -139,8 +141,8 @@ export function WalletScreen({ session, depositRequest, onRequestHandled }: Prop
           <li>
             <Card className="space-y-2 py-8 text-center">
               <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-light text-brand"><ReceiptText size={22} strokeWidth={1.75} /></span>
-              <p className="text-sm font-bold text-content-primary">{entries.length === 0 ? 'No transactions yet' : 'Nothing here'}</p>
-              <p className="text-xs text-content-secondary">{entries.length === 0 ? 'Top up your balance to get started.' : 'No transactions match this filter.'}</p>
+              <p className="text-sm font-bold text-content-primary">{entries.length === 0 ? t('No transactions yet') : t('Nothing here')}</p>
+              <p className="text-xs text-content-secondary">{entries.length === 0 ? t('Top up your balance to get started.') : t('No transactions match this filter.')}</p>
             </Card>
           </li>
         )}

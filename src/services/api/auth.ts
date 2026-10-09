@@ -1,3 +1,4 @@
+import { tr } from '@/i18n'
 import { WebApp } from '@/lib/webapp'
 import { MOCK_SESSION } from '@/constants/dev'
 import { mockBackend } from '@/services/api/mock-orders'
@@ -41,10 +42,10 @@ export async function authenticateWithTelegram(): Promise<AuthSession> {
   if (!initData) {
     // dev fallback: plain browser, no Telegram
     if (import.meta.env.DEV) return { ...MOCK_SESSION, wallet: mockBackend.getWallet() }
-    throw new AuthError('not_in_telegram', 'Please open this app from Telegram.')
+    throw new AuthError('not_in_telegram', tr('Please open this app from Telegram.'))
   }
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new AuthError('not_configured', 'Backend is not configured (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).')
+    throw new AuthError('not_configured', tr('Backend is not configured (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).'))
   }
 
   let res: Response
@@ -56,7 +57,7 @@ export async function authenticateWithTelegram(): Promise<AuthSession> {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
   } catch {
-    throw new AuthError('network', 'Could not reach the server. Check your connection and retry.')
+    throw new AuthError('network', tr('Could not reach the server. Check your connection and retry.'))
   }
 
   const body = (await res.json().catch(() => null)) as
@@ -66,10 +67,10 @@ export async function authenticateWithTelegram(): Promise<AuthSession> {
 
   if (!res.ok || !body || 'error' in body) {
     const code = body && 'error' in body ? body.error : undefined
-    if (code === 'user_banned') throw new AuthError('user_banned', 'Your account is suspended.')
-    if (code === 'signups_paused') throw new AuthError('signups_paused', 'New registrations are temporarily closed. Please try again later.')
-    if (res.status === 401) throw new AuthError('rejected', 'Your Telegram session is invalid or expired. Reopen the app.')
-    throw new AuthError('server', 'Something went wrong on our side. Please try again.')
+    if (code === 'user_banned') throw new AuthError('user_banned', tr('Your account is suspended.'))
+    if (code === 'signups_paused') throw new AuthError('signups_paused', tr('New registrations are temporarily closed. Please try again later.'))
+    if (res.status === 401) throw new AuthError('rejected', tr('Your Telegram session is invalid or expired. Reopen the app.'))
+    throw new AuthError('server', tr('Something went wrong on our side. Please try again.'))
   }
   return { ...body, isMock: false }
 }

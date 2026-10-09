@@ -1,4 +1,5 @@
 import { NAV_ITEMS, type NavItem, type TabId } from '@/constants/navigation'
+import { useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function BottomNav({ active, onChange, items = NAV_ITEMS }: Props) {
+  const t = useT()
   return (
     <nav className="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
       <ul className="card m-0 flex list-none items-center justify-between rounded-[28px] p-1.5">
@@ -25,7 +27,7 @@ export function BottomNav({ active, onChange, items = NAV_ITEMS }: Props) {
                 )}
               >
                 <Icon size={22} strokeWidth={isActive ? 2 : 1.75} />
-                {label}
+                {t(label)}
               </button>
             </li>
           )

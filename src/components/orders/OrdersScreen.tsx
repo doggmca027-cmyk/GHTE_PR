@@ -3,6 +3,7 @@ import { AlertCircle, ReceiptText, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useAuth } from '@/context/AuthContext'
+import { useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
 import { isActiveStatus, matchesFilter, ORDER_FILTERS, type OrderFilter } from '@/lib/order-view'
 import { cn } from '@/lib/utils'
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
+  const t = useT()
   const { refreshWallet } = useAuth()
   const lastStatuses = useRef<Map<string, string>>(new Map())
   const [orders, setOrders] = useState<IOrderView[] | null>(null)
@@ -67,19 +69,19 @@ export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
   return (
     <>
       <div className="mb-3 flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold tracking-tight text-content-primary">Orders</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-content-primary">{t('Orders')}</h1>
         <button
           type="button"
           onClick={() => { haptic.tap(); void load() }}
           disabled={refreshing}
-          aria-label="Refresh orders"
+          aria-label={t('Refresh orders')}
           className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-100/70 bg-white text-content-secondary shadow-sm active:scale-90"
         >
           <RefreshCw size={18} strokeWidth={1.75} className={cn(refreshing && 'animate-spin')} />
         </button>
       </div>
 
-      <div role="tablist" aria-label="Order filter" className="no-scrollbar -mx-5 flex gap-1.5 overflow-x-auto px-5 py-1">
+      <div role="tablist" aria-label={t('Order filter')} className="no-scrollbar -mx-5 flex gap-1.5 overflow-x-auto px-5 py-1">
         {ORDER_FILTERS.map(({ id, label }) => (
           <button
             key={id}
@@ -92,7 +94,7 @@ export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
               filter === id ? 'bg-brand-light text-brand-text' : 'bg-white/70 text-content-secondary hover:bg-white',
             )}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
@@ -103,8 +105,8 @@ export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
         {error && (
           <Card className="space-y-3 text-center">
             <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
-            <p className="text-sm font-medium text-content-secondary">Couldn't load your orders. Check your connection and retry.</p>
-            <Button className="w-full" onClick={() => void load()}>Retry</Button>
+            <p className="text-sm font-medium text-content-secondary">{t("Couldn't load your orders. Check your connection and retry.")}</p>
+            <Button className="w-full" onClick={() => void load()}>{t('Retry')}</Button>
           </Card>
         )}
 
@@ -113,11 +115,11 @@ export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-light text-brand">
               <ReceiptText size={26} strokeWidth={1.75} />
             </span>
-            <p className="text-base font-bold text-content-primary">{orders.length === 0 ? 'No orders yet' : 'Nothing here'}</p>
+            <p className="text-base font-bold text-content-primary">{orders.length === 0 ? t('No orders yet') : t('Nothing here')}</p>
             <p className="mx-auto max-w-[240px] text-sm text-content-secondary">
-              {orders.length === 0 ? 'Your orders will show up here as soon as you place your first one.' : 'No orders match this filter.'}
+              {orders.length === 0 ? t('Your orders will show up here as soon as you place your first one.') : t('No orders match this filter.')}
             </p>
-            {orders.length === 0 && <Button className="mx-auto" onClick={onBrowse}>Browse services</Button>}
+            {orders.length === 0 && <Button className="mx-auto" onClick={onBrowse}>{t('Browse services')}</Button>}
           </Card>
         )}
 

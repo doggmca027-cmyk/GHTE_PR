@@ -1,6 +1,5 @@
-import type { Platform } from '../../supabase/functions/_shared/types.ts'
-
-export type { Platform }
+/** A platform slug from the registry (public.platforms.slug): 'telegram', 'twitch', 'apple-music', ... */
+export type Platform = string
 
 /** Active row of public.categories. */
 export interface ICategory {

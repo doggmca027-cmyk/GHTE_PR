@@ -1,4 +1,6 @@
-import { MOCK_CATALOG } from '@/constants/dev'
+import { MOCK_CATALOG, MOCK_PLATFORMS } from '@/constants/dev'
+import type { PlatformInfo } from '@/constants/platforms'
+import type { PlatformCategory } from '@/types/platform'
 import type { AuthSession } from '@/services/api/auth'
 import type { ICatalog, ICatalogService, ICategory, Platform } from '@/types/catalog'
 
@@ -47,6 +49,15 @@ async function rest<T>(path: string, token: string): Promise<T> {
 export const categoryFromRow = (c: CategoryRow): ICategory => ({
   id: c.id, platform: c.platforms.slug, name: c.name, slug: c.slug, iconUrl: c.icon_url, sortOrder: c.sort_order,
 })
+
+/** The active platforms of the registry, in the admin's order. Anyone may read them (RLS: active rows only). */
+export async function fetchPlatforms(session: AuthSession): Promise<PlatformInfo[]> {
+  if (session.isMock) return MOCK_PLATFORMS
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
+  const rows = await rest<Array<{ slug: string; name: string; category: PlatformCategory; sort_order: number }>>(
+    'platforms?select=slug,name,category,sort_order&active=eq.true&order=sort_order,name', session.token)
+  return rows.map((r) => ({ slug: r.slug, name: r.name, category: r.category, sortOrder: r.sort_order }))
+}
 
 export async function fetchCatalog(session: AuthSession): Promise<ICatalog> {
   if (session.isMock) return MOCK_CATALOG

@@ -1,12 +1,13 @@
+import { currentLocale, t, tr } from '@/i18n'
 import type { OrderStatus } from '@/types'
 
 export type OrderFilter = 'all' | 'active' | 'completed' | 'closed'
 
 export const ORDER_FILTERS: { id: OrderFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'active', label: 'Active' },
-  { id: 'completed', label: 'Completed' },
-  { id: 'closed', label: 'Canceled / Refunded' },
+  { id: 'all', label: tr('All') },
+  { id: 'active', label: tr('Active') },
+  { id: 'completed', label: tr('Completed') },
+  { id: 'closed', label: tr('Canceled / Refunded') },
 ]
 
 const ACTIVE: OrderStatus[] = ['awaiting_payment', 'paid', 'processing', 'submitted', 'in_progress']
@@ -36,17 +37,17 @@ export interface StatusMeta {
 
 export function statusMeta(status: OrderStatus): StatusMeta {
   switch (status) {
-    case 'completed': return { label: 'Completed', tone: 'success', pulse: false }
-    case 'partial': return { label: 'Partial', tone: 'success', pulse: false }
-    case 'submitted': return { label: 'Submitted', tone: 'brand', pulse: true }
-    case 'in_progress': return { label: 'In progress', tone: 'brand', pulse: true }
+    case 'completed': return { label: t('Completed'), tone: 'success', pulse: false }
+    case 'partial': return { label: t('Partial'), tone: 'success', pulse: false }
+    case 'submitted': return { label: t('Submitted'), tone: 'brand', pulse: true }
+    case 'in_progress': return { label: t('In progress'), tone: 'brand', pulse: true }
     case 'paid':
-    case 'awaiting_payment': return { label: 'Paid', tone: 'brand', pulse: true }
-    case 'processing': return { label: 'Processing', tone: 'warning', pulse: true }
-    case 'canceled': return { label: 'Canceled', tone: 'neutral', pulse: false }
-    case 'refunded': return { label: 'Refunded', tone: 'neutral', pulse: false }
-    case 'failed': return { label: 'Failed', tone: 'danger', pulse: false }
-    case 'draft': return { label: 'Draft', tone: 'neutral', pulse: false }
+    case 'awaiting_payment': return { label: t('Paid'), tone: 'brand', pulse: true }
+    case 'processing': return { label: t('Processing'), tone: 'warning', pulse: true }
+    case 'canceled': return { label: t('Canceled'), tone: 'neutral', pulse: false }
+    case 'refunded': return { label: t('Refunded'), tone: 'neutral', pulse: false }
+    case 'failed': return { label: t('Failed'), tone: 'danger', pulse: false }
+    case 'draft': return { label: t('Draft'), tone: 'neutral', pulse: false }
   }
 }
 
@@ -62,7 +63,7 @@ export function truncateUrl(url: string, max = 34): string {
   return bare.length <= max ? bare : `${bare.slice(0, max - 1)}…`
 }
 
-export function formatOrderDate(iso: string, locale = 'en-US'): string {
+export function formatOrderDate(iso: string, locale = currentLocale()): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   return d.toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })

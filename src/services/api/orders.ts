@@ -1,3 +1,4 @@
+import { tr } from '@/i18n'
 import type { AuthSession } from '@/services/api/auth'
 import type { IWallet, OrderStatus } from '@/types'
 import type { Platform } from '@/types/catalog'
@@ -46,15 +47,15 @@ export async function createOrder(session: AuthSession, payload: CreateOrderPayl
   } catch {
     throw new OrderApiError(
       'network',
-      'Connection lost. Your order may have gone through: check the Orders tab, or tap again to retry safely.',
+      tr('Connection lost. Your order may have gone through: check the Orders tab, or tap again to retry safely.'),
     )
   }
 
   const body = (await res.json().catch(() => null)) as PlaceOrderResponse | null
-  if (!body) throw new OrderApiError('server', 'Unexpected response from the server. Please check the Orders tab.')
+  if (!body) throw new OrderApiError('server', tr('Unexpected response from the server. Please check the Orders tab.'))
 
   if (!body.success || !body.order) {
-    throw new OrderApiError(body.error ?? (res.status === 401 ? 'unauthorized' : 'server'), body.message ?? 'Could not place the order.', {
+    throw new OrderApiError(body.error ?? (res.status === 401 ? 'unauthorized' : 'server'), body.message ?? tr('Could not place the order.'), {
       shortfall: body.shortfall,
       wallet: body.wallet,
     })

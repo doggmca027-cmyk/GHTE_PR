@@ -62,7 +62,12 @@ export function quantityPresets(min: number, max: number): number[] {
   return [...new Set(candidates.filter((q) => q >= min && q <= max))].slice(0, 4)
 }
 
+import { tr } from '@/i18n'
+
 export type Speed = 'Instant' | 'Fast' | 'Slow' | 'Standard'
+
+/** The labels a service's speed can show (display: t(speed)). */
+export const SPEED_LABELS = [tr('Instant'), tr('Fast'), tr('Slow'), tr('Standard')] as const
 
 /** Panels encode speed in the service title, e.g. "Views [Instant]". */
 export function deriveSpeed(name: string): Speed {

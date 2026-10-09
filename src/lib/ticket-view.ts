@@ -1,4 +1,5 @@
 // Display and validation rules for support tickets. Pure: no React, no I/O.
+import { t, tr } from '@/i18n'
 import type { IOrderView } from '@/types/orders'
 import type { TicketStatus } from '@/types/tickets'
 
@@ -15,15 +16,15 @@ export interface StatusMeta {
 }
 
 const CUSTOMER: Record<TicketStatus, StatusMeta> = {
-  open: { label: 'Waiting for support', className: 'bg-amber-50 text-amber-700' },
-  answered: { label: 'Support replied', className: 'bg-emerald-50 text-emerald-700' },
-  resolved: { label: 'Resolved', className: 'bg-brand-light text-brand-text' },
-  closed: { label: 'Closed', className: 'bg-slate-100 text-slate-600' },
+  open: { label: tr('Waiting for support'), className: 'bg-amber-50 text-amber-700' },
+  answered: { label: tr('Support replied'), className: 'bg-emerald-50 text-emerald-700' },
+  resolved: { label: tr('Resolved'), className: 'bg-brand-light text-brand-text' },
+  closed: { label: tr('Closed'), className: 'bg-slate-100 text-slate-600' },
 }
 const ADMIN: Record<TicketStatus, StatusMeta> = {
   ...CUSTOMER,
-  open: { label: 'Needs reply', className: 'bg-rose-50 text-rose-700' },
-  answered: { label: 'Answered', className: 'bg-emerald-50 text-emerald-700' },
+  open: { label: tr('Needs reply'), className: 'bg-rose-50 text-rose-700' },
+  answered: { label: tr('Answered'), className: 'bg-emerald-50 text-emerald-700' },
 }
 
 export const statusMeta = (status: TicketStatus, viewer: Viewer = 'customer'): StatusMeta => (viewer === 'admin' ? ADMIN : CUSTOMER)[status]
@@ -32,16 +33,16 @@ export const statusMeta = (status: TicketStatus, viewer: Viewer = 'customer'): S
 export const canReply = (status: TicketStatus): boolean => status !== 'closed'
 
 export function checkSubject(raw: string): string | null {
-  const t = raw.trim()
-  if (t.length < SUBJECT_MIN) return `Describe the problem in at least ${SUBJECT_MIN} characters.`
-  if (t.length > SUBJECT_MAX) return `Keep the subject under ${SUBJECT_MAX} characters.`
+  const text = raw.trim()
+  if (text.length < SUBJECT_MIN) return t('Describe the problem in at least {n} characters.', { n: SUBJECT_MIN })
+  if (text.length > SUBJECT_MAX) return t('Keep the subject under {n} characters.', { n: SUBJECT_MAX })
   return null
 }
 
 export function checkMessage(raw: string): string | null {
-  const t = raw.trim()
-  if (t.length === 0) return 'Write a message.'
-  if (t.length > MESSAGE_MAX) return `Keep the message under ${MESSAGE_MAX.toLocaleString('en-US')} characters.`
+  const text = raw.trim()
+  if (text.length === 0) return t('Write a message.')
+  if (text.length > MESSAGE_MAX) return t('Keep the message under {n} characters.', { n: MESSAGE_MAX.toLocaleString('en-US') })
   return null
 }
 
@@ -51,4 +52,4 @@ export function orderOptionLabel(o: Pick<IOrderView, 'id' | 'serviceName' | 'qua
 }
 
 /** A suggested subject when a ticket starts from an order's "Report an issue" button. */
-export const defaultSubjectFor = (o: Pick<IOrderView, 'serviceName'> | null): string => (o ? `Problem with my order: ${o.serviceName}`.slice(0, SUBJECT_MAX) : '')
+export const defaultSubjectFor = (o: Pick<IOrderView, 'serviceName'> | null): string => (o ? t('Problem with my order: {name}', { name: o.serviceName }).slice(0, SUBJECT_MAX) : '')

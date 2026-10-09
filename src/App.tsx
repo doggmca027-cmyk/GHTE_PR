@@ -11,6 +11,8 @@ import { ServicesScreen } from '@/components/services/ServicesScreen'
 import { SettingsScreen } from '@/components/settings/SettingsScreen'
 import { SupportScreen, type SupportRequest } from '@/components/support/SupportScreen'
 import { useAuth } from '@/context/AuthContext'
+import { useT } from '@/i18n'
+import { tm } from '@/i18n/messages'
 import { bindAnalytics, track } from '@/lib/analytics-client'
 import { WebApp } from '@/lib/webapp'
 
@@ -26,6 +28,7 @@ function FullScreen({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const t = useT()
   const { state, retry } = useAuth()
   const [tab, setTab] = useState<TabId>('home')
   const [depositRequest, setDepositRequest] = useState<DepositRequest | null>(null)
@@ -60,7 +63,7 @@ export default function App() {
   if (state.status === 'loading') {
     return (
       <FullScreen>
-        <Loader2 size={32} strokeWidth={2} className="animate-spin text-brand" aria-label="Loading" />
+        <Loader2 size={32} strokeWidth={2} className="animate-spin text-brand" aria-label={t('Loading')} />
       </FullScreen>
     )
   }
@@ -70,10 +73,10 @@ export default function App() {
       <FullScreen>
         <Card className="w-full max-w-sm space-y-3 text-center">
           <AlertCircle size={32} strokeWidth={1.75} className="mx-auto text-brand" />
-          <h1 className="text-lg font-bold">Can't sign you in</h1>
-          <p className="text-sm text-content-secondary">{state.message}</p>
+          <h1 className="text-lg font-bold">{t("Can't sign you in")}</h1>
+          <p className="text-sm text-content-secondary">{tm(state.message)}</p>
           <Button className="w-full" onClick={retry}>
-            Try again
+            {t('Try again')}
           </Button>
         </Card>
       </FullScreen>
@@ -81,7 +84,8 @@ export default function App() {
   }
 
   const { user, wallet, isMock } = state.session
-  const title = NAV_ITEMS.find((i) => i.id === tab)?.label
+  const navLabel = NAV_ITEMS.find((i) => i.id === tab)?.label
+  const title = navLabel ? t(navLabel) : undefined
 
   return (
     <Layout
@@ -97,7 +101,7 @@ export default function App() {
       ) : tab === 'wallet' ? (
         <WalletScreen session={state.session} depositRequest={depositRequest} onRequestHandled={clearDepositRequest} />
       ) : tab === 'admin' && user.isAdmin ? (
-        <Suspense fallback={<Loader2 size={28} strokeWidth={2} className="mx-auto mt-16 animate-spin text-brand" aria-label="Loading" />}>
+        <Suspense fallback={<Loader2 size={28} strokeWidth={2} className="mx-auto mt-16 animate-spin text-brand" aria-label={t('Loading')} />}>
           <AdminScreen session={state.session} />
         </Suspense>
       ) : tab === 'settings' ? (
@@ -112,16 +116,16 @@ export default function App() {
           <Card className="space-y-3">
             <div className="flex gap-2">
               <Badge>
-                <Sparkles size={12} strokeWidth={2} /> New
+                <Sparkles size={12} strokeWidth={2} /> {t('New')}
               </Badge>
-              {isMock && <Badge>Dev mock user</Badge>}
+              {isMock && <Badge>{t('Dev mock user')}</Badge>}
             </div>
-            <h2 className="text-lg font-bold">Boost your socials</h2>
+            <h2 className="text-lg font-bold">{t('Boost your socials')}</h2>
             <p className="text-sm text-content-secondary">
-              Placeholder content for the {title?.toLowerCase()} screen.
+              {t('Placeholder content for the {title} screen.', { title: title?.toLowerCase() ?? '' })}
             </p>
             <Button className="w-full" onClick={() => setTab('services')}>
-              Browse services
+              {t('Browse services')}
             </Button>
           </Card>
         </>

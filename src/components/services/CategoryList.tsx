@@ -1,3 +1,4 @@
+import { useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 import type { ICategory } from '@/types/catalog'
@@ -12,11 +13,12 @@ interface Props {
 }
 
 export function CategoryList({ categories, value, onChange }: Props) {
+  const t = useT()
   if (categories.length === 0) return null
-  const options = [{ id: ALL_CATEGORIES, name: 'All' }, ...categories]
+  const options = [{ id: ALL_CATEGORIES, name: t('All') }, ...categories]
 
   return (
-    <div role="tablist" aria-label="Category" className="no-scrollbar -mx-5 flex gap-1.5 overflow-x-auto px-5 py-1">
+    <div role="tablist" aria-label={t('Category')} className="no-scrollbar -mx-5 flex gap-1.5 overflow-x-auto px-5 py-1">
       {options.map(({ id, name }) => {
         const active = id === value
         return (

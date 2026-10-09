@@ -1,3 +1,4 @@
+import { tr } from '@/i18n'
 // The brains of the live price in the order form, without React so it can be tested with fake timers.
 //
 // What it guarantees:
@@ -73,7 +74,7 @@ export function createQuoteController(opts: QuoteControllerOptions) {
       emit(state)
     } catch (e) {
       if (isAbort(e) || stale()) return
-      emit({ kind: 'error', message: e instanceof Error ? e.message : 'Could not refresh the price.' })
+      emit({ kind: 'error', message: e instanceof Error ? e.message : tr('Could not refresh the price.') })
     }
   }
 

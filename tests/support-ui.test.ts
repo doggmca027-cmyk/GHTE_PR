@@ -149,7 +149,7 @@ describe('Order history: "Report an issue"', () => {
     const fs = await import('node:fs')
     const path = await import('node:path')
     const read = (p: string) => fs.readFileSync(path.resolve(__dirname, '..', p), 'utf8')
-    expect(read('src/components/layout/Header.tsx')).toContain('aria-label="Support"')
+    expect(read('src/components/layout/Header.tsx')).toContain("aria-label={t('Support')}")
     expect(read('src/App.tsx')).toMatch(/setSupportRequest\(\{ orderId: order\.id \}\); setTab\('support'\)/)
     expect(read('src/components/admin/AdminScreen.tsx')).toContain("label: 'Support'")
   })

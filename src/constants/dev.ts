@@ -1,3 +1,5 @@
+import type { PlatformInfo } from '@/constants/platforms'
+import { FALLBACK_PLATFORMS } from '@/constants/platforms'
 import type { ICatalog, ICatalogService, ICategory } from '@/types/catalog'
 import type { AuthSession } from '@/services/api/auth'
 
@@ -32,6 +34,19 @@ const tgViews = cat(1, 'telegram', 'Telegram Views', 'telegram-views')
 const tgMembers = cat(2, 'telegram', 'Telegram Members', 'telegram-members')
 const igFollowers = cat(3, 'instagram', 'Instagram Followers', 'instagram-followers')
 const ttLikes = cat(4, 'tiktok', 'TikTok Likes', 'tiktok-likes')
+
+/** The registry's first platforms plus a few of the newer ones, so the dev list looks like production. */
+export const MOCK_PLATFORMS: PlatformInfo[] = [
+  ...FALLBACK_PLATFORMS.filter((p) => p.slug !== 'other'),
+  { slug: 'whatsapp', name: 'WhatsApp', category: 'messaging', sortOrder: 25 },
+  { slug: 'twitch', name: 'Twitch', category: 'video', sortOrder: 114 },
+  { slug: 'spotify', name: 'Spotify', category: 'music', sortOrder: 70 },
+  { slug: 'apple-music', name: 'Apple Music', category: 'music', sortOrder: 120 },
+  { slug: 'discord', name: 'Discord', category: 'community', sortOrder: 80 },
+  { slug: 'reddit', name: 'Reddit', category: 'community', sortOrder: 90 },
+  { slug: 'linkedin', name: 'LinkedIn', category: 'social', sortOrder: 111 },
+  { slug: 'other', name: 'Other', category: 'other', sortOrder: 1000 },
+]
 
 export const MOCK_CATALOG: ICatalog = {
   categories: [tgViews, tgMembers, igFollowers, ttLikes],

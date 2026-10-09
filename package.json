@@ -24,7 +24,8 @@
     "test:ton": "node --disable-warning=ExperimentalWarning scripts/ton-e2e.ts",
     "secrets:rotate": "node --disable-warning=ExperimentalWarning scripts/rotate-secrets.ts",
     "smoke:live": "node --disable-warning=ExperimentalWarning scripts/live-smoke-test.ts",
-    "observe:live": "node --disable-warning=ExperimentalWarning scripts/observe-live-test.ts"
+    "observe:live": "node --disable-warning=ExperimentalWarning scripts/observe-live-test.ts",
+    "i18n:keys": "node --disable-warning=ExperimentalWarning scripts/i18n-keys.ts"
   },
   "dependencies": {
     "@tonconnect/ui-react": "^3.0.2",

@@ -1,4 +1,5 @@
 import { LifeBuoy, Plus, Settings, ShieldCheck } from 'lucide-react'
+import { useT } from '@/i18n'
 import { cn, formatMoney } from '@/lib/utils'
 import { Logo } from './Logo'
 
@@ -19,6 +20,7 @@ const iconButton =
   'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-100/70 shadow-sm transition-colors active:scale-95'
 
 export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSupport, isAdmin = false, onOpenAdmin, active = null }: Props) {
+  const t = useT()
   return (
     <header className="flex shrink-0 items-center justify-between gap-2 px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
       <Logo />
@@ -26,7 +28,7 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSuppo
         <button
           type="button"
           onClick={onTopUp}
-          aria-label="Top up balance"
+          aria-label={t('Top up balance')}
           className="flex min-w-0 items-center gap-1.5 rounded-full border border-blue-100/70 bg-white py-1 pl-3 pr-1 shadow-sm"
         >
           <span className="truncate text-[13px] font-bold text-content-primary">{formatMoney(balance, currency)}</span>
@@ -37,7 +39,7 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSuppo
         <button
           type="button"
           onClick={onOpenSupport}
-          aria-label="Support"
+          aria-label={t('Support')}
           aria-pressed={active === 'support'}
           className={cn(iconButton, active === 'support' ? 'bg-brand text-white' : 'bg-white text-content-secondary')}
         >
@@ -46,7 +48,7 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSuppo
         <button
           type="button"
           onClick={onOpenSettings}
-          aria-label="Settings"
+          aria-label={t('Settings')}
           aria-pressed={active === 'settings'}
           className={cn(iconButton, active === 'settings' ? 'bg-brand text-white' : 'bg-white text-content-secondary')}
         >
@@ -56,7 +58,7 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSuppo
           <button
             type="button"
             onClick={onOpenAdmin}
-            aria-label="Admin"
+            aria-label={t('Admin')}
             aria-pressed={active === 'admin'}
             className={cn(iconButton, active === 'admin' ? 'bg-brand text-white' : 'bg-white text-brand')}
           >
