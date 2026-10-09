@@ -81,6 +81,10 @@ export interface SkippedService {
   reason: string
 }
 
+/** Placeholder services of some panels cost a trillion per 1000 (RootPanel has two); the column holds at most 10 billion. Nothing real costs this much. */
+export const MAX_RATE_PER_1000 = 100_000
+const INT4_MAX = 2_147_483_647
+
 export function normalizeProviderServices(list: IProviderService[]): {
   valid: IProviderService[]
   skipped: SkippedService[]
@@ -96,11 +100,11 @@ export function normalizeProviderServices(list: IProviderService[]): {
         ? 'duplicate service id'
         : !s.name.trim()
           ? 'empty name'
-          : !Number.isFinite(s.ratePer1000) || s.ratePer1000 < 0
+          : !Number.isFinite(s.ratePer1000) || s.ratePer1000 < 0 || s.ratePer1000 > MAX_RATE_PER_1000
             ? 'invalid rate'
-            : !Number.isInteger(s.minQuantity) || s.minQuantity <= 0
+            : !Number.isInteger(s.minQuantity) || s.minQuantity <= 0 || s.minQuantity > INT4_MAX
               ? 'invalid min'
-              : !Number.isInteger(s.maxQuantity) || s.maxQuantity < s.minQuantity
+              : !Number.isInteger(s.maxQuantity) || s.maxQuantity < s.minQuantity || s.maxQuantity > INT4_MAX
                 ? 'invalid max'
                 : null
     if (reason) skipped.push({ externalServiceId: id, reason })

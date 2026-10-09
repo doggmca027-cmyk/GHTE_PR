@@ -63,6 +63,21 @@ describe('normalizeProviderServices', () => {
   })
 })
 
+describe('normalizeProviderServices: values the database cannot hold', () => {
+  it('skips placeholder prices (RootPanel lists services at 1,000,000,000,000 per 1000) and quantities beyond a 32-bit integer', () => {
+    const { valid, skipped } = normalizeProviderServices([
+      incoming({ externalServiceId: '1', ratePer1000: 100_000 }),
+      incoming({ externalServiceId: '2', ratePer1000: 1_000_000_000_000 }),
+      incoming({ externalServiceId: '3', ratePer1000: 14_999_999_998.5 }),
+      incoming({ externalServiceId: '4', minQuantity: 10, maxQuantity: 2_147_483_647 }),
+      incoming({ externalServiceId: '5', minQuantity: 10, maxQuantity: 2_147_483_648 }),
+      incoming({ externalServiceId: '6', minQuantity: 2_147_483_648, maxQuantity: 2_147_483_649 }),
+    ])
+    expect(valid.map((s) => s.externalServiceId)).toEqual(['1', '4'])
+    expect(skipped.map((s) => [s.externalServiceId, s.reason])).toEqual([['2', 'invalid rate'], ['3', 'invalid rate'], ['5', 'invalid max'], ['6', 'invalid min']])
+  })
+})
+
 describe('diffProviderServices', () => {
   it('classifies added / updated / unchanged / missing / reactivated', () => {
     const existing = [
