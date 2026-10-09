@@ -43,7 +43,17 @@ Provider data does not belong here, with one legacy exception (section 4).
 ### provider_services
 One row per service in a **provider's own catalog**: `external_service_id` (the id at the panel), `rate_per_1000` (the
 panel's price), its own limits and flags, `is_active`. `sync-catalog` keeps it in step with the panel every hour.
-`unique (provider_id, external_service_id)`.
+`unique (provider_id, external_service_id)`. Also kept: `service_type` (the panel's own type, "Default", "Package", ...) and
+`description` (the panel's own text, when it sends one: `desc`).
+
+**Publishing.** After storing a catalogue the sync calls `publish_provider_services` (service role only): every service of type
+"Default" with a real price and sane limits gets a category (per platform, by the panel's category text) and a storefront
+service, named in English by the glossary (`service-text.ts`; the original stays in `name_i18n.ru`), with its facts in
+`attributes` (refill, start time, speed, geography, drops). The customer-side description is generated from those facts in the
+customer's language. A service an admin made by hand (`auto_published = false`) is never touched. A provider with
+`routing_enabled = false` is imported but **never published**, and the hourly run does not even sync it (call `sync-catalog`
+with `{"providerId": ...}` to import or refresh it). Prices: the admin sets markups for everything / a platform / a category /
+a service (Admin -> Цены и наценки); with no rule that applies, the sync keeps the price a service has (the publisher gives a new one cost x 2.5) and only lifts it to cost + the minimum margin.
 
 ### provider_service_offers (the provider offer)
 **One normalized service can have many offers.** An offer says "this provider fulfils this service at this cost":

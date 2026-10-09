@@ -31,7 +31,7 @@ import {
   type ProviderSyncReport,
   type ServiceRow,
 } from './catalog-sync.ts'
-import { buildPublishRows, type PublishRow } from './catalog-publish.ts'
+import { buildPublishRows, isPublishable, type PublishCandidate, type PublishRow } from './catalog-publish.ts'
 import type { Logger } from './logger.ts'
 import type { IProviderAdapter } from './providers/contract.ts'
 import { groupByService, serviceCostBasis, type PricingOffer } from './service-cost.ts'
@@ -45,6 +45,13 @@ export const MAX_DEACTIVATION_RATIO = 0.5
 export const MIN_CATALOG_FOR_RATIO_GUARD = 20
 /** Rows per publish_provider_services call (a few hundred KB of JSON). */
 export const PUBLISH_CHUNK = 600
+/**
+ * Services put on the storefront per run. An Edge Function has a couple of seconds of CPU per request and translating a name costs a fraction of
+ * a millisecond, so a first catalogue of ten thousand services is taken in slices: the next hourly run (or a manual one) carries on.
+ */
+export const PUBLISH_BUDGET = 1500
+/** Storefront services rewritten per run (price and availability changes). Availability changes go first; the rest waits for the next run. */
+export const MAX_SERVICE_UPDATES = 3000
 
 /** Everything the run reads or writes. Implementations page and chunk as they need. */
 export interface CatalogStore {
@@ -65,6 +72,11 @@ export interface CatalogStore {
   publishServices?(providerId: string, rows: PublishRow[]): Promise<{ categories_changed: number; services_created: number; services_updated: number }>
   /** Slugs of the platforms of the registry (a category on an unknown platform goes to "other"). */
   loadPlatformSlugs?(): Promise<string[]>
+  /**
+   * Refresh last_synced_at of every active row of the provider except `skipIds` (the ones the panel no longer lists), inside the database.
+   * Optional: a store without it gets every row rewritten on every run.
+   */
+  touchProviderServices?(providerId: string, atIso: string, skipIds: string[]): Promise<void>
 }
 
 export interface SyncProviderInput {
@@ -75,6 +87,8 @@ export interface SyncProviderInput {
   rules: PriceRule[]
   log: Logger
   now?: () => Date
+  /** Publish this slice of the catalogue (offset / count in the panel's order) instead of what is new or changed: for a manual re-publish after the translator improved. */
+  republish?: { offset: number; limit: number }
 }
 
 export async function syncProviderCatalog(input: SyncProviderInput): Promise<ProviderSyncReport> {
@@ -122,13 +136,18 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
     report.warning = `deactivation skipped: ${diff.missing.length}/${activeBefore} services missing from provider response`
   }
 
-  // 3. Upsert provider_services (new ones are only stored, never put on the storefront).
-  const saved = await store.upsertProviderServices(diff.rows)
+  // 3. Write provider_services (new ones are only stored here). With a store that can, only what is new or changed is sent: the rest has its
+  //    last_synced_at refreshed inside the database, so an unchanged catalogue of tens of thousands of services costs almost nothing.
+  const lean = typeof store.touchProviderServices === 'function'
+  const changedExternal = new Set([...diff.added, ...diff.updated])
+  const saved = await store.upsertProviderServices(lean ? diff.rows.filter((r) => changedExternal.has(r.external_service_id)) : diff.rows)
+  if (lean) await store.touchProviderServices!(provider.id, nowIso, diff.missing.map((m) => m.id))
   report.added = diff.added.length
   report.updated = diff.updated.length
 
   // 4. Offers: cost and limits follow the provider service, so routing always sees the real margin base.
-  const driftedOffers = planOfferSync(await store.loadOffers(provider.id))
+  const providerOffers = await store.loadOffers(provider.id)
+  const driftedOffers = planOfferSync(providerOffers)
   if (driftedOffers.length > 0) await store.updateOffers(driftedOffers)
   report.offers.synced = driftedOffers.length
 
@@ -145,12 +164,29 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
   //     refreshed). A failure here is reported but never stops the pricing of what is already on the storefront.
   if (provider.routing_enabled !== false && store.publishServices && store.loadPlatformSlugs) {
     try {
-      const idByExternal = new Map(saved.map((s) => [s.external_service_id, s.id]))
-      const candidates = valid.flatMap((s) => {
+      const idByExternal = new Map([...existingPS.map((e) => [e.external_service_id, e.id] as const), ...saved.map((s) => [s.external_service_id, s.id] as const)])
+      const candidates = valid.flatMap((s): PublishCandidate[] => {
         const id = idByExternal.get(s.externalServiceId)
         return id ? [{ id, name: s.name, categoryRaw: s.categoryRaw, serviceType: s.type ?? null, rate: s.ratePer1000, min: s.minQuantity, max: s.maxQuantity, description: s.description ?? null }] : []
       })
-      const built = buildPublishRows(candidates, new Set(await store.loadPlatformSlugs()))
+      // What needs doing: what is new or changed (changes first), within the budget; a manual slice overrides this.
+      const onStorefront = new Set(providerOffers.map((o) => o.provider_service_id))
+      const changedIds = new Set<string>()
+      for (const ext of changedExternal) {
+        const id = idByExternal.get(ext)
+        if (id) changedIds.add(id)
+      }
+      let chosen: PublishCandidate[]
+      let backlog = 0
+      if (input.republish) {
+        chosen = candidates.filter(isPublishable).slice(input.republish.offset, input.republish.offset + input.republish.limit)
+      } else {
+        const wanted = candidates.filter((c) => (!onStorefront.has(c.id) || changedIds.has(c.id)) && isPublishable(c))
+        const ordered = [...wanted.filter((c) => changedIds.has(c.id)), ...wanted.filter((c) => !changedIds.has(c.id))]
+        chosen = ordered.slice(0, PUBLISH_BUDGET)
+        backlog = ordered.length - chosen.length
+      }
+      const built = buildPublishRows(chosen, new Set(await store.loadPlatformSlugs()))
       const total = { created: 0, updated: 0, categories: 0 }
       for (let i = 0; i < built.rows.length; i += PUBLISH_CHUNK) {
         const r = await store.publishServices(provider.id, built.rows.slice(i, i + PUBLISH_CHUNK))
@@ -158,7 +194,7 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
         total.updated += r.services_updated
         total.categories += r.categories_changed
       }
-      report.published = { ...total, skipped: built.skipped, untranslatedServices: built.untranslatedServices, untranslatedCategories: built.untranslatedCategories }
+      report.published = { ...total, skipped: candidates.length - candidates.filter(isPublishable).length, untranslatedServices: built.untranslatedServices, untranslatedCategories: built.untranslatedCategories, backlog }
     } catch (e) {
       log.error('publishing the catalogue failed', { err: e, providerId: provider.id, error_code: 'catalog_publish_failed' })
       report.warning = [report.warning, `publishing failed: ${e instanceof Error ? e.message : 'unknown error'}`].filter(Boolean).join('; ')
@@ -170,7 +206,7 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
   const reactivatedPsIds = new Set(existingPS.filter((e) => diff.reactivated.has(e.external_service_id)).map((e) => e.id))
   const linked = await store.loadLinkedServices(provider.id)
   const offersByService = groupByService(linked.length > 0 ? await store.loadServiceOffers(linked.map((s) => s.id)) : [])
-  const toUpdate: ServiceRow[] = []
+  const planned: { row: ServiceRow; plan: ReturnType<typeof planService> }[] = []
   for (const service of linked) {
     const offers = offersByService.get(service.id) ?? []
     const plan = planService({
@@ -181,12 +217,22 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
       offerLost: offers.some((o) => deactivatedPsIds.has(o.provider_service_id)),
     })
     if (plan.action !== 'update' || !plan.row) continue
-    toUpdate.push(plan.row)
+    planned.push({ row: plan.row, plan })
+  }
+  // A run rewrites a bounded number of services. A service that must leave the storefront (or come back) goes before a price change;
+  // whatever is left still differs from what it should be, so the next run picks it up.
+  if (planned.length > MAX_SERVICE_UPDATES) {
+    const availability = (p: { plan: ReturnType<typeof planService> }) => (p.plan.deactivated || p.plan.reactivated ? 0 : 1)
+    planned.sort((a, b) => availability(a) - availability(b))
+    report.services.deferred = planned.length - MAX_SERVICE_UPDATES
+    planned.length = MAX_SERVICE_UPDATES
+  }
+  for (const { plan } of planned) {
     report.services.updated++
     if (plan.repriced) report.services.repriced++
     if (plan.reactivated) report.services.reactivated++
     if (plan.deactivated) report.services.deactivated++
   }
-  if (toUpdate.length > 0) await store.updateServices(toUpdate)
+  if (planned.length > 0) await store.updateServices(planned.map((p) => p.row))
   return report
 }

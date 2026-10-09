@@ -1,6 +1,6 @@
 // The catalog sync end to end, through the IProviderAdapter contract (MockProviderAdapter) and an in-memory CatalogStore.
 import { describe, expect, it } from 'vitest'
-import { syncProviderCatalog, type CatalogStore } from '../supabase/functions/_shared/catalog-sync-run.ts'
+import { MAX_SERVICE_UPDATES, syncProviderCatalog, type CatalogStore } from '../supabase/functions/_shared/catalog-sync-run.ts'
 import {
   planOfferSync,
   type ExistingOffer,
@@ -38,6 +38,9 @@ class MemoryStore implements CatalogStore {
   anomalies: string[] = []
   balance: number | null = null
   writes: string[] = []
+  /** What each upsert / touch call carried, to see that an unchanged catalogue is not sent back. */
+  upserted: string[][] = []
+  touched: { at: string; skip: string[] }[] = []
   private seq = 0
 
   addPS(ext: string, o: Partial<ExistingProviderService> & { provider_id?: string } = {}) {
@@ -66,8 +69,13 @@ class MemoryStore implements CatalogStore {
   async loadProviderServices(providerId: string) {
     return [...this.ps.values()].filter((e) => e.provider_id === providerId).map(({ provider_id: _p, ...e }) => e)
   }
+  async touchProviderServices(providerId: string, atIso: string, skipIds: string[]) {
+    this.touched.push({ at: atIso, skip: skipIds })
+    for (const e of this.ps.values()) if (e.provider_id === providerId && e.is_active && !skipIds.includes(e.id)) (e as { last_synced_at?: string }).last_synced_at = atIso
+  }
   async upsertProviderServices(rows: ProviderServiceRow[]) {
     this.writes.push('provider_services')
+    this.upserted.push(rows.map((r) => r.external_service_id))
     return rows.map((r) => {
       const prev = [...this.ps.values()].find((e) => e.provider_id === r.provider_id && e.external_service_id === r.external_service_id)
       const id = prev?.id ?? `ps-new-${++this.seq}-${r.external_service_id}`
@@ -359,5 +367,47 @@ describe('planOfferSync', () => {
     ])
     expect(rows.map((r) => r.id)).toEqual(['cost', 'limits', 'flags'])
     expect(rows[0]).toEqual({ id: 'cost', service_id: 's', provider_id: 'p', provider_service_id: 'ps', cost_per_1000: 1, min_quantity: 10, max_quantity: 100, refill_supported: false, cancel_supported: false })
+  })
+})
+
+describe('a run does a bounded amount of work', () => {
+  it('sends only what is new or changed, and refreshes last_synced_at of the rest inside the database (not listed ones are skipped)', async () => {
+    const store = new MemoryStore()
+    store.addPS('1'); store.addPS('2'); store.addPS('3'); store.addPS('9')
+    await run(store, [svc('1'), svc('2', { ratePer1000: 1.1 }), svc('3'), svc('4')]) // 1 and 3 unchanged, 2 changed, 4 new, 9 no longer listed
+    expect(store.upserted).toEqual([['2', '4']])
+    expect(store.touched).toEqual([{ at: '2026-10-08T00:00:00.000Z', skip: ['ps-9'] }])
+    expect([...store.ps.values()].find((p) => p.external_service_id === '1')).toMatchObject({ last_synced_at: '2026-10-08T00:00:00.000Z' })
+    expect([...store.ps.values()].find((p) => p.external_service_id === '9')).toMatchObject({ is_active: false })
+  })
+
+  it('an unchanged catalogue writes nothing at all to provider_services', async () => {
+    const store = new MemoryStore()
+    store.addPS('1'); store.addPS('2')
+    await run(store, [svc('1'), svc('2')])
+    expect(store.upserted).toEqual([[]])
+    expect(store.touched).toHaveLength(1)
+  })
+
+  it('writes at most MAX_SERVICE_UPDATES storefront services per run, availability changes first; the rest is left for the next run', async () => {
+    const store = new MemoryStore()
+    const n = MAX_SERVICE_UPDATES + 40
+    for (let i = 1; i <= n; i++) {
+      store.addPS(String(i))
+      store.addService(`s${i}`, `ps-${i}`, { customer_rate_per_1000: 50 }) // every price is wrong: all of them need a re-price
+      store.addOffer(`o${i}`, `s${i}`, `ps-${i}`)
+    }
+    // the last one has to leave the storefront: the panel dropped it
+    const listed = Array.from({ length: n - 1 }, (_, i) => svc(String(i + 1)))
+    const report = await run(store, listed)
+    expect(report.services.updated).toBe(MAX_SERVICE_UPDATES)
+    expect(report.services.deferred).toBe(n - MAX_SERVICE_UPDATES)
+    expect(store.services.get(`s${n}`)!.is_active).toBe(false) // the availability change was not the one that waited
+    const repriced = [...store.services.values()].filter((s) => s.customer_rate_per_1000 !== 50).length
+    expect(repriced).toBe(MAX_SERVICE_UPDATES - 1)
+    // the next run finishes the job
+    const again = await run(store, listed)
+    expect(again.services.deferred).toBeUndefined()
+    expect([...store.services.values()].filter((s) => s.is_active && s.customer_rate_per_1000 === 50)).toHaveLength(0)
   })
 })

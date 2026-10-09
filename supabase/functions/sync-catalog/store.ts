@@ -71,6 +71,10 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       return saved
     },
 
+    async touchProviderServices(providerId, atIso, skipIds) {
+      must(await db.rpc('touch_provider_services', { p_provider_id: providerId, p_at: atIso, p_skip: skipIds }), 'touch provider_services')
+    },
+
     async flagAnomaly(a) {
       must(await db.rpc('flag_catalog_anomaly', { p_provider_service_id: a.providerServiceId, p_reason: a.reason, p_observed: a.observed }), 'flag catalog anomaly')
     },

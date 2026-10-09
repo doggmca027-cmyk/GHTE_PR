@@ -114,6 +114,18 @@ describe('planService', () => {
     expect(plan.row).toMatchObject({ id: 's1', name: 'Admin renamed', description: 'desc', sort_order: 5, customer_rate_per_1000: 5 })
   })
 
+  it('with no price rule that applies, the price is kept; it is only lifted when it fell below cost + the minimum margin', () => {
+    const noRules = { ...base, rules: [] }
+    expect(planService({ ...noRules, existing: svc({ customer_rate_per_1000: 2.5 }), basis: basis({ cost: 1 }) }).action).toBe('none')
+    expect(planService({ ...noRules, existing: svc({ customer_rate_per_1000: 7 }), basis: basis({ cost: 1 }) }).action).toBe('none')
+    const lifted = planService({ ...noRules, existing: svc({ customer_rate_per_1000: 1 }), basis: basis({ cost: 1 }) })
+    expect(lifted.row?.customer_rate_per_1000).toBe(1.01)
+    // a rule for another platform does not apply either
+    expect(planService({ ...base, rules: [{ ...globalRule(150), platform: 'youtube' }], existing: svc({ customer_rate_per_1000: 2.5 }), basis: basis({ cost: 2 }) }).action).toBe('none')
+    // and as soon as a rule applies, it decides
+    expect(planService({ ...base, existing: svc({ customer_rate_per_1000: 2.5 }), basis: basis({ cost: 2 }) }).row?.customer_rate_per_1000).toBe(5)
+  })
+
   it('a cheaper offer lowers the price, a dearer base raises it', () => {
     expect(planService({ ...base, existing: svc(), basis: basis({ cost: 0.6 }) }).row?.customer_rate_per_1000).toBe(1.5)
     expect(planService({ ...base, existing: svc(), basis: basis({ cost: 1.4 }) }).row?.customer_rate_per_1000).toBe(3.5)

@@ -137,6 +137,10 @@ interface Row extends MonitoredProvider { }
 interface Script {
   down: Set<string>
   throwing?: Set<string>
+  /** Answers 502 to the first ping of every run and is fine on the second. */
+  flaky?: Set<string>
+  /** Refuses the key (not a transient failure: it must not be retried). */
+  badKey?: Set<string>
   hang?: Set<string>
   /** Balance each provider reports (default 500 USD); NaN simulates an unreadable balance field. */
   balance?: Record<string, number>
@@ -150,6 +154,7 @@ function portsFor(db: PGlite, script: Script) {
   const lowBalance: { name: string; balance: number; currency: string; proposalAmount?: number }[] = []
   const alerts: { name: string; kind: AlertKind }[] = []
   const pings: string[] = []
+  const flakySeen = new Set<string>()
   const ports: HealthPorts<Row> = {
     async listProviders() {
       return (await db.query<{ id: string; name: string; health_status: HealthStatus; pen: number }>(`select id, name, health_status, reliability_penalty_multiplier::float8 pen from providers where is_active and routing_enabled order by name`)).rows
@@ -159,6 +164,8 @@ function portsFor(db: PGlite, script: Script) {
       pings.push(p.id)
       if (script.hang?.has(p.id)) return new Promise<void>(() => {})
       if (script.throwing?.has(p.id)) throw new Error('unhandled boom')
+      if (script.badKey?.has(p.id)) throw new SMMProviderError('api', 'x', { code: 'invalid_api_key' })
+      if (script.flaky?.has(p.id) && !flakySeen.has(p.id)) { flakySeen.add(p.id); throw new SMMProviderError('http', 'x', { httpStatus: 502 }) }
       if (script.down.has(p.id)) throw new SMMProviderError('http', 'x', { httpStatus: 503 })
       const balance = script.balance?.[p.id] ?? 500
       return { balance, currency: 'usd' }
@@ -199,6 +206,7 @@ function portsFor(db: PGlite, script: Script) {
     },
     async notify(p, kind) { alerts.push({ name: p.name, kind }) },
     pingTimeoutMs: 50,
+    retryDelayMs: 0,
   }
   return { ports, alerts, pings, lowBalance }
 }
@@ -253,6 +261,24 @@ describe('provider-health-monitor core', () => {
       expect(r.alerts).toBe(0)
     }
     expect(alerts).toHaveLength(1)
+  })
+
+  it('a panel that answers 502 for a moment is asked again before it is declared unavailable: no flip, no alert', async () => {
+    const { ports, alerts, pings } = portsFor(db, { down: new Set(), flaky: new Set([A]) })
+    const report = await runHealthChecks(ports)
+    expect(await statusOf(db, A)).toBe('healthy')
+    expect(alerts).toEqual([])
+    expect(report).toMatchObject({ healthy: 2, unavailable: 0 })
+    expect(pings.filter((id) => id === A)).toHaveLength(2)
+    expect(pings.filter((id) => id === B)).toHaveLength(1)
+  })
+
+  it('a refused key is not transient: one ping, unavailable at once', async () => {
+    const { ports, alerts, pings } = portsFor(db, { down: new Set(), badKey: new Set([A]) })
+    await runHealthChecks(ports)
+    expect(await statusOf(db, A)).toBe('unavailable')
+    expect(alerts).toEqual([{ name: 'A', kind: 'down' }])
+    expect(pings.filter((id) => id === A)).toHaveLength(1)
   })
 
   it('alerts once on recovery and restores the status', async () => {

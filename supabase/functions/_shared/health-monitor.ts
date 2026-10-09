@@ -4,6 +4,8 @@
 // Rules:
 //   * One provider throwing can never stop the others (each runs in its own try/catch under allSettled).
 //   * A ping is bounded by PING_TIMEOUT_MS here even if the port itself hangs.
+//   * A transient failure (5xx, timeout, network) is retried once before the provider is declared unavailable: a panel that answers
+//     502 for a second would otherwise flip to unavailable, alert the admins and push traffic to the fallback for a minute.
 //   * Alerts fire only on a real transition and only for the caller that won the compare-and-set on
 //     providers.health_status, so a cron tick that finds nothing new (or two overlapping runs) sends nothing.
 //   * Routing needs no extra work: selectBestOffer / the pricing view already read providers.health_status.
@@ -11,6 +13,8 @@ import { SMMProviderError } from './providers/contract.ts'
 import type { HealthStatus } from './types.ts'
 
 export const PING_TIMEOUT_MS = 8_000
+/** A ping that failed in a way a moment can cure (a 5xx from the panel's gateway, a timeout, a dropped connection) is repeated once after this pause. */
+export const PING_RETRY_DELAY_MS = 2_000
 
 // Reliability penalty (providers.reliability_penalty_multiplier, 1..10): the router multiplies an offer's cost by it, so a provider
 // that keeps failing must be that much cheaper to win. It climbs fast on a failed check and falls back slowly on a good one, so a
@@ -125,6 +129,8 @@ export interface HealthPorts<P extends MonitoredProvider> {
   savePenalty?(provider: P, from: number, to: number): Promise<boolean>
   now?: () => Date
   pingTimeoutMs?: number
+  /** Pause before the single retry of a transient failure (default PING_RETRY_DELAY_MS). */
+  retryDelayMs?: number
 }
 
 export interface ProviderCheckReport {
@@ -172,6 +178,13 @@ export function classifyPingError(e: unknown): { status: 'unavailable' | 'inconc
 }
 
 class PingTimeout extends Error {}
+
+/** A failure that a repeat a moment later can cure: a timeout, a dropped connection or a 5xx. A refused key or a garbage answer is not. */
+export function isTransientPingError(e: unknown): boolean {
+  if (e instanceof PingTimeout) return true
+  if (e instanceof SMMProviderError) return e.kind === 'timeout' || e.kind === 'network' || (e.httpStatus !== undefined && e.httpStatus >= 500)
+  return false
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -236,7 +249,14 @@ async function checkOne<P extends MonitoredProvider>(p: P, ports: HealthPorts<P>
   let errorKind: string | null = null
   let reading: BalanceReading | void = undefined
   try {
-    reading = await withTimeout(Promise.resolve().then(() => ports.ping(p)), ports.pingTimeoutMs ?? PING_TIMEOUT_MS)
+    const ping = () => withTimeout(Promise.resolve().then(() => ports.ping(p)), ports.pingTimeoutMs ?? PING_TIMEOUT_MS)
+    try {
+      reading = await ping()
+    } catch (first) {
+      if (!isTransientPingError(first)) throw first
+      await new Promise((r) => setTimeout(r, ports.retryDelayMs ?? PING_RETRY_DELAY_MS))
+      reading = await ping()
+    }
   } catch (e) {
     if (e instanceof PingTimeout) {
       to = 'unavailable'

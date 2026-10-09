@@ -3,7 +3,7 @@ import path from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { buildPublishRows, type PublishCandidate } from '../supabase/functions/_shared/catalog-publish'
-import { PUBLISH_CHUNK, syncProviderCatalog, type CatalogStore } from '../supabase/functions/_shared/catalog-sync-run'
+import { PUBLISH_BUDGET, PUBLISH_CHUNK, syncProviderCatalog, type CatalogStore } from '../supabase/functions/_shared/catalog-sync-run'
 import { silentLogger } from '../supabase/functions/_shared/logger'
 import type { IProviderService } from '../supabase/functions/_shared/types'
 
@@ -170,6 +170,24 @@ describe('publish_provider_services (real schema)', () => {
     await db.query(`update services set auto_published = true, description = null where primary_provider_service_id = $1`, [ps['4']])
   })
 
+  it('touch_provider_services refreshes last_synced_at of the active rows except the skipped ones, and only the service role may call it', async () => {
+    await db.query(`update provider_services set last_synced_at = '2026-01-01' where provider_id = $1`, [provider])
+    await db.query(`update provider_services set is_active = false where id = $1`, [ps['6']])
+    const n = await one<number>(`select touch_provider_services($1::uuid, '2026-10-09T00:00:00Z'::timestamptz, array[$2::uuid]) v`, [provider, ps['1']])
+    expect(n).toBe(4) // six rows: one inactive, one skipped
+    const at = async (ext: string) => String((await rows(`select last_synced_at::text t from provider_services where id = $1`, [ps[ext]]))[0].t)
+    expect(await at('1')).toContain('2026-01-01')
+    expect(await at('6')).toContain('2026-01-01')
+    expect(await at('2')).toContain('2026-10-09')
+    // never moves a row backwards
+    expect(await one<number>(`select touch_provider_services($1::uuid, '2025-05-01T00:00:00Z'::timestamptz) v`, [provider])).toBe(0)
+    await db.query(`update provider_services set is_active = true where id = $1`, [ps['6']])
+    for (const role of ['anon', 'authenticated']) {
+      expect((await rows(`select has_function_privilege('${role}', 'public.touch_provider_services(uuid, timestamptz, uuid[])', 'execute') ok`))[0].ok).toBe(false)
+    }
+    expect((await rows(`select has_function_privilege('service_role', 'public.touch_provider_services(uuid, timestamptz, uuid[])', 'execute') ok`))[0].ok).toBe(true)
+  })
+
   it('a customer reads the published services through the app\'s own query: the English name, the original and the facts', async () => {
     await db.exec(`reset role; set role anon`)
     const r = await rows(`select name, name_i18n, attributes from services where is_active order by customer_rate_per_1000 limit 1`)
@@ -219,7 +237,52 @@ describe('the catalog sync publishes what it just stored', () => {
     expect(store.published[0].providerId).toBe('prov')
     expect(store.published[0].rows.map((r) => r.ps)).toEqual(['ps-1', 'ps-2'])
     expect(store.published[0].rows[0]).toMatchObject({ platform: 'telegram', name: 'Telegram Post Views [no refill]' })
-    expect(report.published).toEqual({ created: 2, updated: 0, categories: 1, skipped: 2, untranslatedServices: 0, untranslatedCategories: 0 })
+    expect(report.published).toEqual({ created: 2, updated: 0, categories: 1, skipped: 2, untranslatedServices: 0, untranslatedCategories: 0, backlog: 0 })
+  })
+
+  it('a first catalogue is taken in slices of PUBLISH_BUDGET: the backlog is reported and the next run carries on where this one stopped', async () => {
+    const store = new Store()
+    const onStorefront = new Set<string>()
+    // the database remembers what the first run stored: the second run sees those provider services as known and unchanged
+    const stored = new Map<string, Record<string, unknown>>()
+    store.upsertProviderServices = async (rows) => (rows as unknown as Array<Record<string, any>>).map((r) => {
+      stored.set(r.external_service_id, { id: 'ps-' + r.external_service_id, external_service_id: r.external_service_id, name: r.name, category_raw: r.category_raw, rate_per_1000: r.rate_per_1000, min_quantity: r.min_quantity, max_quantity: r.max_quantity, refill_supported: r.refill_supported, cancel_supported: r.cancel_supported, service_type: r.service_type, description: r.description, is_active: true })
+      return { id: 'ps-' + r.external_service_id, external_service_id: r.external_service_id }
+    })
+    store.loadProviderServices = async () => [...stored.values()] as never
+    store.loadOffers = async () => [...onStorefront].map((ps) => ({ id: 'o-' + ps, service_id: 's-' + ps, provider_id: 'prov', provider_service_id: ps, cost_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: false, cancel_supported: false, source: { rate_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: false, cancel_supported: false } })) as never
+    const catalogue = Array.from({ length: PUBLISH_BUDGET + 200 }, (_, i) => svc(String(i + 1)))
+    const first = await run(catalogue, store)
+    const sent = () => store.published.flatMap((p) => p.rows.map((r) => r.ps))
+    expect(sent()).toHaveLength(PUBLISH_BUDGET)
+    expect(first.published).toMatchObject({ created: PUBLISH_BUDGET, backlog: 200 })
+    sent().forEach((ps) => onStorefront.add(ps))
+    const before = sent().length
+    const second = await run(catalogue, store)
+    expect(sent().length - before).toBe(200)
+    expect(second.published).toMatchObject({ created: 200, backlog: 0 })
+    sent().forEach((ps) => onStorefront.add(ps))
+    expect(new Set(sent()).size).toBe(PUBLISH_BUDGET + 200) // nothing was sent twice
+    const third = await run(catalogue, store)
+    expect(third.published).toMatchObject({ created: 0, backlog: 0 })
+  })
+
+  it('a changed service is published again even when it is already on the storefront, and before the backlog', async () => {
+    const store = new Store()
+    store.loadOffers = async () => [{ id: 'o', service_id: 's', provider_id: 'prov', provider_service_id: 'ps-1', cost_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: false, cancel_supported: false, source: { rate_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: false, cancel_supported: false } }] as never
+    store.loadProviderServices = async () => [
+      { id: 'ps-1', external_service_id: '1', name: 'Просмотры постов Telegram [Без восстановления]', category_raw: 'Просмотры постов Telegram [один пост]', rate_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: false, cancel_supported: false, service_type: 'Default', description: null, is_active: true },
+    ] as never
+    await run([svc('1', { name: 'Просмотры постов Telegram [Дёшево]' }), svc('2')], store)
+    expect(store.published[0].rows.map((r) => r.ps)).toEqual(['ps-1', 'ps-2'])
+  })
+
+  it('a manual slice publishes that part of the catalogue again, whatever is already on the storefront', async () => {
+    const store = new Store()
+    store.loadOffers = async () => [] as never
+    const catalogue = Array.from({ length: 10 }, (_, i) => svc(String(i + 1)))
+    await syncProviderCatalog({ provider: { id: 'prov', name: 'Panel' }, adapter: { getServices: async () => catalogue, getBalance: async () => ({ balance: 1, currency: 'USD' }) }, store, rules: [], log: silentLogger, republish: { offset: 3, limit: 4 } })
+    expect(store.published.flatMap((p) => p.rows.map((r) => r.ps))).toEqual(['ps-4', 'ps-5', 'ps-6', 'ps-7'])
   })
 
   it('sends a big catalogue in chunks', async () => {

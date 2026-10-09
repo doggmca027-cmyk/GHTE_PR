@@ -1,7 +1,7 @@
 // Pure catalog-sync logic (no I/O) so it can be unit-tested. The sync-catalog Edge
 // Function loads rows, calls these functions, and writes the resulting plan.
 
-import { calculateCustomerRate } from './price-engine.ts'
+import { calculateCustomerRate, selectPriceRule } from './price-engine.ts'
 import { timingSafeEqual } from './telegram.ts'
 import type { CostBasis } from './service-cost.ts'
 import type { IProviderService, Platform, PriceRule } from './types.ts'
@@ -353,7 +353,7 @@ const NO_CHANGE: ServicePlan = { action: 'none', repriced: false, reactivated: f
 /**
  * Re-prices and re-limits an existing storefront service from its offers. The base cost is the cheapest priceable offer, so a new
  * cheaper offer lowers the price and a vanished one raises it. Limits never exceed what the offers can deliver but keep a narrower
- * admin choice. With no priceable offer the price is left alone; the service is switched off only when this run took its offer away.
+ * admin choice. With no priceable offer the price is left alone, and so it is when no price rule applies (it is only lifted to the floor); the service is switched off only when this run took its offer away.
  */
 export function planService(input: PlanServiceInput): ServicePlan {
   const { existing, basis } = input
@@ -363,12 +363,13 @@ export function planService(input: PlanServiceInput): ServicePlan {
     return { action: 'update', repriced: false, reactivated: false, deactivated: true, row: { ...serviceRow(existing), is_active: false } }
   }
 
-  const rate = calculateCustomerRate(
-    basis.cost,
-    input.rules,
-    { serviceId: existing.id, categoryId: existing.category_id, platform: existing.platform },
-    { minMargin: input.minMargin },
-  )
+  const context = { serviceId: existing.id, categoryId: existing.category_id, platform: existing.platform }
+  const floor = calculateCustomerRate(basis.cost, [], context, { minMargin: input.minMargin })
+  // A price comes from a rule. With no rule that applies, the price the service has is kept (it was set by hand or by the publisher's default
+  // markup) and only lifted when it has fallen below cost + the minimum margin: an empty rule table must never reprice a storefront to cost.
+  const rate = selectPriceRule(basis.cost, input.rules, context) === null
+    ? Math.max(existing.customer_rate_per_1000, floor)
+    : calculateCustomerRate(basis.cost, input.rules, context, { minMargin: input.minMargin })
 
   // Keep admin-narrowed limits, but never exceed what the offers can actually deliver.
   let min = Math.max(existing.min_quantity, basis.minQuantity)
@@ -486,12 +487,12 @@ export interface ProviderSyncReport {
   added: number
   updated: number
   deactivated: number
-  services: { repriced: number; updated: number; deactivated: number; reactivated: number }
+  services: { repriced: number; updated: number; deactivated: number; reactivated: number; /** Changes left for the next run (a run writes a bounded number). */ deferred?: number }
   /** Offers whose cost / limits were brought back in line with their provider service. */
   offers: { synced: number }
   skippedInvalid: number
   /** What putting this provider's services on the storefront did in this run (absent when the store cannot publish). */
-  published?: { created: number; updated: number; categories: number; skipped: number; untranslatedServices: number; untranslatedCategories: number }
+  published?: { created: number; updated: number; categories: number; skipped: number; untranslatedServices: number; untranslatedCategories: number; /** Services still waiting for a later run (a run translates a bounded number). */ backlog: number }
 }
 
 export interface SyncReport {

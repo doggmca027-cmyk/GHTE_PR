@@ -1,4 +1,6 @@
-// Supabase Edge Function (Deno): POST /sync-catalog  { providerId?: uuid }
+// Supabase Edge Function (Deno): POST /sync-catalog  { providerId?: uuid, republishOffset?: number, republishLimit?: number }
+//   republishOffset / republishLimit (with providerId): put that slice of the provider's catalogue on the storefront again instead of what is new or
+//   changed, e.g. after the translator improved. A run does a bounded amount of work, so a big catalogue is taken slice by slice.
 //
 // Pulls every active provider's catalogue THROUGH THE IProviderAdapter CONTRACT and keeps the database in step with it:
 // upserts provider_services, re-prices / re-limits the storefront services that are already linked, keeps
@@ -34,7 +36,7 @@ interface ProviderRow {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
 
-async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[], log: Logger, correlationId: string): Promise<ProviderSyncReport> {
+async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[], log: Logger, correlationId: string, republish?: { offset: number; limit: number }): Promise<ProviderSyncReport> {
   const mockMode = Deno.env.get('MOCK_MODE') === 'true'
   const apiKey = await resolveProviderApiKey(provider, Deno.env)
   if (!apiKey && !mockMode) {
@@ -50,7 +52,7 @@ async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[], l
     { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log },
     { MOCK_MODE: Deno.env.get('MOCK_MODE') },
   )
-  return await syncProviderCatalog({ provider, adapter, store: createSupabaseCatalogStore(db), rules, log })
+  return await syncProviderCatalog({ provider, adapter, store: createSupabaseCatalogStore(db), rules, log, republish })
 }
 
 Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId }): Promise<Response> => {
@@ -67,9 +69,13 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
   }
 
   let onlyProvider: string | undefined
+  let republish: { offset: number; limit: number } | undefined
   try {
     const body = await req.json()
     if (typeof body?.providerId === 'string') onlyProvider = body.providerId
+    if (onlyProvider && Number.isInteger(body?.republishOffset) && body.republishOffset >= 0 && Number.isInteger(body?.republishLimit) && body.republishLimit > 0) {
+      republish = { offset: body.republishOffset, limit: Math.min(body.republishLimit, 3000) }
+    }
   } catch { /* empty body is fine */ }
 
   const started = Date.now()
@@ -95,7 +101,7 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
 
     for (const provider of providers) {
       try {
-        reports.push(await syncProvider(db, provider, rules, log, correlationId))
+        reports.push(await syncProvider(db, provider, rules, log, correlationId, republish))
       } catch (e) {
         log.error('provider sync failed', { err: e, providerId: provider.id, error_code: 'provider_sync_failed' })
         const failed = emptyProviderReport(provider.name)
