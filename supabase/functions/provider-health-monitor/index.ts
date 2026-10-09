@@ -151,6 +151,13 @@ Deno.serve(instrument('provider-health-monitor', async (req: Request, { log, cor
         return (data ?? []).length > 0
       },
 
+      async previousCheckFailed(p) {
+        const { data, error } = await db.from('provider_health_log').select('error_kind').eq('provider_id', p.id).order('checked_at', { ascending: false }).limit(1)
+        if (error) throw new Error(`health log: ${error.message}`)
+        const kind = (data as { error_kind: string | null }[] | null)?.[0]?.error_kind ?? null
+        return kind !== null && kind !== 'rate_limited'
+      },
+
       async appendLog(e) {
         const { error } = await db.from('provider_health_log').insert({
           provider_id: e.providerId, status: e.status, previous_status: e.previousStatus,

@@ -148,6 +148,10 @@ interface Script {
   undelivered?: boolean
   /** Filing a top-up proposal fails (database error). */
   proposalFails?: boolean
+  /** Wire previousCheckFailed (the production setting): a healthy provider needs two failed checks in a row to be declared unavailable. */
+  debounce?: boolean
+  /** The read behind previousCheckFailed fails. */
+  debounceReadFails?: boolean
 }
 
 function portsFor(db: PGlite, script: Script) {
@@ -205,6 +209,13 @@ function portsFor(db: PGlite, script: Script) {
       return (await db.query(`update providers set reliability_penalty_multiplier = $3 where id = $1 and reliability_penalty_multiplier = $2 returning id`, [p.id, from, to])).rows.length > 0
     },
     async notify(p, kind) { alerts.push({ name: p.name, kind }) },
+    ...(script.debounce ? {
+      async previousCheckFailed(p: Row) {
+        if (script.debounceReadFails) throw new Error('db down')
+        const r = (await db.query<{ error_kind: string | null }>(`select error_kind from provider_health_log where provider_id = $1 order by checked_at desc limit 1`, [p.id])).rows[0]
+        return r?.error_kind != null && r.error_kind !== 'rate_limited'
+      },
+    } : {}),
     pingTimeoutMs: 50,
     retryDelayMs: 0,
   }
@@ -279,6 +290,77 @@ describe('provider-health-monitor core', () => {
     expect(await statusOf(db, A)).toBe('unavailable')
     expect(alerts).toEqual([{ name: 'A', kind: 'down' }])
     expect(pings.filter((id) => id === A)).toHaveLength(1)
+  })
+
+  describe('a healthy provider is declared unavailable only after two failed checks in a row', () => {
+    const run = (ports: ReturnType<typeof portsFor>['ports']) => runHealthChecks(ports)
+    const logRows = async (db: PGlite, id: string) => (await db.query<{ status: string; error_kind: string | null }>(`select status::text, error_kind from provider_health_log where provider_id = $1 order by checked_at, id`, [id])).rows
+
+    it('the first failure is logged and nothing else happens: still healthy, no alert, traffic stays', async () => {
+      const script: Script = { down: new Set([A]), debounce: true }
+      const { ports, alerts } = portsFor(db, script)
+      const r = await run(ports)
+      expect(r.providers.find((p) => p.providerId === A)).toMatchObject({ to: 'soft_failure', alert: null })
+      expect(await statusOf(db, A)).toBe('healthy')
+      expect(alerts).toEqual([])
+      expect(await logRows(db, A)).toEqual([{ status: 'healthy', error_kind: 'http 503' }])
+    })
+
+    it('the second failure in a row declares it unavailable and alerts once; the next ticks say nothing new', async () => {
+      const { ports, alerts } = portsFor(db, { down: new Set([A]), debounce: true })
+      await run(ports)
+      await run(ports)
+      expect(await statusOf(db, A)).toBe('unavailable')
+      expect(alerts).toEqual([{ name: 'A', kind: 'down' }])
+      await run(ports); await run(ports)
+      expect(alerts).toHaveLength(1)
+    })
+
+    it('a blip that is gone by the next check never alerts, however often it repeats', async () => {
+      const script: Script = { down: new Set([A]), debounce: true }
+      const { ports, alerts } = portsFor(db, script)
+      for (let i = 0; i < 3; i++) {
+        script.down = new Set([A]); await run(ports) // fails once
+        script.down = new Set(); await run(ports) // fine again
+      }
+      expect(await statusOf(db, A)).toBe('healthy')
+      expect(alerts).toEqual([])
+      expect((await logRows(db, A)).filter((l) => l.error_kind !== null)).toHaveLength(3)
+    })
+
+    it('recovery after a declared outage still alerts once', async () => {
+      const script: Script = { down: new Set([A]), debounce: true }
+      const { ports, alerts } = portsFor(db, script)
+      await run(ports); await run(ports)
+      script.down = new Set()
+      await run(ports)
+      expect(await statusOf(db, A)).toBe('healthy')
+      expect(alerts).toEqual([{ name: 'A', kind: 'down' }, { name: 'A', kind: 'recovered' }])
+    })
+
+    it('rate limiting is not a failure: it neither counts as the first nor as the second', async () => {
+      const { ports } = portsFor(db, { down: new Set(), debounce: true })
+      await db.query(`insert into provider_health_log(provider_id, status, previous_status, error_kind, checked_at) values ($1, 'healthy', 'healthy', 'rate_limited', now())`, [A])
+      const failing = portsFor(db, { down: new Set([A]), debounce: true }).ports
+      await run(failing)
+      expect(await statusOf(db, A)).toBe('healthy') // the last log row was rate limiting, so this is the first real failure
+      void ports
+    })
+
+    it('if the log cannot be read the failure counts at once (better one alert too many than a dead provider that looks fine)', async () => {
+      const { ports, alerts } = portsFor(db, { down: new Set([A]), debounce: true, debounceReadFails: true })
+      await run(ports)
+      expect(await statusOf(db, A)).toBe('unavailable')
+      expect(alerts).toEqual([{ name: 'A', kind: 'down' }])
+    })
+
+    it('a provider that was never checked (disabled) is not debounced: its first check decides, silently', async () => {
+      await db.exec(`update providers set health_status = 'disabled' where id = '${A}'`)
+      const { ports, alerts } = portsFor(db, { down: new Set([A]), debounce: true })
+      await run(ports)
+      expect(await statusOf(db, A)).toBe('unavailable')
+      expect(alerts).toEqual([])
+    })
   })
 
   it('alerts once on recovery and restores the status', async () => {

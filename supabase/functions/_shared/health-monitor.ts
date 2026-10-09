@@ -4,7 +4,10 @@
 // Rules:
 //   * One provider throwing can never stop the others (each runs in its own try/catch under allSettled).
 //   * A ping is bounded by PING_TIMEOUT_MS here even if the port itself hangs.
-//   * A transient failure (5xx, timeout, network) is retried once before the provider is declared unavailable: a panel that answers
+//   * A HEALTHY provider is declared unavailable only after two checks in a row failed (previousCheckFailed): SMM Center's panel answers 502 for
+//     a few seconds about once an hour, which is not an outage worth an alert and a minute of traffic going elsewhere. The first failure is
+//     logged and the status stays; a real outage is declared one minute later.
+//   * A transient failure (5xx, timeout, network) is retried once before it counts as a failed check at all: a panel that answers
 //     502 for a second would otherwise flip to unavailable, alert the admins and push traffic to the fallback for a minute.
 //   * Alerts fire only on a real transition and only for the caller that won the compare-and-set on
 //     providers.health_status, so a cron tick that finds nothing new (or two overlapping runs) sends nothing.
@@ -127,6 +130,12 @@ export interface HealthPorts<P extends MonitoredProvider> {
    * stack two steps on one check. True for the caller that wrote it.
    */
   savePenalty?(provider: P, from: number, to: number): Promise<boolean>
+  /**
+   * True when the provider's previous check already failed (a real failure, not rate limiting). A healthy provider whose first check fails is not declared
+   * unavailable yet; only a second failure in a row does it. Optional: without it the first failure counts at once. A read that fails counts as
+   * "yes": better one alert too many than a provider that is down and looks fine.
+   */
+  previousCheckFailed?(provider: P): Promise<boolean>
   now?: () => Date
   pingTimeoutMs?: number
   /** Pause before the single retry of a transient failure (default PING_RETRY_DELAY_MS). */
@@ -137,7 +146,7 @@ export interface ProviderCheckReport {
   providerId: string
   name: string
   from: HealthStatus
-  to: HealthStatus | 'unchanged_inconclusive' | 'error'
+  to: HealthStatus | 'unchanged_inconclusive' | 'soft_failure' | 'error'
   alert: AlertKind | null
   /** True when this check raised a low-balance alert. */
   balanceAlert: boolean
@@ -275,6 +284,16 @@ async function checkOne<P extends MonitoredProvider>(p: P, ports: HealthPorts<P>
     // inconclusive: leave the status alone, keep the trail
     await ports.appendLog({ providerId: p.id, status: p.healthStatus, previousStatus: p.healthStatus, latencyMs, errorKind, checkedAt }).catch(() => {})
     return { ...base, to: 'unchanged_inconclusive', alert: null, balanceAlert: false }
+  }
+
+  // First failure of a healthy provider: remember it (the log row carries the error), keep the status, say nothing.
+  if (to === 'unavailable' && p.healthStatus === 'healthy' && ports.previousCheckFailed) {
+    const again = await ports.previousCheckFailed(p).catch(() => true)
+    if (!again) {
+      await ports.applyCheck(p, p.healthStatus, p.healthStatus, checkedAt).catch(() => {})
+      await ports.appendLog({ providerId: p.id, status: p.healthStatus, previousStatus: p.healthStatus, latencyMs, errorKind, checkedAt }).catch(() => {})
+      return { ...base, to: 'soft_failure', alert: null, balanceAlert: false }
+    }
   }
 
   const outcome = await ports.applyCheck(p, p.healthStatus, to, checkedAt)
