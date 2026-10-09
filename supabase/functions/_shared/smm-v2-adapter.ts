@@ -87,6 +87,15 @@ function toOptionalNumber(value: unknown, field: string): number | undefined {
   return value === undefined || value === null || value === '' ? undefined : toNumber(value, field)
 }
 
+/** The panel's text about a service, trimmed and cut to a sane length; nothing at all when there is none. */
+function describe(value: unknown): { description?: string } {
+  if (typeof value !== 'string') return {}
+  const text = value.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, MAX_DESCRIPTION)
+  return text === '' ? {} : { description: text }
+}
+
+const MAX_DESCRIPTION = 2000
+
 function toBool(value: unknown): boolean {
   return value === true || value === 1 || value === '1' || (typeof value === 'string' && value.toLowerCase() === 'true')
 }
@@ -203,6 +212,7 @@ export class SMMv2Adapter implements IProviderAdapter {
         maxQuantity: toNumber(item.max, 'max'),
         refillSupported: toBool(item.refill),
         cancelSupported: toBool(item.cancel),
+        ...describe(item.desc ?? item.description),
       }
     })
   }

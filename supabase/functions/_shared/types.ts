@@ -117,6 +117,8 @@ export interface IProviderService {
   maxQuantity: number
   refillSupported: boolean
   cancelSupported: boolean
+  /** The panel's own text about the service ("desc"/"description"), when it sends one. */
+  description?: string
 }
 
 export interface IProviderBalance {

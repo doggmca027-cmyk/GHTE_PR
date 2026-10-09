@@ -55,7 +55,7 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       fetchAll<ExistingProviderService>(
         (from, to) =>
           db.from('provider_services')
-            .select('id, external_service_id, name, category_raw, rate_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, service_type, is_active')
+            .select('id, external_service_id, name, category_raw, rate_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, service_type, description, is_active')
             .eq('provider_id', providerId).order('id').range(from, to),
         'load provider_services',
       ),

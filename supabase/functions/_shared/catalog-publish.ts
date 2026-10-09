@@ -13,6 +13,8 @@ export interface PublishCandidate {
   rate: number
   min: number
   max: number
+  /** The panel's own text about the service, if it sent one. */
+  description?: string | null
 }
 
 export interface PublishRow {
@@ -26,6 +28,8 @@ export interface PublishRow {
   name: string
   name_ru: string
   attributes: ServiceAttributes
+  /** The panel's text, shown on the service as it is. */
+  description: string | null
 }
 
 interface PlatformRule {
@@ -187,6 +191,7 @@ export function buildPublishRows(candidates: readonly PublishCandidate[], knownS
       name: t.name,
       name_ru: t.nameRu,
       attributes: t.attributes,
+      description: c.description?.trim() || null,
     })
   }
   return result

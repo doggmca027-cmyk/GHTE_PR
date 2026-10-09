@@ -154,6 +154,22 @@ describe('publish_provider_services (real schema)', () => {
     expect((await rows(`select has_function_privilege('service_role', 'public.publish_provider_services(uuid, jsonb)', 'execute') ok`))[0].ok).toBe(true)
   })
 
+  it('the panel\'s own description reaches the storefront service, is refreshed, and never overwrites a service an admin made by hand', async () => {
+    const withText = (text: string | null) => (rs: ReturnType<typeof buildPublishRows>['rows']) => rs.map((x) => (x.ps === ps['3'] || x.ps === ps['4'] ? { ...x, description: text } : x))
+    const desc = async (ext: string) => (await rows(`select s.description from services s where s.primary_provider_service_id = $1`, [ps[ext]]))[0].description
+    await publish(withText('Refill: 30 days\nSupport: yes'))
+    expect(await desc('3')).toBe('Refill: 30 days\nSupport: yes')
+    await publish(withText('Changed text'))
+    expect(await desc('3')).toBe('Changed text')
+    await publish(withText(null))
+    expect(await desc('3')).toBeNull()
+
+    await db.query(`update services set auto_published = false, description = 'Hand written' where primary_provider_service_id = $1`, [ps['4']])
+    await publish(withText('From the panel'))
+    expect(await desc('4')).toBe('Hand written')
+    await db.query(`update services set auto_published = true, description = null where primary_provider_service_id = $1`, [ps['4']])
+  })
+
   it('a customer reads the published services through the app\'s own query: the English name, the original and the facts', async () => {
     await db.exec(`reset role; set role anon`)
     const r = await rows(`select name, name_i18n, attributes from services where is_active order by customer_rate_per_1000 limit 1`)
@@ -235,12 +251,33 @@ describe('the catalog sync publishes what it just stored', () => {
     expect(report.published).toBeUndefined()
   })
 
+  it('the hourly run only syncs providers that sell; one with routing off is synced when it is asked for by id (source check)', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'supabase/functions/sync-catalog/index.ts'), 'utf8')
+    expect(src).toContain("q = onlyProvider ? q.eq('id', onlyProvider) : q.eq('routing_enabled', true)")
+    expect(src).toContain("select('id, name, api_url, api_key_encrypted, routing_enabled')")
+  })
+
   it('a store that cannot publish simply publishes nothing', async () => {
     const store = new Store()
     Object.defineProperty(store, 'publishServices', { value: undefined }) // an instance without the optional method
     const report = await run([svc('1')], store)
     expect(report.status).toBe('ok')
     expect(report.published).toBeUndefined()
+  })
+
+  it('the sync sends the panel\'s own text to the database and to the publisher, and a changed text counts as an update', async () => {
+    const store = new Store()
+    let sent: Array<{ description: string | null }> = []
+    store.upsertProviderServices = async (rows) => { sent = rows as unknown as typeof sent; return rows.map((r) => ({ id: `ps-${r.external_service_id}`, external_service_id: r.external_service_id })) }
+    await run([svc('1', { description: '  Refill: no  ' }), svc('2')], store)
+    expect(sent.map((r) => r.description)).toEqual(['Refill: no', null])
+    expect(store.published[0].rows.map((r) => r.description)).toEqual(['Refill: no', null])
+
+    store.loadProviderServices = async () => [
+      { id: 'ps-1', external_service_id: '1', name: 'Просмотры постов Telegram [Без восстановления]', category_raw: 'Просмотры постов Telegram [один пост]', rate_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: false, cancel_supported: false, service_type: 'Default', description: 'Old text', is_active: true },
+    ] as never
+    const report = await run([svc('1', { description: 'New text' })], store)
+    expect(report.updated).toBe(1)
   })
 
   it('the sync sends the panel\'s type of service to the database (provider_services.service_type)', async () => {

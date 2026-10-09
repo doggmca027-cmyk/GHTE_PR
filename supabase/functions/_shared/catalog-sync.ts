@@ -124,6 +124,8 @@ export interface ExistingProviderService {
   cancel_supported: boolean
   /** The panel's type of service ("Default", "Package", ...). Absent on rows read before the column existed. */
   service_type?: string | null
+  /** The panel's own text about the service. Absent on rows read before the column existed. */
+  description?: string | null
   is_active: boolean
 }
 
@@ -138,6 +140,7 @@ export interface ProviderServiceRow {
   refill_supported: boolean
   cancel_supported: boolean
   service_type: string
+  description: string | null
   is_active: true
   last_synced_at: string
 }
@@ -180,6 +183,7 @@ export function diffProviderServices(
       refill_supported: s.refillSupported,
       cancel_supported: s.cancelSupported,
       service_type: (s.type ?? '').trim() || 'Default',
+      description: s.description?.trim() || null,
       is_active: true,
       last_synced_at: nowIso,
     }
@@ -200,7 +204,8 @@ export function diffProviderServices(
       prev.max_quantity !== row.max_quantity ||
       prev.refill_supported !== row.refill_supported ||
       prev.cancel_supported !== row.cancel_supported ||
-      (prev.service_type ?? 'Default') !== row.service_type
+      (prev.service_type ?? 'Default') !== row.service_type ||
+      (prev.description ?? null) !== row.description
     if (changed) diff.updated.push(s.externalServiceId)
     else diff.unchanged++
   }

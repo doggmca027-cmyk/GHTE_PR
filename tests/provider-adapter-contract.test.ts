@@ -104,6 +104,29 @@ const implementations: { name: string; make: (caps: { supportsRefill?: boolean; 
   { name: 'SMMv2Adapter (fake panel)', make: (caps) => smm(caps).adapter, ready: () => {} },
 ]
 
+describe('SMMv2Adapter: the panel\'s own text about a service', () => {
+  const item = (service: number, extra: Record<string, unknown> = {}) => ({ service, name: `S${service}`, type: 'Default', rate: '1.00', min: 10, max: 100, category: 'c', refill: false, cancel: false, ...extra })
+  const services = async (body: unknown[]) => {
+    const fetchImpl = (async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch
+    return new SMMv2Adapter({ id: 'smm', name: 'Panel', apiUrl: 'https://panel.example/api/v2', apiKey: KEY, mockMode: false, fetchImpl, capabilities: DEFAULT_SMM_V2_CAPABILITIES }).getServices()
+  }
+
+  it('keeps "desc" or "description" trimmed with calm line breaks and a length cap; no text means no field', async () => {
+    const out = await services([
+      item(1, { desc: '  Refill: no\r\n\r\n\r\n\r\nSupport: yes  ' }),
+      item(2, { description: 'x'.repeat(5000) }),
+      item(3, { desc: '   ' }),
+      item(4),
+      item(5, { desc: 42 }),
+    ])
+    expect(out[0].description).toBe('Refill: no\n\nSupport: yes')
+    expect(out[1].description).toHaveLength(2000)
+    expect('description' in out[2]).toBe(false)
+    expect('description' in out[3]).toBe(false)
+    expect('description' in out[4]).toBe(false)
+  })
+})
+
 describe.each(implementations)('IProviderAdapter contract: $name', ({ make, ready }) => {
   it('covers balance, catalog, order creation and status in the normalized shapes', async () => {
     const a = make({})

@@ -148,7 +148,7 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
       const idByExternal = new Map(saved.map((s) => [s.external_service_id, s.id]))
       const candidates = valid.flatMap((s) => {
         const id = idByExternal.get(s.externalServiceId)
-        return id ? [{ id, name: s.name, categoryRaw: s.categoryRaw, serviceType: s.type ?? null, rate: s.ratePer1000, min: s.minQuantity, max: s.maxQuantity }] : []
+        return id ? [{ id, name: s.name, categoryRaw: s.categoryRaw, serviceType: s.type ?? null, rate: s.ratePer1000, min: s.minQuantity, max: s.maxQuantity, description: s.description ?? null }] : []
       })
       const built = buildPublishRows(candidates, new Set(await store.loadPlatformSlugs()))
       const total = { created: 0, updated: 0, categories: 0 }

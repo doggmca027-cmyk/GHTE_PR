@@ -227,6 +227,10 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
               </ul>
             )}
 
+            {service.description && (
+              <p className="mt-2 whitespace-pre-line rounded-2xl bg-surface-sub px-4 py-3 text-[13px] font-medium text-content-secondary">{service.description}</p>
+            )}
+
             {/* Link */}
             <label className="mt-5 block">
               <span className="mb-1.5 flex items-center gap-1.5 text-sm font-bold text-content-primary">
