@@ -67,7 +67,7 @@ export function overallRetention(cohorts: RetentionCohort[]): { day: number; use
 export const formatRate = (rate: number | null): string => (rate === null ? '–' : `${rate % 1 === 0 ? rate.toFixed(0) : rate.toFixed(1)}%`)
 
 export const FUNNEL_LABELS: Record<string, string> = {
-  catalog_view: 'Viewed the catalog',
-  checkout_started: 'Started checkout',
-  order_placed: 'Placed an order',
+  catalog_view: 'Открыли каталог',
+  checkout_started: 'Начали оформление',
+  order_placed: 'Сделали заказ',
 }

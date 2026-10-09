@@ -4,10 +4,9 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Toast } from '@/components/ui/Toast'
 import { useLoader } from '@/hooks/useLoader'
-import { balanceState, parseAmount, usd } from '@/lib/admin-view'
+import { balanceState, parseAmount, timeAgoRu, usd } from '@/lib/admin-view'
 import { haptic } from '@/lib/haptics'
 import { checkPayoutDraft, payoutChanged, shortId, type PayoutDraft } from '@/lib/payment-view'
-import { timeAgo } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { listProviderConfigs, setProviderPayout, updateProviderConfig } from '@/services/api/admin'
@@ -17,10 +16,10 @@ import type { AdminProvider } from '@/types/admin-providers'
 import type { ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayoutInput } from '@/types/admin'
 
 const HEALTH_BADGE: Record<ProviderHealth, { label: string; className: string }> = {
-  healthy: { label: 'Healthy', className: 'bg-emerald-50 text-emerald-700' },
-  degraded: { label: 'Degraded', className: 'bg-amber-100 text-amber-700' },
-  unavailable: { label: 'Unavailable', className: 'bg-rose-50 text-rose-700' },
-  disabled: { label: 'Disabled', className: 'bg-slate-100 text-slate-600' },
+  healthy: { label: 'Работает', className: 'bg-emerald-50 text-emerald-700' },
+  degraded: { label: 'Сбои', className: 'bg-amber-100 text-amber-700' },
+  unavailable: { label: 'Недоступен', className: 'bg-rose-50 text-rose-700' },
+  disabled: { label: 'Выключен', className: 'bg-slate-100 text-slate-600' },
 }
 
 /** What the modal saves: each part is null when unchanged. */
@@ -48,11 +47,11 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
       // TOGGLE_ROUTING: a 409 (no API key, provider inactive) comes back as a readable message and the switch stays where it was
       await toggleProviderRouting(session, p.id, !p.routingEnabled)
       haptic.success()
-      setMessage({ kind: 'ok', text: `${p.name}: routing ${p.routingEnabled ? 'disabled' : 'enabled'}.` })
+      setMessage({ kind: 'ok', text: `${p.name}: маршрутизация ${p.routingEnabled ? 'выключена' : 'включена'}.` })
       await Promise.all([reload(), details.reload()])
     } catch (e) {
       haptic.error()
-      setMessage({ kind: 'error', text: e instanceof Error ? e.message : 'Could not save.' })
+      setMessage({ kind: 'error', text: e instanceof Error ? e.message : 'Не удалось сохранить.' })
       await Promise.all([reload(), details.reload()]) // show what the server really has
     } finally {
       setBusyId(null)
@@ -70,8 +69,8 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
     return (
       <Card className="space-y-3 text-center">
         <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
-        <p className="text-sm font-medium text-content-secondary">{error ?? 'Could not load providers.'}</p>
-        <Button className="w-full" onClick={() => void reload()}>Retry</Button>
+        <p className="text-sm font-medium text-content-secondary">{error ?? 'Не удалось загрузить провайдеров.'}</p>
+        <Button className="w-full" onClick={() => void reload()}>Повторить</Button>
       </Card>
     )
   }
@@ -79,13 +78,13 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
   return (
     <div className="space-y-3">
       <p className="rounded-2xl bg-brand-light/60 px-3.5 py-2.5 text-[13px] font-medium text-brand-text">
-        Health and balance are refreshed every minute for providers with routing on. You get one Telegram alert when a balance reaches its threshold.
+        Состояние и баланс обновляются раз в минуту у провайдеров с включённой маршрутизацией. Когда баланс опускается до порога, приходит одно уведомление в Telegram. Провайдер с выключенной маршрутизацией только загружает каталог: его услуги не попадают в продажу.
       </p>
       <button type="button" onClick={() => { haptic.tap(); setMessage(null); setAdding(true) }} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl bg-brand text-sm font-bold text-white active:scale-[0.98]">
-        <Plus size={16} strokeWidth={2} /> Add provider
+        <Plus size={16} strokeWidth={2} /> Добавить провайдера
       </button>
 
-      {data.length === 0 && <Card className="p-4 text-sm text-content-secondary">No providers yet.</Card>}
+      {data.length === 0 && <Card className="p-4 text-sm text-content-secondary">Провайдеров пока нет.</Card>}
       {data.map((p) => {
         const state = balanceState(p.balance, p.lowBalanceThreshold, p.lastBalanceSync)
         const d = detailsById.get(p.id)
@@ -95,13 +94,13 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
               <div className="min-w-0">
                 <h3 className="text-[15px] font-bold leading-snug text-content-primary">{p.name}</h3>
                 <span className={cn('mt-1 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold', HEALTH_BADGE[p.health].className)}>{HEALTH_BADGE[p.health].label}</span>
-                {!p.isActive && <span className="ml-1.5 inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">Inactive</span>}
+                {!p.isActive && <span className="ml-1.5 inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">Не активен</span>}
               </div>
               <button
                 type="button"
                 role="switch"
                 aria-checked={p.routingEnabled}
-                aria-label={`${p.routingEnabled ? 'Disable' : 'Enable'} routing for ${p.name}`}
+                aria-label={`${p.routingEnabled ? 'Выключить' : 'Включить'} маршрутизацию для ${p.name}`}
                 disabled={busyId === p.id}
                 onClick={() => void toggleRouting(p)}
                 className={cn('relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50', p.routingEnabled ? 'bg-brand' : 'bg-slate-300')}
@@ -115,43 +114,43 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
             )}
             {d && !d.hasApiKey && (
               <p role="status" className="mt-2 flex items-center gap-1.5 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                <KeyRound size={14} strokeWidth={1.75} /> No API key: routing cannot be switched on.
+                <KeyRound size={14} strokeWidth={1.75} /> Нет API-ключа: маршрутизацию включить нельзя.
               </p>
             )}
             <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <div>
-                <dt className="text-xs text-content-secondary">Balance</dt>
+                <dt className="text-xs text-content-secondary">Баланс</dt>
                 <dd className={cn('font-bold', state === 'low' ? 'text-amber-600' : 'text-content-primary')}>
-                  {state === 'unknown' ? 'Not read yet' : `${usd(p.balance)} ${p.currency}`}
+                  {state === 'unknown' ? 'Ещё не считан' : `${usd(p.balance)} ${p.currency}`}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-content-secondary">Low-balance threshold</dt>
+                <dt className="text-xs text-content-secondary">Порог низкого баланса</dt>
                 <dd className="font-bold text-content-primary">{usd(p.lowBalanceThreshold)}</dd>
               </div>
               {d && (
                 <div>
-                  <dt className="text-xs text-content-secondary">Priority</dt>
+                  <dt className="text-xs text-content-secondary">Приоритет</dt>
                   <dd className="font-bold text-content-primary">{d.priority}</dd>
                 </div>
               )}
               <div>
-                <dt className="text-xs text-content-secondary">Reliability penalty</dt>
+                <dt className="text-xs text-content-secondary">Штраф надёжности</dt>
                 <dd className={cn('font-bold', p.reliabilityPenalty > 1 ? 'text-amber-600' : 'text-content-primary')}>x{p.reliabilityPenalty}</dd>
               </div>
             </dl>
-            {state === 'low' && <p role="alert" className="mt-2 text-xs font-semibold text-amber-600">Balance is at or below the threshold. Top up to about {usd(p.targetTopupBalance)}.</p>}
+            {state === 'low' && <p role="alert" className="mt-2 text-xs font-semibold text-amber-600">Баланс на пороге или ниже. Пополните примерно до {usd(p.targetTopupBalance)}.</p>}
             <PayoutSummary provider={p} />
             <div className="mt-3 flex items-center justify-between">
-              <p className="text-xs text-content-secondary">{p.lastHealthCheck ? `Checked ${timeAgo(p.lastHealthCheck)}` : 'Never checked'}</p>
+              <p className="text-xs text-content-secondary">{p.lastHealthCheck ? `Проверен ${timeAgoRu(p.lastHealthCheck)}` : 'Ещё не проверялся'}</p>
               <div className="flex gap-2">
                 {d && (
                   <button type="button" onClick={() => { haptic.tap(); setMessage(null); setEditingProvider(d) }} className="flex h-9 items-center gap-1.5 rounded-full bg-brand-light px-3.5 text-[13px] font-bold text-brand-text active:scale-95">
-                    <Pencil size={14} strokeWidth={1.75} /> Edit
+                    <Pencil size={14} strokeWidth={1.75} /> Изменить
                   </button>
                 )}
                 <button type="button" onClick={() => { haptic.tap(); setMessage(null); setEditing(p) }} className="flex h-9 items-center gap-1.5 rounded-full bg-brand-light px-3.5 text-[13px] font-bold text-brand-text active:scale-95">
-                  <Settings2 size={14} strokeWidth={1.75} /> Edit Config
+                  <Settings2 size={14} strokeWidth={1.75} /> Настройки
                 </button>
               </div>
             </div>
@@ -167,7 +166,7 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
             try {
               const r = await upsertProvider(session, request)
               haptic.success()
-              setMessage({ kind: 'ok', text: r.created ? `${r.provider.name} added. Switch routing on once it has an API key.` : `${r.provider.name} saved.` })
+              setMessage({ kind: 'ok', text: r.created ? `${r.provider.name} добавлен. Включите маршрутизацию, когда будет API-ключ.` : `${r.provider.name} сохранён.` })
             } catch (e) {
               haptic.error()
               throw e
@@ -194,7 +193,7 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
               throw e
             }
             haptic.success()
-            setMessage({ kind: 'ok', text: `${editing.name}: configuration saved.` })
+            setMessage({ kind: 'ok', text: `${editing.name}: настройки сохранены.` })
             await reload()
             setEditing(null)
           }}
@@ -210,17 +209,17 @@ export function PayoutSummary({ provider: p }: { provider: ProviderConfigView })
   if (!p.payoutWallet || p.maxTopupPerTx === null || p.maxDailyTopup === null) {
     return (
       <p role="status" className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-        Payouts not configured: top-ups to this provider are refused until a wallet and both limits are set.
+        Выплаты не настроены: пополнения этого провайдера отклоняются, пока не указаны кошелёк и оба лимита.
       </p>
     )
   }
   return (
     <div className="mt-2 rounded-2xl bg-surface-sub px-3 py-2 text-xs">
       <p className="font-semibold text-content-primary">
-        Payouts: {p.payoutAsset} · {p.payoutNetwork} → <code className="font-mono" title={p.payoutWallet}>{shortId(p.payoutWallet)}</code>
+        Выплаты: {p.payoutAsset} · {p.payoutNetwork} → <code className="font-mono" title={p.payoutWallet}>{shortId(p.payoutWallet)}</code>
       </p>
       <p className="mt-0.5 text-content-secondary">
-        {usd(p.maxTopupPerTx)} per top-up · {usd(p.maxDailyTopup)} per day · {usd(p.topupUsedToday)} used today
+        {usd(p.maxTopupPerTx)} за пополнение · {usd(p.maxDailyTopup)} в день · сегодня потрачено {usd(p.topupUsedToday)}
       </p>
     </div>
   )
@@ -277,50 +276,50 @@ export function ConfigModal({ provider, onClose, onSave }: { provider: ProviderC
     try {
       await onSave({ config: configDirty ? configPatch : null, payout: payoutDirty ? payout.input : null })
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not save.')
+      setErr(e instanceof Error ? e.message : 'Не удалось сохранить.')
       setBusy(false)
     }
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Edit configuration of ${provider.name}`} className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+    <div role="dialog" aria-modal="true" aria-label={`Настройки провайдера ${provider.name}`} className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
       <div className="max-h-[92vh] w-full max-w-md space-y-3 overflow-y-auto rounded-3xl bg-white p-4 shadow-card">
         <h3 className="text-[15px] font-bold text-content-primary">{provider.name}</h3>
-        <AmountField label="Low-balance threshold (alert at or below)" value={low} onChange={setLow} invalid={lowN === null} />
-        <AmountField label="Target top-up balance" value={target} onChange={setTarget} invalid={targetN === null} />
-        {lowN !== null && targetN !== null && targetN < lowN && <p role="alert" className="text-xs font-semibold text-rose-600">The top-up target cannot be below the threshold.</p>}
-        <AmountField label="Reliability penalty (1 = reliable, up to 10)" value={penalty} onChange={setPenalty} invalid={!penaltyOk} />
-        <p className="-mt-1 text-xs text-content-secondary">Routing compares cost x penalty: at x1.5 this provider must be a third cheaper to win. Prices charged are not affected.</p>
+        <AmountField label="Порог низкого баланса (уведомление при этой сумме и ниже)" value={low} onChange={setLow} invalid={lowN === null} />
+        <AmountField label="До какой суммы пополнять" value={target} onChange={setTarget} invalid={targetN === null} />
+        {lowN !== null && targetN !== null && targetN < lowN && <p role="alert" className="text-xs font-semibold text-rose-600">Цель пополнения не может быть ниже порога.</p>}
+        <AmountField label="Штраф надёжности (1 — надёжный, максимум 10)" value={penalty} onChange={setPenalty} invalid={!penaltyOk} />
+        <p className="-mt-1 text-xs text-content-secondary">Маршрутизация сравнивает цену × штраф: при штрафе 1.5 провайдер должен быть на треть дешевле, чтобы выиграть. На цены для клиентов это не влияет.</p>
         <label className="flex items-center justify-between gap-3 rounded-2xl bg-surface-sub px-3.5 py-3 text-sm font-semibold text-content-primary">
-          Routing enabled
+          Маршрутизация включена
           <input type="checkbox" checked={routing} disabled={!provider.isActive && !provider.routingEnabled} onChange={(e) => setRouting(e.target.checked)} className="h-5 w-5 accent-[var(--color-brand,#2563eb)]" />
         </label>
 
         <fieldset className="space-y-2.5 rounded-2xl border border-blue-100/70 p-3">
-          <legend className="px-1 text-xs font-bold text-content-primary">Payouts (treasury top-ups to this provider)</legend>
+          <legend className="px-1 text-xs font-bold text-content-primary">Выплаты (пополнение этого провайдера из казны)</legend>
           <label className="block text-xs font-bold text-content-primary">
-            Allowed destination wallet (TON)
+            Разрешённый кошелёк получателя (TON)
             <input value={draft.wallet} spellCheck={false} autoComplete="off" onChange={(e) => set({ wallet: e.target.value })} placeholder="UQ… or 0:…" aria-invalid={Boolean(payout.errors.wallet)}
               className={cn('mt-1 w-full rounded-xl border bg-white px-3 py-2.5 font-mono text-[13px] outline-none', payout.errors.wallet ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')} />
           </label>
           {payout.errors.wallet && <p role="alert" className="text-xs font-semibold text-rose-600">{payout.errors.wallet}</p>}
           <div className="grid grid-cols-2 gap-2">
-            <Segmented label="Network" value={draft.network} options={['mainnet', 'testnet'] as const} onChange={(network) => set({ network })} />
-            <Segmented label="Asset" value={draft.asset} options={['TON', 'USDT'] as const} onChange={(asset) => set({ asset })} />
+            <Segmented label="Сеть" value={draft.network} options={['mainnet', 'testnet'] as const} onChange={(network) => set({ network })} />
+            <Segmented label="Актив" value={draft.asset} options={['TON', 'USDT'] as const} onChange={(asset) => set({ asset })} />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <AmountField label="Max per top-up (USD)" value={draft.maxPerTx} onChange={(maxPerTx) => set({ maxPerTx })} invalid={Boolean(payout.errors.maxPerTx)} />
-            <AmountField label="Max per day (USD)" value={draft.maxDaily} onChange={(maxDaily) => set({ maxDaily })} invalid={Boolean(payout.errors.maxDaily)} />
+            <AmountField label="Максимум за пополнение (USD)" value={draft.maxPerTx} onChange={(maxPerTx) => set({ maxPerTx })} invalid={Boolean(payout.errors.maxPerTx)} />
+            <AmountField label="Максимум в день (USD)" value={draft.maxDaily} onChange={(maxDaily) => set({ maxDaily })} invalid={Boolean(payout.errors.maxDaily)} />
           </div>
           {(payout.errors.maxPerTx || payout.errors.maxDaily) && <p role="alert" className="text-xs font-semibold text-rose-600">{payout.errors.maxPerTx ?? payout.errors.maxDaily}</p>}
           <p className="text-xs text-content-secondary">
             {payout.incomplete
-              ? 'Until a wallet and both limits are set, every top-up to this provider is refused.'
-              : `Used today: ${usd(provider.topupUsedToday)}. The server enforces both limits and the treasury reserve under a lock; the app can never pick another destination.`}
+              ? 'Пока не указаны кошелёк и оба лимита, любое пополнение этого провайдера отклоняется.'
+              : `Сегодня потрачено: ${usd(provider.topupUsedToday)}. Сервер проверяет оба лимита и резерв казны, приложение не может выбрать другой адрес.`}
           </p>
           {walletConfirmed && walletChanged && (
             <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-              Every future top-up of {provider.name} goes to <span className="break-all font-mono">{newWallet}</span>. Check it character by character with the provider: a transfer to a wrong address cannot be undone. Tap Save again to confirm.
+              Все будущие пополнения {provider.name} пойдут на <span className="break-all font-mono">{newWallet}</span>. Сверьте адрес с провайдером по символам: перевод на неверный адрес не вернуть. Нажмите «Сохранить» ещё раз для подтверждения.
             </p>
           )}
         </fieldset>
@@ -328,10 +327,10 @@ export function ConfigModal({ provider, onClose, onSave }: { provider: ProviderC
         {err && <p role="alert" className="text-xs font-semibold text-rose-600">{err}</p>}
         <div className="flex gap-2">
           <Button className="h-11 flex-1 text-sm" disabled={!valid || busy} onClick={() => void save()}>
-            <Check size={16} strokeWidth={2} /> {walletChanged && !walletConfirmed ? 'Save (new wallet)' : walletChanged ? 'Confirm new wallet' : 'Save'}
+            <Check size={16} strokeWidth={2} /> {walletChanged && !walletConfirmed ? 'Сохранить (новый кошелёк)' : walletChanged ? 'Подтвердить новый кошелёк' : 'Сохранить'}
           </Button>
           <button type="button" onClick={onClose} className="flex h-11 flex-1 items-center justify-center gap-1 rounded-2xl bg-surface-sub text-sm font-semibold text-content-secondary active:scale-95">
-            <X size={16} strokeWidth={2} /> Cancel
+            <X size={16} strokeWidth={2} /> Отмена
           </button>
         </div>
       </div>

@@ -198,22 +198,22 @@ describe('payment screen helpers', () => {
   })
 
   it('names each detector reason', () => {
-    expect(describePaymentIssue('outcome unknown: timeout').title).toBe('Payment outcome unknown')
+    expect(describePaymentIssue('outcome unknown: timeout').title).toBe('Результат платежа неизвестен')
     expect(describePaymentIssue('outcome unknown: timeout').detail).toBe('timeout')
-    expect(describePaymentIssue('Stuck in CONFIRMING for over 4 h: x').title).toBe('Payment stuck in limbo')
-    expect(describePaymentIssue('Confirmed on chain at x but not completed after 30 min, and the provider balance did not rise in proportion: y').title).toBe('Provider balance not credited')
-    expect(describePaymentIssue('Confirmed on chain at x but not completed after 30 min. The provider balance rose').title).toBe('Confirmed, not completed')
+    expect(describePaymentIssue('Stuck in CONFIRMING for over 4 h: x').title).toBe('Платёж завис')
+    expect(describePaymentIssue('Confirmed on chain at x but not completed after 30 min, and the provider balance did not rise in proportion: y').title).toBe('Баланс провайдера не пополнился')
+    expect(describePaymentIssue('Confirmed on chain at x but not completed after 30 min. The provider balance rose').title).toBe('Подтверждён, но не завершён')
   })
 
   it('validates the payout form like the server: TON address with checksum, testnet-only never on mainnet, sane limits', () => {
     const d = { wallet: RAW, network: 'mainnet' as const, asset: 'TON' as const, maxPerTx: '50', maxDaily: '200' }
     expect(checkPayoutDraft(d)).toMatchObject({ input: { wallet: RAW, maxTopupPerTx: 50, maxDailyTopup: 200 }, errors: {}, incomplete: false })
     expect(checkPayoutDraft({ ...d, wallet: MAINNET_PLAIN }).errors).toEqual({})
-    expect(checkPayoutDraft({ ...d, wallet: BAD_CHECKSUM }).errors.wallet).toMatch(/Not a valid TON address/)
+    expect(checkPayoutDraft({ ...d, wallet: BAD_CHECKSUM }).errors.wallet).toMatch(/Это не адрес TON/)
     expect(checkPayoutDraft({ ...d, wallet: 'UQ-short' }).input).toBeNull()
-    expect(checkPayoutDraft({ ...d, wallet: TESTNET_ONLY }).errors.wallet).toMatch(/testnet-only/)
+    expect(checkPayoutDraft({ ...d, wallet: TESTNET_ONLY }).errors.wallet).toMatch(/только для тестовой сети/)
     expect(checkPayoutDraft({ ...d, wallet: TESTNET_ONLY, network: 'testnet' }).errors).toEqual({})
-    expect(checkPayoutDraft({ ...d, maxDaily: '20' }).errors.maxDaily).toMatch(/cannot be below/)
+    expect(checkPayoutDraft({ ...d, maxDaily: '20' }).errors.maxDaily).toMatch(/не может быть меньше/)
     expect(checkPayoutDraft({ ...d, maxPerTx: '0' }).errors.maxPerTx).toBeDefined()
     // clearing is allowed, it simply disables top-ups (fail closed)
     expect(checkPayoutDraft({ ...d, wallet: ' ', maxPerTx: '' })).toMatchObject({ input: { wallet: null, maxTopupPerTx: null }, incomplete: true })
@@ -272,26 +272,26 @@ describe('admin screens', () => {
   it('PAYMENT_CREATED: shows the full server-side destination, Record Broadcast and Cancel', async () => {
     const out = await card(basePayment({}))
     expect(out).toContain(RAW)
-    expect(out).toContain('Record Broadcast')
-    expect(out).toContain('Cancel')
-    expect(out).not.toContain('Mark as Failed')
+    expect(out).toContain('Записать отправку')
+    expect(out).toContain('Отменить')
+    expect(out).not.toContain('Неудачен<')
   })
 
   it('BROADCASTED: Advance (Mark Confirming) and Mark as Failed; CONFIRMED: forward only', async () => {
     const b = await card(basePayment({ status: 'BROADCASTED', txHash: 'TXHASH-123456789' }))
-    expect(b).toContain('Mark Confirming')
-    expect(b).toContain('Mark as Failed')
+    expect(b).toContain('Отметить «Подтверждается»')
+    expect(b).toContain('Неудачен')
     const c = await card(basePayment({ status: 'CONFIRMED', txHash: 'TX', confirmedAt: ago(40 * MIN) }))
-    expect(c).toContain('Balance Verified')
-    expect(c).not.toContain('Mark as Failed')
-    expect(c).not.toContain('Cancel')
+    expect(c).toContain('Баланс проверен')
+    expect(c).not.toContain('Неудачен<')
+    expect(c).not.toContain('Отменить')
   })
 
   it('shows the detector verdict on the payment', async () => {
     const issue = detectPaymentIssue(evidence({ providerBalance: 100 }), NOW)
     const out = await card(basePayment({ status: 'CONFIRMED', txHash: 'TX', issue, openCaseId: PID }))
-    expect(out).toContain('Provider balance not credited')
-    expect(out).toContain('reconciliation case open')
+    expect(out).toContain('Баланс провайдера не пополнился')
+    expect(out).toContain('открыт кейс сверки')
     expect(out).toContain('did not rise in proportion')
   })
 
@@ -301,15 +301,15 @@ describe('admin screens', () => {
       const { RecordBroadcastModal } = await import('../src/components/admin/PaymentsPanel')
       return createElement(RecordBroadcastModal, { payment: basePayment({}), onClose: () => {}, onSubmit: async () => {} })
     })
-    expect(rb).toContain('Transaction hash')
-    expect(rb).toContain('mark it as Confirming too')
+    expect(rb).toContain('Хеш транзакции')
+    expect(rb).toContain('сразу отметить как «Подтверждается»')
     const fail = await html(async () => {
       const { createElement } = await import('react')
       const { ReasonModal } = await import('../src/components/admin/PaymentsPanel')
       return createElement(ReasonModal, { payment: basePayment({ status: 'RECONCILIATION_REQUIRED', txHash: 'T', confirmedAt: ago(MIN) }), kind: 'fail', onClose: () => {}, onSubmit: async () => {} })
     })
-    expect(fail).toContain('the money has left')
-    expect(fail).toContain('returns to the treasury')
+    expect(fail).toContain('деньги ушли')
+    expect(fail).toContain('вернётся в казну')
   })
 
   const provider: ProviderConfigView = {
@@ -324,7 +324,7 @@ describe('admin screens', () => {
       const { ConfigModal } = await import('../src/components/admin/ProvidersTab')
       return createElement(ConfigModal, { provider, onClose: () => {}, onSave: async () => {} })
     })
-    for (const text of ['Allowed destination wallet (TON)', 'Network', 'Asset', 'Max per top-up (USD)', 'Max per day (USD)', RAW, 'mainnet', 'testnet', 'USDT', 'Used today: $30.00']) expect(out).toContain(text)
+    for (const text of ['Разрешённый кошелёк получателя (TON)', 'Сеть', 'Актив', 'Максимум за пополнение (USD)', 'Максимум в день (USD)', RAW, 'mainnet', 'testnet', 'USDT', 'Сегодня потрачено: $30.00']) expect(out).toContain(text)
   })
 
   it('provider card: payout summary, or a warning that top-ups are refused', async () => {
@@ -333,8 +333,8 @@ describe('admin screens', () => {
       const { PayoutSummary } = await import('../src/components/admin/ProvidersTab')
       return createElement(PayoutSummary, { provider: p })
     })
-    expect(await render(provider)).toContain('$50.00 per top-up · $200.00 per day · $30.00 used today')
-    expect(await render({ ...provider, maxDailyTopup: null })).toContain('Payouts not configured')
+    expect(await render(provider)).toContain('$50.00 за пополнение · $200.00 в день · сегодня потрачено $30.00')
+    expect(await render({ ...provider, maxDailyTopup: null })).toContain('Выплаты не настроены')
   })
 
   it('treasury reserve modal', async () => {
@@ -343,7 +343,7 @@ describe('admin screens', () => {
       const { ReserveModal } = await import('../src/components/admin/TreasuryTab')
       return createElement(ReserveModal, { current: 25, balance: 100, onClose: () => {}, onSubmit: async () => {} })
     })
-    expect(out).toContain('Minimum treasury reserve')
+    expect(out).toContain('Минимальный резерв казны')
     expect(out).toContain('value="25"')
   })
 
@@ -359,8 +359,8 @@ describe('admin screens', () => {
       const session = { token: 't', isMock: true, user: { isAdmin: true } } as never
       return createElement(CaseCard, { kase, severity: 'high', session, onDone: () => {}, onFailed: () => {}, onOpenPayments: () => {} })
     })
-    for (const text of ['Top-up of Secsers', 'Payment stuck in limbo', 'Open Payment', 'Mark Resolved', '$50.00']) expect(out).toContain(text)
-    expect(out).not.toContain('Force Refund')
+    for (const text of ['Пополнение провайдера Secsers', 'Платёж завис', 'Открыть платёж', 'Решено', '$50.00']) expect(out).toContain(text)
+    expect(out).not.toContain('Вернуть деньги')
   })
 })
 

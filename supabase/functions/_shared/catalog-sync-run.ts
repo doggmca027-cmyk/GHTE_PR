@@ -68,7 +68,8 @@ export interface CatalogStore {
 }
 
 export interface SyncProviderInput {
-  provider: { id: string; name: string }
+  /** routing_enabled false: the catalogue is imported and kept current, but nothing of this provider is put on the storefront. */
+  provider: { id: string; name: string; routing_enabled?: boolean }
   adapter: CatalogAdapter
   store: CatalogStore
   rules: PriceRule[]
@@ -142,7 +143,7 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
 
   // 5b. Publish: every service of this provider that can be sold as it is gets a storefront service (new ones appear, renamed ones are
   //     refreshed). A failure here is reported but never stops the pricing of what is already on the storefront.
-  if (store.publishServices && store.loadPlatformSlugs) {
+  if (provider.routing_enabled !== false && store.publishServices && store.loadPlatformSlugs) {
     try {
       const idByExternal = new Map(saved.map((s) => [s.external_service_id, s.id]))
       const candidates = valid.flatMap((s) => {

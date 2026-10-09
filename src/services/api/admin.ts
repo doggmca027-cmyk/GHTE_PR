@@ -1,5 +1,5 @@
 import type { AuthSession } from '@/services/api/auth'
-import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingRow, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayment, ProviderPaymentAction, ProviderPayoutInput, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, SystemHealth, PlatformSettingsView, ReconCase, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
+import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingPage, PricingQuery, PromoInput, PromoView, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayment, ProviderPaymentAction, ProviderPayoutInput, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, SystemHealth, PlatformSettingsView, ReconCase, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
 import { createMockPricing } from './mock-pricing'
 import { createMockObservability } from './mock-observability'
 import { mockProviders } from './mock-providers'
@@ -16,6 +16,8 @@ export { AdminApiError }
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 const TIMEOUT_MS = 15_000
+// a markup on a whole platform re-prices thousands of services
+const PRICING_WRITE_TIMEOUT_MS = 60_000
 
 // Lazily created so importing this module never touches storage during tests / SSR.
 let mock: ReturnType<typeof createMockAdmin> | undefined
@@ -144,15 +146,15 @@ export async function updatePriceRule(session: AuthSession, id: string, patch: {
 let mockPricingStore: ReturnType<typeof createMockPricing> | undefined
 const mockPricing = () => (mockPricingStore ??= createMockPricing())
 
-async function callPricing<T>(session: AuthSession, body: Record<string, unknown>): Promise<T> {
+async function callFunction<T>(fn: string, session: AuthSession, body: Record<string, unknown>): Promise<T> {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new AdminApiError('server', 'Backend is not configured.')
   let res: Response
   try {
-    res = await fetch(`${SUPABASE_URL}/functions/v1/admin-pricing`, {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(fn === 'admin-pricing' ? PRICING_WRITE_TIMEOUT_MS : TIMEOUT_MS),
     })
   } catch {
     throw new AdminApiError('network', 'Connection lost. Please try again.')
@@ -161,33 +163,65 @@ async function callPricing<T>(session: AuthSession, body: Record<string, unknown
   if (res.ok && data?.success) return data
   if (res.status === 401 || res.status === 403) throw new AdminApiError('forbidden', 'Admin access required.')
   if (res.status === 400) throw new AdminApiError('invalid_input', data?.message ?? 'Invalid input.')
+  if (res.status === 409) throw new AdminApiError('conflict', data?.message ?? 'Conflict.')
   throw new AdminApiError('server', 'Something went wrong. Please try again.')
 }
+const callPricing = <T,>(session: AuthSession, body: Record<string, unknown>) => callFunction<T>('admin-pricing', session, body)
 
-export async function getPricing(session: AuthSession): Promise<PricingRow[]> {
+export async function getPricing(session: AuthSession, query: PricingQuery = {}): Promise<PricingPage> {
   if (session.isMock) {
     guardMock(session)
-    return mockPricing().list()
+    return mockPricing().list(query)
   }
-  const { services } = await callPricing<{ services: Record<string, unknown>[] }>(session, { action: 'GET' })
-  return services.map((r) => {
-    const rate = num(r.customer_rate_per_1000)
-    const cost = r.best_offer_cost == null ? null : num(r.best_offer_cost)
-    const margin = cost === null ? null : rate - cost
-    return {
-      serviceId: String(r.service_id), name: String(r.name), category: String(r.category ?? ''), platform: String(r.platform ?? ''),
-      customerRate: rate, bestCost: cost, marginAbsolute: margin, marginPercent: margin !== null && rate > 0 ? (margin / rate) * 100 : null,
-    }
-  })
+  const { services, total } = await callPricing<{ services: Record<string, unknown>[]; total: number }>(session, { action: 'GET', ...query })
+  return {
+    total: num(total),
+    rows: services.map((r) => {
+      const rate = num(r.customer_rate_per_1000)
+      const cost = r.best_offer_cost == null ? null : num(r.best_offer_cost)
+      const margin = cost === null ? null : rate - cost
+      return {
+        serviceId: String(r.service_id), name: String(r.name), category: String(r.category ?? ''), platform: String(r.platform ?? ''),
+        customerRate: rate, bestCost: cost, marginAbsolute: margin, marginPercent: margin !== null && rate > 0 ? (margin / rate) * 100 : null,
+      }
+    }),
+  }
 }
 
-export async function setServiceMargin(session: AuthSession, input: MarginRuleInput): Promise<{ repriced: number }> {
+/** Saves a markup for one service, a category, a platform or (no scope) every service, and re-prices what it touches right away. */
+export async function setMargin(session: AuthSession, input: MarginRuleInput): Promise<{ repriced: number }> {
   if (session.isMock) {
     guardMock(session)
-    mockPricing().setMargin(input)
-    return { repriced: 1 }
+    return { repriced: mockPricing().setMargin(input) }
   }
-  return callPricing<{ repriced: number }>(session, { action: 'UPDATE_RULE', serviceId: input.serviceId, type: input.type, value: input.value })
+  return callPricing<{ repriced: number }>(session, { action: 'UPDATE_RULE', serviceId: input.serviceId, categoryId: input.categoryId, platform: input.platform, type: input.type, value: input.value })
+}
+
+// ---- Promo codes (admin-promos Edge Function) ---------------------------------------------------------
+
+export async function listPromos(session: AuthSession): Promise<PromoView[]> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockPricing().listPromos()
+  }
+  return (await callFunction<{ promos: PromoView[] }>('admin-promos', session, { action: 'LIST' })).promos
+}
+
+export async function createPromo(session: AuthSession, input: PromoInput): Promise<PromoView> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockPricing().createPromo(input)
+  }
+  return (await callFunction<{ promo: PromoView }>('admin-promos', session, { action: 'CREATE', ...input })).promo
+}
+
+export async function setPromoActive(session: AuthSession, id: string, active: boolean): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    mockPricing().setPromoActive(id, active)
+    return
+  }
+  await callFunction('admin-promos', session, { action: 'SET_ACTIVE', id, active })
 }
 
 // ---- Provider management (admin_list_providers / admin_update_provider_config) ------------------------

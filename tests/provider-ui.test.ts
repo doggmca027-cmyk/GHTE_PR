@@ -18,10 +18,10 @@ const session = (over: Partial<AuthSession> = {}, admin = true): AuthSession => 
 
 describe('checkProviderUrl', () => {
   it('requires https:// and a parsable URL', () => {
-    expect(checkProviderUrl('')).toBe('API URL is required.')
+    expect(checkProviderUrl('')).toBe('Укажите адрес API.')
     expect(checkProviderUrl('http://panel.example.com')).toMatch(/https:\/\//)
     expect(checkProviderUrl('panel.example.com')).toMatch(/https:\/\//)
-    expect(checkProviderUrl('https://')).toMatch(/valid/)
+    expect(checkProviderUrl('https://')).toMatch(/ссылку/)
     expect(checkProviderUrl(' https://panel.example.com/api ')).toBeNull()
   })
 })
@@ -101,28 +101,28 @@ describe('ProviderModal markup', () => {
 
   it('add: empty fields, a password input, no key warning', async () => {
     const out = await render({ provider: null })
-    expect(out).toContain('Add provider')
+    expect(out).toContain('Добавить провайдера')
     expect(out).toContain('type="password"')
-    expect(out).toContain('Paste the provider API key')
+    expect(out).toContain('Вставьте API-ключ провайдера')
     expect(out).toContain('placeholder="https://panel.example.com/api/v2"')
-    expect(out).not.toContain('has no API key yet')
+    expect(out).not.toContain('ещё нет API-ключа')
   })
 
   it('edit: prefilled, the key field is empty with the "keep" placeholder, and nothing secret is in the markup', async () => {
     const out = await render({ provider: provider() })
-    expect(out).toContain('Edit Secsers')
+    expect(out).toContain('Изменить: Secsers')
     expect(out).toContain('value="Secsers"')
     expect(out).toContain('value="https://secsers.example.com/api/v2"')
-    expect(out).toContain('placeholder="Leave empty to keep current key"')
-    expect(out).toContain('A key is stored. Leave empty to keep it.')
+    expect(out).toContain('placeholder="Пусто — оставить текущий ключ"')
+    expect(out).toContain('Ключ сохранён. Оставьте поле пустым, чтобы не менять его.')
     expect(out).toMatch(/autocomplete="new-password"/i)
-    expect(out).not.toContain('has no API key yet')
+    expect(out).not.toContain('ещё нет API-ключа')
   })
 
   it('edit without a stored key: shows the warning', async () => {
     const out = await render({ provider: provider({ hasApiKey: false }) })
-    expect(out).toContain('This provider has no API key yet')
-    expect(out).toContain('Routing cannot be switched on until one is saved.')
+    expect(out).toContain('У этого провайдера ещё нет API-ключа')
+    expect(out).toContain('маршрутизацию включить нельзя')
   })
 
   it('escapes provider names', async () => {

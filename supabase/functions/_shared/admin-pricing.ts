@@ -3,7 +3,8 @@
 import { calculateCustomerRate } from './price-engine.ts'
 import type { Platform, PriceRule } from './types.ts'
 
-const PLATFORMS: readonly Platform[] = ['telegram', 'instagram', 'tiktok', 'youtube', 'twitter', 'facebook', 'other']
+// any slug of the platform registry (98 platforms); the function looks it up in the database and answers "Unknown platform" for a slug that is not there
+const PLATFORM_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_RULE_VALUE = 100_000
 
@@ -16,14 +17,54 @@ export interface UpdateRuleInput {
   value: number
 }
 
-export type ParsedPricingRequest = { action: 'GET' } | ({ action: 'UPDATE_RULE' } & UpdateRuleInput)
+/** Which services the pricing grid shows, a page at a time (the catalogue has thousands). */
+export interface PricingQuery {
+  search: string
+  platform: string | null
+  categoryId: string | null
+  offset: number
+  limit: number
+}
+
+export const PRICING_PAGE_MAX = 100
+
+export type ParsedPricingRequest = ({ action: 'GET' } & PricingQuery) | ({ action: 'UPDATE_RULE' } & UpdateRuleInput)
+
+/** One row of get_admin_pricing_view, as far as the grid filter needs it. */
+export interface PricingViewRow {
+  name?: unknown
+  category?: unknown
+  category_id?: unknown
+  platform?: unknown
+}
+
+/** Filters the pricing view by search text (every word must appear in the name or the category), platform and category, then cuts one page. */
+export function pagePricingRows<T extends PricingViewRow>(rows: T[], q: PricingQuery): { rows: T[]; total: number } {
+  const words = q.search.toLowerCase().split(/s+/).filter(Boolean)
+  const hits = rows.filter((r) => {
+    if (q.platform && r.platform !== q.platform) return false
+    if (q.categoryId && r.category_id !== q.categoryId) return false
+    if (words.length === 0) return true
+    const hay = `${String(r.name ?? '')} ${String(r.category ?? '')}`.toLowerCase()
+    return words.every((w) => hay.includes(w))
+  })
+  return { rows: hits.slice(q.offset, q.offset + q.limit), total: hits.length }
+}
 
 /** Validates the request body. Returns an error message instead of throwing. */
 export function parsePricingRequest(body: unknown): ParsedPricingRequest | { error: string } {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { error: 'Body must be a JSON object.' }
   const b = body as Record<string, unknown>
   const action = typeof b.action === 'string' ? b.action.toUpperCase() : 'GET'
-  if (action === 'GET') return { action: 'GET' }
+  if (action === 'GET') {
+    const search = typeof b.search === 'string' ? b.search.trim().slice(0, 80) : ''
+    const platform = typeof b.platform === 'string' && b.platform !== '' ? b.platform : null
+    if (platform && !PLATFORM_SLUG.test(platform)) return { error: 'Unknown platform.' }
+    const categoryId = typeof b.categoryId === 'string' && b.categoryId !== '' ? b.categoryId : null
+    if (categoryId && !UUID.test(categoryId)) return { error: 'Invalid scope id.' }
+    const int = (v: unknown, fallback: number, max: number) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? Math.min(v, max) : fallback)
+    return { action: 'GET', search, platform, categoryId, offset: int(b.offset, 0, 1_000_000), limit: Math.max(1, int(b.limit, 30, PRICING_PAGE_MAX)) }
+  }
   if (action !== 'UPDATE_RULE') return { error: 'Unknown action.' }
 
   const scope = (key: string): string | null | undefined => {
@@ -36,7 +77,7 @@ export function parsePricingRequest(body: unknown): ParsedPricingRequest | { err
   const platform = scope('platform')
   if (serviceId === undefined || categoryId === undefined || platform === undefined) return { error: 'Invalid scope.' }
   if ((serviceId && !UUID.test(serviceId)) || (categoryId && !UUID.test(categoryId))) return { error: 'Invalid scope id.' }
-  if (platform && !PLATFORMS.includes(platform as Platform)) return { error: 'Unknown platform.' }
+  if (platform && !PLATFORM_SLUG.test(platform)) return { error: 'Unknown platform.' }
   if ([serviceId, categoryId, platform].filter(Boolean).length > 1) return { error: 'A rule targets at most one scope.' }
 
   if (b.type !== 'fixed' && b.type !== 'percentage') return { error: 'type must be "fixed" or "percentage".' }

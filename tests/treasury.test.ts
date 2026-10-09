@@ -54,7 +54,7 @@ describe('view helpers and dev mock', () => {
   it('formats signed amounts and labels', () => {
     expect(signedUsd(5)).toBe('+$5.00')
     expect(signedUsd(-120.5)).toBe('-$120.50')
-    expect(treasuryTypeLabel('provider_topup')).toBe('Provider top-up')
+    expect(treasuryTypeLabel('provider_topup')).toBe('Пополнение провайдера')
   })
 
   it('mock ledger refuses overdrafts, replays by key and paginates', () => {

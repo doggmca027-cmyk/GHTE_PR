@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { affectedServices, parsePricingRequest, repriceServices, type RepriceService } from '../supabase/functions/_shared/admin-pricing.ts'
+import { affectedServices, pagePricingRows, parsePricingRequest, repriceServices, type RepriceService } from '../supabase/functions/_shared/admin-pricing.ts'
 import { calculateCustomerRate } from '../supabase/functions/_shared/price-engine.ts'
 import { pricingHealth } from '../src/lib/admin-view'
 import { createMockPricing } from '../src/services/api/mock-pricing'
@@ -12,13 +12,15 @@ const CAT = '22222222-2222-4222-8222-222222222222'
 
 describe('parsePricingRequest', () => {
   it('defaults to GET and accepts a valid UPDATE_RULE', () => {
-    expect(parsePricingRequest({})).toEqual({ action: 'GET' })
-    expect(parsePricingRequest({ action: 'get' })).toEqual({ action: 'GET' })
+    expect(parsePricingRequest({})).toEqual({ action: 'GET', search: '', platform: null, categoryId: null, offset: 0, limit: 30 })
+    expect(parsePricingRequest({ action: 'get' })).toMatchObject({ action: 'GET' })
     expect(parsePricingRequest({ action: 'UPDATE_RULE', serviceId: SVC, type: 'percentage', value: 150.456 })).toEqual({
       action: 'UPDATE_RULE', serviceId: SVC, categoryId: null, platform: null, type: 'percentage', value: 150.46,
     })
     expect(parsePricingRequest({ action: 'UPDATE_RULE', type: 'fixed', value: 0 })).toMatchObject({ serviceId: null, categoryId: null, platform: null })
     expect(parsePricingRequest({ action: 'UPDATE_RULE', platform: 'telegram', type: 'fixed', value: 1 })).toMatchObject({ platform: 'telegram' })
+    // every platform of the registry is a scope, not only the first seven
+    expect(parsePricingRequest({ action: 'UPDATE_RULE', platform: 'binance-square', type: 'percentage', value: 120 })).toMatchObject({ platform: 'binance-square' })
   })
 
   it.each([
@@ -30,11 +32,19 @@ describe('parsePricingRequest', () => {
     [{ action: 'UPDATE_RULE', type: 'fixed', value: '5' }],
     [{ action: 'UPDATE_RULE', type: 'fixed', value: Number.NaN }],
     [{ action: 'UPDATE_RULE', type: 'fixed', value: 1, serviceId: 'nope' }],
-    [{ action: 'UPDATE_RULE', type: 'fixed', value: 1, platform: 'myspace' }],
+    [{ action: 'UPDATE_RULE', type: 'fixed', value: 1, platform: 'My Space!' }],
     [{ action: 'UPDATE_RULE', type: 'fixed', value: 1, serviceId: SVC, categoryId: CAT }],
     [{ action: 'UPDATE_RULE', type: 'fixed', value: 1, serviceId: 5 }],
+    [{ action: 'GET', platform: '../etc' }],
+    [{ action: 'GET', categoryId: 'nope' }],
   ])('rejects %j', (body) => {
     expect(parsePricingRequest(body)).toHaveProperty('error')
+  })
+
+  it('reads the grid query: trimmed search, a page of at most 100', () => {
+    expect(parsePricingRequest({ action: 'GET', search: '  views  ', platform: 'telegram', categoryId: CAT, offset: 60, limit: 5000 }))
+      .toEqual({ action: 'GET', search: 'views', platform: 'telegram', categoryId: CAT, offset: 60, limit: 100 })
+    expect(parsePricingRequest({ action: 'GET', offset: -4, limit: 0 })).toMatchObject({ offset: 0, limit: 1 })
   })
 })
 
@@ -81,11 +91,34 @@ describe('PricingTab health', () => {
 describe('mock pricing (dev mode)', () => {
   it('reprices through the shared engine', () => {
     const m = createMockPricing()
-    const before = m.list()[0]
+    const before = m.list().rows[0]
     m.setMargin({ serviceId: before.serviceId, type: 'percentage', value: 100 })
-    const after = m.list()[0]
+    const after = m.list().rows[0]
     expect(after.customerRate).toBe(1.08)
     expect(after.marginAbsolute).toBeCloseTo(after.customerRate - (after.bestCost ?? 0), 4)
+  })
+
+  it('a margin on a platform or on everything reprices every service in that scope', () => {
+    const m = createMockPricing()
+    expect(m.setMargin({ platform: 'telegram', type: 'percentage', value: 100 })).toBe(1)
+    expect(m.setMargin({ type: 'percentage', value: 50 })).toBe(3)
+    expect(m.list().rows.map((r) => r.customerRate)).toEqual([0.81, 3.15, 0.12])
+  })
+
+  it('searches and pages', () => {
+    const m = createMockPricing()
+    expect(m.list({ search: 'instagram' }).rows).toHaveLength(1)
+    expect(m.list({ platform: 'tiktok' }).total).toBe(1)
+    expect(m.list({ offset: 1, limit: 1 })).toMatchObject({ total: 3, rows: [{ platform: 'instagram' }] })
+  })
+
+  it('promo codes: create, reject a duplicate, switch off', () => {
+    const m = createMockPricing()
+    const p = m.createPromo({ code: ' gift5 ', discountType: 'fixed', discountValue: 5 })
+    expect(p).toMatchObject({ code: 'GIFT5', isActive: true, currentUses: 0 })
+    expect(() => m.createPromo({ code: 'GIFT5', discountType: 'percentage', discountValue: 5 })).toThrow('already exists')
+    m.setPromoActive(p.id, false)
+    expect(m.listPromos()[0].isActive).toBe(false)
   })
 })
 
@@ -191,5 +224,28 @@ describe('get_admin_pricing_view', () => {
     await db.exec(`reset role; set role anon`)
     await expect(db.query(`select get_admin_pricing_view()`)).rejects.toThrow()
     await db.exec('reset role')
+  })
+})
+
+describe('pagePricingRows', () => {
+  const rows = [
+    { name: 'Telegram Post Views', category: 'Telegram Views', category_id: 'c1', platform: 'telegram' },
+    { name: 'Telegram Subscribers', category: 'Telegram Members', category_id: 'c2', platform: 'telegram' },
+    { name: 'Instagram Likes', category: 'Instagram Likes', category_id: 'c3', platform: 'instagram' },
+  ]
+  const q = (over = {}) => ({ search: '', platform: null, categoryId: null, offset: 0, limit: 30, ...over })
+
+  it('filters by platform, category and every word of the search (name or category)', () => {
+    expect(pagePricingRows(rows, q()).total).toBe(3)
+    expect(pagePricingRows(rows, q({ platform: 'instagram' })).rows.map((r) => r.name)).toEqual(['Instagram Likes'])
+    expect(pagePricingRows(rows, q({ categoryId: 'c2' })).rows.map((r) => r.name)).toEqual(['Telegram Subscribers'])
+    expect(pagePricingRows(rows, q({ search: 'telegram members' })).rows.map((r) => r.name)).toEqual(['Telegram Subscribers'])
+    expect(pagePricingRows(rows, q({ search: 'nothing here' })).total).toBe(0)
+  })
+
+  it('cuts a page and still reports the total', () => {
+    const page = pagePricingRows(rows, q({ offset: 1, limit: 1 }))
+    expect(page.rows.map((r) => r.name)).toEqual(['Telegram Subscribers'])
+    expect(page.total).toBe(3)
   })
 })

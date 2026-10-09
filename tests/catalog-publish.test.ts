@@ -222,6 +222,19 @@ describe('the catalog sync publishes what it just stored', () => {
     expect(report.published).toBeUndefined()
   })
 
+  it('a provider with routing switched off is imported and kept current, but nothing of it reaches the storefront', async () => {
+    const store = new Store()
+    const report = await syncProviderCatalog({
+      provider: { id: 'prov', name: 'Panel', routing_enabled: false },
+      adapter: { getServices: async () => [svc('1'), svc('2')], getBalance: async () => ({ balance: 1, currency: 'USD' }) },
+      store, rules: [], log: silentLogger,
+    })
+    expect(report.status).toBe('ok')
+    expect(report.added).toBe(2)
+    expect(store.published).toHaveLength(0)
+    expect(report.published).toBeUndefined()
+  })
+
   it('a store that cannot publish simply publishes nothing', async () => {
     const store = new Store()
     Object.defineProperty(store, 'publishServices', { value: undefined }) // an instance without the optional method

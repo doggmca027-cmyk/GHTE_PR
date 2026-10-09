@@ -18,7 +18,7 @@ describe('RevenueSection', () => {
 
   it('totals, margin share and one bar row per day, newest first, with orders and AOV', async () => {
     const html = await view(section([day('2026-05-10', 2, 6.4, 3.2), day('2026-05-11', 0, 0, 0), day('2026-05-12', 2, 24, 12)]))
-    for (const text of ['Revenue &amp; margin', '$30.40', '$15.20', '50% of revenue', '>4<', '$7.60', '05-12', '05-10', 'AOV $12.00', 'AOV –']) expect(html).toContain(text)
+    for (const text of ['Выручка и маржа', '$30.40', '$15.20', '50% от выручки', '>4<', '$7.60', '05-12', '05-10', 'чек $12.00', 'чек –']) expect(html).toContain(text)
     expect(html.indexOf('05-12')).toBeLessThan(html.indexOf('05-10'))
     expect(html).toContain('width:100%') // the best day fills the bar
     expect(html).toContain('width:26.7%')
@@ -27,7 +27,7 @@ describe('RevenueSection', () => {
   it('loading: skeleton rows, busy, no numbers', async () => {
     const html = await view(null)
     expect(html).toContain('aria-busy="true"')
-    expect(html).toContain('Loading revenue &amp; margin')
+    expect(html).toContain('Загрузка: выручка и маржа')
     expect(html).toContain('animate-pulse')
     expect(html).not.toContain('$')
   })
@@ -40,8 +40,8 @@ describe('RevenueSection', () => {
 
   it('empty: no orders in the period is a message, not a wall of empty bars', async () => {
     const html = await view(section([day('2026-05-10', 0, 0, 0), day('2026-05-11', 0, 0, 0)]))
-    expect(html).toContain('No data for this period yet.')
-    expect(html).not.toContain('Daily revenue')
+    expect(html).toContain('За этот период данных пока нет.')
+    expect(html).not.toContain('Выручка по дням')
   })
 })
 
@@ -55,14 +55,14 @@ describe('FunnelSection', () => {
 
   it('the three steps with users, bars relative to the first step and both conversion rates', async () => {
     const html = await view({ data: steps })
-    for (const text of ['Viewed the catalog', 'Started checkout', 'Placed an order', '>240<', '>96<', '>31<', 'Start of the funnel', '40% of the previous step · 40% of all', '32.3% of the previous step · 12.9% of all']) expect(html).toContain(text)
+    for (const text of ['Открыли каталог', 'Начали оформление', 'Сделали заказ', '>240<', '>96<', '>31<', 'Начало воронки', '40% от прошлого шага · 40% от всех', '32.3% от прошлого шага · 12.9% от всех']) expect(html).toContain(text)
     expect(html).toContain('width:100%')
     expect(html).toContain('width:40%')
   })
 
   it('no one entered the funnel: empty state; loading and error states', async () => {
-    expect(await view({ data: steps.map((s) => ({ ...s, users: 0 })) })).toContain('No data for this period yet.')
-    expect(await view({ data: [] })).toContain('No data for this period yet.')
+    expect(await view({ data: steps.map((s) => ({ ...s, users: 0 })) })).toContain('За этот период данных пока нет.')
+    expect(await view({ data: [] })).toContain('За этот период данных пока нет.')
     expect(await view(null)).toContain('aria-busy="true"')
     expect(await view(FAILED as Section<FunnelStep[]>)).toContain('This section could not be loaded.')
   })
@@ -77,15 +77,15 @@ describe('TopServicesSection', () => {
 
   it('ranked list with revenue, margin, orders, units and AOV; service names are escaped', async () => {
     const html = await view({ data: rows })
-    for (const text of ['Top services', '$168.50', 'margin $84.25', '42 orders', '420,000 units', 'AOV $4.0119', '$81.00']) expect(html).toContain(text)
+    for (const text of ['Лучшие услуги', '$168.50', 'маржа $84.25', '42 заказов', '420,000 шт.', 'чек $4.0119', '$81.00']) expect(html).toContain(text)
     expect(html.indexOf('Telegram Post Views')).toBeLessThan(html.indexOf('Members'))
     expect(html).not.toContain('<b>R30</b>')
     expect(html).toContain('&lt;b&gt;R30&lt;/b&gt;')
   })
 
   it('empty, loading, error', async () => {
-    expect(await view({ data: [] })).toContain('No data for this period yet.')
-    expect(await view(null)).toContain('Loading top services')
+    expect(await view({ data: [] })).toContain('За этот период данных пока нет.')
+    expect(await view(null)).toContain('Загрузка: лучшие услуги')
     expect(await view(FAILED as Section<TopService[]>)).toContain('role="alert"')
   })
 })
@@ -99,17 +99,17 @@ describe('RetentionSection', () => {
 
   it('overall day-1 / day-7 retention and a cohort table; cohorts too young show a dash', async () => {
     const html = await view({ data: cohorts })
-    for (const text of ['Day 1 retention', '75%', '3 of 4 users', 'Day 7 retention', '33.3%', '1 of 3 users', '01-10', '01-11', '66.7%', '100%', '–']) expect(html).toContain(text)
+    for (const text of ['Возвращаемость, день 1', '75%', '3 из 4 пользователей', 'Возвращаемость, день 7', '33.3%', '1 из 3 пользователей', '01-10', '01-11', '66.7%', '100%', '–']) expect(html).toContain(text)
     expect(html).toContain('<th scope="col"')
   })
 
   it('only very young cohorts: says they cannot be measured yet', async () => {
     const html = await view({ data: [{ cohort: '2026-10-09', size: 5, retention: [{ day: 1, users: null, rate: null }, { day: 7, users: null, rate: null }] }] })
-    expect(html).toContain('too recent to measure yet')
+    expect(html).toContain('слишком свежие, чтобы измерить')
   })
 
   it('empty, loading, error', async () => {
-    expect(await view({ data: [] })).toContain('No data for this period yet.')
+    expect(await view({ data: [] })).toContain('За этот период данных пока нет.')
     expect(await view(null)).toContain('aria-busy="true"')
     expect(await view(FAILED as Section<RetentionCohort[]>)).toContain('This section could not be loaded.')
   })
@@ -118,10 +118,10 @@ describe('RetentionSection', () => {
 describe('shell: range picker, error boundary, admin tab', () => {
   it('the picker offers 7, 30 and 90 days and marks the current one', async () => {
     const html = await render((m) => [m.RangePicker, { value: 30, onChange: () => {}, onRefresh: () => {}, refreshing: false }])
-    expect(html).toContain('7 days')
-    expect(html).toContain('90 days')
-    expect(html).toMatch(/aria-checked="true"[^>]*>30 days/)
-    expect(html).toMatch(/aria-checked="false"[^>]*>7 days/)
+    expect(html).toContain('7 дн.')
+    expect(html).toContain('90 дн.')
+    expect(html).toMatch(/aria-checked="true"[^>]*>30 дн\./)
+    expect(html).toMatch(/aria-checked="false"[^>]*>7 дн\./)
   })
 
   it('refreshing disables the refresh button and spins it', async () => {
@@ -139,7 +139,7 @@ describe('shell: range picker, error boundary, admin tab', () => {
     const { renderToStaticMarkup } = await import('react-dom/server')
     const html = renderToStaticMarkup(b.render() as never)
     expect(html).toContain('Funnel')
-    expect(html).toContain('could not be displayed')
+    expect(html).toContain('не удалось показать')
     expect(html).toContain('role="alert"')
   })
 
@@ -148,6 +148,6 @@ describe('shell: range picker, error boundary, admin tab', () => {
     const { renderToStaticMarkup } = await import('react-dom/server')
     const { AdminScreen } = await import('../src/components/admin/AdminScreen')
     const session = { token: 't', expiresAt: 0, isMock: true, wallet: { balance: 0, currency: 'USD' }, user: { id: 'u', telegramId: 1, username: 'a', firstName: 'A', languageCode: 'en', isAdmin: true } }
-    expect(renderToStaticMarkup(createElement(AdminScreen, { session }))).toContain('Analytics')
+    expect(renderToStaticMarkup(createElement(AdminScreen, { session }))).toContain('Аналитика')
   })
 })

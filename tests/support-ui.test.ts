@@ -114,7 +114,7 @@ describe('lists', () => {
     expect(html).toContain('Needs reply')
     expect(html).toContain('border-rose-200')
     expect(html).toContain('Anna')
-    expect(html).toContain('waiting ')
+    expect(html).toContain('ждёт ')
     expect(html).toContain('Answered')
   })
 })
@@ -151,7 +151,7 @@ describe('Order history: "Report an issue"', () => {
     const read = (p: string) => fs.readFileSync(path.resolve(__dirname, '..', p), 'utf8')
     expect(read('src/components/layout/Header.tsx')).toContain("aria-label={t('Support')}")
     expect(read('src/App.tsx')).toMatch(/setSupportRequest\(\{ orderId: order\.id \}\); setTab\('support'\)/)
-    expect(read('src/components/admin/AdminScreen.tsx')).toContain("label: 'Support'")
+    expect(read('src/components/admin/AdminScreen.tsx')).toContain("label: 'Поддержка'")
   })
 })
 

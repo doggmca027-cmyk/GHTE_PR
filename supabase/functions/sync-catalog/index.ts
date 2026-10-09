@@ -28,6 +28,7 @@ interface ProviderRow {
   name: string
   api_url: string
   api_key_encrypted: string | null
+  routing_enabled: boolean
 }
 
 const json = (body: unknown, status = 200) =>
@@ -75,7 +76,7 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
   const reports: ProviderSyncReport[] = []
   try {
-    let q = db.from('providers').select('id, name, api_url, api_key_encrypted').eq('is_active', true).order('priority', { ascending: false })
+    let q = db.from('providers').select('id, name, api_url, api_key_encrypted, routing_enabled').eq('is_active', true).order('priority', { ascending: false })
     if (onlyProvider) q = q.eq('id', onlyProvider)
     const providers = must(await q, 'load providers') as ProviderRow[]
 

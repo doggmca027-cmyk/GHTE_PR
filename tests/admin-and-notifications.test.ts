@@ -901,14 +901,14 @@ describe('mock notifications (console in dev)', () => {
 
 describe('admin view helpers', () => {
   it('explains the machine notes in plain language', () => {
-    expect(describeNote('needs_reconciliation: provider accepted as 90210 but database update failed')).toMatchObject({ title: 'Provider accepted this order', refundOwed: false })
-    expect(describeNote('needs_refund: provider_rejected: api/invalid_link: Incorrect link')).toMatchObject({ title: 'Refund owed to the customer', refundOwed: true })
+    expect(describeNote('needs_reconciliation: provider accepted as 90210 but database update failed')).toMatchObject({ title: 'Провайдер принял этот заказ', refundOwed: false })
+    expect(describeNote('needs_refund: provider_rejected: api/invalid_link: Incorrect link')).toMatchObject({ title: 'Клиенту нужно вернуть деньги', refundOwed: true })
     expect(describeNote('needs_refund: provider_rejected: api/invalid_link: Incorrect link').detail).toContain('Incorrect link')
-    expect(describeNote('needs_reconciliation: timeout: add: no response').detail).toContain('may or may not')
+    expect(describeNote('needs_reconciliation: timeout: add: no response').detail).toContain('мог создать этот заказ, а мог и нет')
     // sentence boundary is added without eating real characters (a trailing "s" must survive)
-    expect(describeNote('needs_reconciliation: timeout: no response within 10000ms').detail).toContain('within 10000ms. The provider')
-    expect(describeNote('needs_reconciliation: lost it. ').detail).toMatch(/^lost it\. The provider/)
-    expect(describeNote(null).title).toBe('Needs attention')
+    expect(describeNote('needs_reconciliation: timeout: no response within 10000ms').detail).toContain('within 10000ms. Провайдер')
+    expect(describeNote('needs_reconciliation: lost it. ').detail).toMatch(/^lost it\. Провайдер/)
+    expect(describeNote(null).title).toBe('Требует внимания')
   })
 
   it('formats rule values and relative times', () => {

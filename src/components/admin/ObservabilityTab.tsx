@@ -3,9 +3,8 @@ import { Activity, AlertCircle, CheckCircle2, Database, RefreshCw, TriangleAlert
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useLoader } from '@/hooks/useLoader'
-import { usd } from '@/lib/admin-view'
+import { plural, timeAgoRu, usd } from '@/lib/admin-view'
 import { haptic } from '@/lib/haptics'
-import { timeAgo } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { getSystemHealth } from '@/services/api/admin'
@@ -17,26 +16,26 @@ const WINDOWS = [1, 6, 24] as const
 const REFRESH_MS = 60_000
 
 const OVERALL: Record<OverallStatus, { label: string; hint: string; box: string; icon: typeof CheckCircle2 }> = {
-  ok: { label: 'All systems operational', hint: 'Nothing needs attention.', box: 'border-emerald-200 bg-emerald-50 text-emerald-800', icon: CheckCircle2 },
-  degraded: { label: 'Degraded', hint: 'Something needs attention soon.', box: 'border-amber-300 bg-amber-50 text-amber-900', icon: TriangleAlert },
-  critical: { label: 'Critical', hint: 'Act now: see the active alerts.', box: 'border-rose-300 bg-rose-50 text-rose-800', icon: XCircle },
+  ok: { label: 'Все системы работают', hint: 'Ничего не требует внимания.', box: 'border-emerald-200 bg-emerald-50 text-emerald-800', icon: CheckCircle2 },
+  degraded: { label: 'Есть проблемы', hint: 'Скоро нужно будет вмешаться.', box: 'border-amber-300 bg-amber-50 text-amber-900', icon: TriangleAlert },
+  critical: { label: 'Критично', hint: 'Действуйте сейчас: смотрите активные тревоги.', box: 'border-rose-300 bg-rose-50 text-rose-800', icon: XCircle },
 }
 
 const CRON_BADGE: Record<CronState, { label: string; className: string }> = {
-  ok: { label: 'OK', className: 'bg-emerald-50 text-emerald-700' },
-  late: { label: 'Late', className: 'bg-amber-100 text-amber-800' },
-  failing: { label: 'Failing', className: 'bg-rose-50 text-rose-700' },
-  never_ran: { label: 'No run yet', className: 'bg-amber-100 text-amber-800' },
-  missing: { label: 'Missing', className: 'bg-rose-50 text-rose-700' },
-  disabled: { label: 'Disabled', className: 'bg-rose-50 text-rose-700' },
-  unknown: { label: 'Unknown', className: 'bg-slate-100 text-slate-600' },
+  ok: { label: 'В норме', className: 'bg-emerald-50 text-emerald-700' },
+  late: { label: 'Опаздывает', className: 'bg-amber-100 text-amber-800' },
+  failing: { label: 'Падает', className: 'bg-rose-50 text-rose-700' },
+  never_ran: { label: 'Ещё не запускалась', className: 'bg-amber-100 text-amber-800' },
+  missing: { label: 'Не создана', className: 'bg-rose-50 text-rose-700' },
+  disabled: { label: 'Выключена', className: 'bg-rose-50 text-rose-700' },
+  unknown: { label: 'Неизвестно', className: 'bg-slate-100 text-slate-600' },
 }
 
 const HEALTH_BADGE: Record<string, { label: string; className: string }> = {
-  healthy: { label: 'Healthy', className: 'bg-emerald-50 text-emerald-700' },
-  degraded: { label: 'Degraded', className: 'bg-amber-100 text-amber-700' },
-  unavailable: { label: 'Unavailable', className: 'bg-rose-50 text-rose-700' },
-  disabled: { label: 'Not checked', className: 'bg-slate-100 text-slate-600' },
+  healthy: { label: 'Работает', className: 'bg-emerald-50 text-emerald-700' },
+  degraded: { label: 'Сбои', className: 'bg-amber-100 text-amber-700' },
+  unavailable: { label: 'Недоступен', className: 'bg-rose-50 text-rose-700' },
+  disabled: { label: 'Не проверяется', className: 'bg-slate-100 text-slate-600' },
 }
 
 export function ObservabilityTab({ session }: { session: AuthSession }) {
@@ -59,8 +58,8 @@ export function ObservabilityTab({ session }: { session: AuthSession }) {
     return (
       <Card className="space-y-3 text-center">
         <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
-        <p className="text-sm font-medium text-content-secondary">{error ?? 'Could not load the system health.'}</p>
-        <Button className="w-full" onClick={() => void reload()}>Retry</Button>
+        <p className="text-sm font-medium text-content-secondary">{error ?? 'Не удалось загрузить состояние системы.'}</p>
+        <Button className="w-full" onClick={() => void reload()}>Повторить</Button>
       </Card>
     )
   }
@@ -91,7 +90,7 @@ export function HealthView({ health: h, hours, loading = false, error = null, on
 
   return (
     <div className="space-y-3">
-      <section aria-label="Overall status" className={cn('rounded-3xl border p-4 shadow-card', overall.box)}>
+      <section aria-label="Общее состояние" className={cn('rounded-3xl border p-4 shadow-card', overall.box)}>
         <div className="flex items-start gap-3">
           <Icon size={28} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           <div className="min-w-0">
@@ -101,35 +100,35 @@ export function HealthView({ health: h, hours, loading = false, error = null, on
         </div>
         <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
           <div className="rounded-2xl bg-white/70 px-3 py-2">
-            <dt className="flex items-center gap-1 font-semibold text-content-secondary"><Activity size={13} strokeWidth={1.75} /> Cron heartbeat</dt>
-            <dd className={cn('mt-0.5 text-sm font-bold', cronTone)}>{h.cron.state === 'ok' ? 'All jobs on time' : h.cron.state === 'unknown' ? 'Cannot be read' : h.cron.state === 'critical' ? 'Job(s) failing or late' : 'Needs attention'}</dd>
+            <dt className="flex items-center gap-1 font-semibold text-content-secondary"><Activity size={13} strokeWidth={1.75} /> Фоновые задачи</dt>
+            <dd className={cn('mt-0.5 text-sm font-bold', cronTone)}>{h.cron.state === 'ok' ? 'Все вовремя' : h.cron.state === 'unknown' ? 'Не удаётся прочитать' : h.cron.state === 'critical' ? 'Задачи падают или опаздывают' : 'Требует внимания'}</dd>
           </div>
           <div className="rounded-2xl bg-white/70 px-3 py-2">
-            <dt className="flex items-center gap-1 font-semibold text-content-secondary"><Database size={13} strokeWidth={1.75} /> Database</dt>
-            <dd className={cn('mt-0.5 text-sm font-bold', h.db.ok ? 'text-emerald-700' : 'text-rose-700')}>{h.db.ok ? 'Reachable' : 'Unreachable'}{h.db.latencyMs !== null && h.db.ok ? ` · ${h.db.latencyMs} ms` : ''}</dd>
+            <dt className="flex items-center gap-1 font-semibold text-content-secondary"><Database size={13} strokeWidth={1.75} /> База данных</dt>
+            <dd className={cn('mt-0.5 text-sm font-bold', h.db.ok ? 'text-emerald-700' : 'text-rose-700')}>{h.db.ok ? 'Доступна' : 'Недоступна'}{h.db.latencyMs !== null && h.db.ok ? ` · ${h.db.latencyMs} мс` : ''}</dd>
           </div>
         </dl>
         <div className="mt-3 flex items-center justify-between gap-2">
-          <div role="radiogroup" aria-label="Time window" className="flex gap-1 rounded-2xl bg-white/70 p-1">
+          <div role="radiogroup" aria-label="Период" className="flex gap-1 rounded-2xl bg-white/70 p-1">
             {WINDOWS.map((w) => (
               <button key={w} type="button" role="radio" aria-checked={hours === w} onClick={() => onHours(w)}
                 className={cn('h-8 rounded-xl px-3 text-[12px] font-bold', hours === w ? 'bg-white text-content-primary shadow-sm' : 'text-content-secondary')}>
-                {w} h
+                {w} ч
               </button>
             ))}
           </div>
-          <button type="button" aria-label="Refresh" disabled={loading} onClick={onRefresh}
+          <button type="button" aria-label="Обновить" disabled={loading} onClick={onRefresh}
             className="flex h-9 items-center gap-1.5 rounded-full bg-white/80 px-3 text-[12px] font-bold text-content-primary active:scale-95 disabled:opacity-60">
-            <RefreshCw size={14} strokeWidth={2} className={cn(loading && 'animate-spin')} /> {timeAgo(h.generatedAt)}
+            <RefreshCw size={14} strokeWidth={2} className={cn(loading && 'animate-spin')} /> {timeAgoRu(h.generatedAt)}
           </button>
         </div>
-        {error && <p role="alert" className="mt-2 rounded-xl bg-white/70 px-3 py-1.5 text-xs font-semibold text-rose-700">Refresh failed: {error}. Showing the last snapshot.</p>}
+        {error && <p role="alert" className="mt-2 rounded-xl bg-white/70 px-3 py-1.5 text-xs font-semibold text-rose-700">Не удалось обновить: {error}. Показано последнее состояние.</p>}
       </section>
 
-      <section aria-label="Active alerts" className="space-y-2">
-        <h2 className="px-1 text-sm font-bold text-content-primary">Active alerts</h2>
+      <section aria-label="Активные тревоги" className="space-y-2">
+        <h2 className="px-1 text-sm font-bold text-content-primary">Активные тревоги</h2>
         {h.alerts.length === 0 ? (
-          <p className="flex items-center gap-2 rounded-2xl bg-emerald-50 px-3.5 py-2.5 text-[13px] font-semibold text-emerald-700"><CheckCircle2 size={16} strokeWidth={1.75} /> No active alerts.</p>
+          <p className="flex items-center gap-2 rounded-2xl bg-emerald-50 px-3.5 py-2.5 text-[13px] font-semibold text-emerald-700"><CheckCircle2 size={16} strokeWidth={1.75} /> Активных тревог нет.</p>
         ) : (
           h.alerts.map((a) => (
             <article key={a.id} role={a.severity === 'critical' ? 'alert' : 'status'}
@@ -144,41 +143,41 @@ export function HealthView({ health: h, hours, loading = false, error = null, on
         )}
       </section>
 
-      <section aria-label="Queues" className="space-y-2">
-        <h2 className="px-1 text-sm font-bold text-content-primary">Queues and backlog</h2>
+      <section aria-label="Очереди" className="space-y-2">
+        <h2 className="px-1 text-sm font-bold text-content-primary">Очереди и накопления</h2>
         <div className="grid grid-cols-2 gap-2">
-          <MetricCard label="Stuck orders" value={String(h.orders.stuck)} tone={h.orders.stuck > 0 ? 'danger' : 'success'}
-            hint={h.orders.stuck > 0 ? `oldest ${h.orders.stuckOldestMinutes} min` : 'none past the grace period'} />
-          <MetricCard label="Open cases" value={String(h.reconciliation.open)} tone={h.reconciliation.critical > 0 ? 'danger' : h.reconciliation.open > 0 ? 'warning' : 'success'}
-            hint={`${h.reconciliation.critical} critical · ${h.reconciliation.high} high · ${h.reconciliation.normal} normal`} />
-          <MetricCard label="In the pipeline" value={String(Object.values(h.orders.queue).reduce((a, b) => a + b, 0))}
-            hint={Object.entries(h.orders.queue).map(([s, n]) => `${n} ${s.replace('_', ' ')}`).join(' · ') || 'no active orders'} />
-          <MetricCard label="Held orders" value={String(h.orders.held)} tone={h.orders.held > 0 ? 'warning' : 'default'} hint="waiting on a human" />
-          <MetricCard label="Pending deposits" value={String(h.deposits.pending)} tone={h.deposits.stalePending > 0 ? 'warning' : 'default'}
-            hint={h.deposits.stalePending > 0 ? `${h.deposits.stalePending} expired while pending` : 'waiting for the chain'} />
-          <MetricCard label="Provider payments" value={String(h.paymentsInProgress)} hint={`${h.pendingProposals} top-up proposal${h.pendingProposals === 1 ? '' : 's'} pending`} />
+          <MetricCard label="Зависшие заказы" value={String(h.orders.stuck)} tone={h.orders.stuck > 0 ? 'danger' : 'success'}
+            hint={h.orders.stuck > 0 ? `самый старый ${h.orders.stuckOldestMinutes} мин` : 'нет, все в пределах нормы'} />
+          <MetricCard label="Открытые кейсы" value={String(h.reconciliation.open)} tone={h.reconciliation.critical > 0 ? 'danger' : h.reconciliation.open > 0 ? 'warning' : 'success'}
+            hint={`${h.reconciliation.critical} критичных · ${h.reconciliation.high} важных · ${h.reconciliation.normal} обычных`} />
+          <MetricCard label="В обработке" value={String(Object.values(h.orders.queue).reduce((a, b) => a + b, 0))}
+            hint={Object.entries(h.orders.queue).map(([s, n]) => `${n} ${s.replace('_', ' ')}`).join(' · ') || 'активных заказов нет'} />
+          <MetricCard label="Заказы на удержании" value={String(h.orders.held)} tone={h.orders.held > 0 ? 'warning' : 'default'} hint="ждут решения человека" />
+          <MetricCard label="Ожидающие пополнения" value={String(h.deposits.pending)} tone={h.deposits.stalePending > 0 ? 'warning' : 'default'}
+            hint={h.deposits.stalePending > 0 ? `${h.deposits.stalePending} истекло в ожидании` : 'ждут сеть'} />
+          <MetricCard label="Платежи провайдерам" value={String(h.paymentsInProgress)} hint={`ожидает ${h.pendingProposals} ${plural(h.pendingProposals, ['предложение', 'предложения', 'предложений'])} о пополнении`} />
         </div>
-        <p className="px-1 text-xs text-content-secondary">Treasury {usd(h.treasury.balance)}{h.treasury.minimumReserve > 0 ? ` · reserve ${usd(h.treasury.minimumReserve)}` : ''}</p>
+        <p className="px-1 text-xs text-content-secondary">Казна {usd(h.treasury.balance)}{h.treasury.minimumReserve > 0 ? ` · резерв ${usd(h.treasury.minimumReserve)}` : ''}</p>
       </section>
 
-      <section aria-label="Scheduled jobs" className="space-y-2">
-        <h2 className="px-1 text-sm font-bold text-content-primary">Scheduled jobs</h2>
+      <section aria-label="Фоновые задачи" className="space-y-2">
+        <h2 className="px-1 text-sm font-bold text-content-primary">Фоновые задачи</h2>
         {h.cron.jobs.map((j) => <JobRow key={j.name} job={j} />)}
-        {!h.cron.available && <p className="px-1 text-xs text-content-secondary">The scheduler log cannot be read in this environment; workers are judged by their own heartbeat.</p>}
+        {!h.cron.available && <p className="px-1 text-xs text-content-secondary">Журнал планировщика здесь прочитать нельзя; о работе задач судим по их собственным отметкам.</p>}
       </section>
 
-      <section aria-label="Provider API health" className="space-y-2">
-        <h2 className="px-1 text-sm font-bold text-content-primary">Provider API health · last {hours} h</h2>
-        {h.providers.length === 0 && <Card className="p-4 text-sm text-content-secondary">No providers yet.</Card>}
+      <section aria-label="Состояние API провайдеров" className="space-y-2">
+        <h2 className="px-1 text-sm font-bold text-content-primary">Состояние API провайдеров · последние {hours} ч</h2>
+        {h.providers.length === 0 && <Card className="p-4 text-sm text-content-secondary">Провайдеров пока нет.</Card>}
         {h.providers.map((p) => <ProviderRow key={p.id} provider={p} />)}
         {h.recentProviderErrors.length > 0 && (
           <div className="rounded-2xl border border-blue-100/70 bg-white p-3 shadow-card">
-            <h3 className="text-xs font-bold text-content-primary">Recent provider API errors</h3>
+            <h3 className="text-xs font-bold text-content-primary">Последние ошибки API провайдеров</h3>
             <ul className="mt-1.5 space-y-1">
               {h.recentProviderErrors.map((e, i) => (
                 <li key={`${e.checkedAt}-${i}`} className="flex items-center justify-between gap-2 text-xs">
                   <span className="min-w-0 truncate"><b className="text-content-primary">{e.providerName}</b> <span className="text-content-secondary">· {e.errorKind}</span></span>
-                  <span className="shrink-0 text-content-secondary">{e.latencyMs !== null ? `${e.latencyMs} ms · ` : ''}{timeAgo(e.checkedAt)}</span>
+                  <span className="shrink-0 text-content-secondary">{e.latencyMs !== null ? `${e.latencyMs} мс · ` : ''}{timeAgoRu(e.checkedAt)}</span>
                 </li>
               ))}
             </ul>
@@ -201,7 +200,7 @@ function JobRow({ job: j }: { job: CronPulse }) {
         <span className={cn('shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold', badge.className)}>{badge.label}</span>
       </div>
       <p className="mt-1.5 text-xs text-content-secondary">{j.detail}</p>
-      {j.failedRuns > 0 && <p className="mt-0.5 text-xs font-semibold text-rose-600">{j.failedRuns} failed run{j.failedRuns === 1 ? '' : 's'} in the window</p>}
+      {j.failedRuns > 0 && <p className="mt-0.5 text-xs font-semibold text-rose-600">{j.failedRuns} {plural(j.failedRuns, ['неудачный запуск', 'неудачных запуска', 'неудачных запусков'])} за период</p>}
     </article>
   )
 }
@@ -212,26 +211,26 @@ function ProviderRow({ provider: p }: { provider: ProviderPulse }) {
   const rate = p.errorRate === null ? '—' : `${Math.round(p.errorRate * 100)}%`
   const bad = p.errorRate !== null && p.errorRate >= 0.5 && p.checks >= 5
   return (
-    <article className={cn('rounded-3xl border bg-white p-4 shadow-card', p.health === 'unavailable' || bad ? 'border-rose-300' : p.lowBalance ? 'border-amber-300' : 'border-blue-100/70')} aria-label={`Provider ${p.name}`}>
+    <article className={cn('rounded-3xl border bg-white p-4 shadow-card', p.health === 'unavailable' || bad ? 'border-rose-300' : p.lowBalance ? 'border-amber-300' : 'border-blue-100/70')} aria-label={`Провайдер ${p.name}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-[15px] font-bold leading-snug text-content-primary">{p.name}</h3>
           <span className={cn('mt-1 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold', badge.className)}>{badge.label}</span>
-          {!p.routingEnabled && <span className="ml-1.5 inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">Routing off</span>}
+          {!p.routingEnabled && <span className="ml-1.5 inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">Маршрутизация выключена</span>}
         </div>
-        <p className="shrink-0 text-right text-[11px] text-content-secondary">checked {timeAgo(p.lastHealthCheck)}</p>
+        <p className="shrink-0 text-right text-[11px] text-content-secondary">проверен {timeAgoRu(p.lastHealthCheck)}</p>
       </div>
       <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
-        <div><dt className="text-xs text-content-secondary">Check errors</dt><dd className={cn('font-bold', bad ? 'text-rose-600' : 'text-content-primary')}>{rate}</dd><dd className="text-[11px] text-content-secondary">{p.failedChecks} of {p.checks}</dd></div>
-        <div><dt className="text-xs text-content-secondary">Latency</dt><dd className="font-bold text-content-primary">{p.avgLatencyMs === null ? '—' : `${p.avgLatencyMs} ms`}</dd><dd className="text-[11px] text-content-secondary">{p.maxLatencyMs === null ? '' : `max ${p.maxLatencyMs} ms`}</dd></div>
-        <div><dt className="text-xs text-content-secondary">Balance</dt><dd className={cn('font-bold', p.lowBalance ? 'text-amber-600' : 'text-content-primary')}>{p.lastBalanceSync ? usd(p.balance) : '—'}</dd><dd className="text-[11px] text-content-secondary">{p.currency}</dd></div>
+        <div><dt className="text-xs text-content-secondary">Ошибки проверок</dt><dd className={cn('font-bold', bad ? 'text-rose-600' : 'text-content-primary')}>{rate}</dd><dd className="text-[11px] text-content-secondary">{p.failedChecks} из {p.checks}</dd></div>
+        <div><dt className="text-xs text-content-secondary">Задержка</dt><dd className="font-bold text-content-primary">{p.avgLatencyMs === null ? '—' : `${p.avgLatencyMs} мс`}</dd><dd className="text-[11px] text-content-secondary">{p.maxLatencyMs === null ? '' : `макс. ${p.maxLatencyMs} мс`}</dd></div>
+        <div><dt className="text-xs text-content-secondary">Баланс</dt><dd className={cn('font-bold', p.lowBalance ? 'text-amber-600' : 'text-content-primary')}>{p.lastBalanceSync ? usd(p.balance) : '—'}</dd><dd className="text-[11px] text-content-secondary">{p.currency}</dd></div>
       </dl>
       {kinds.length > 0 && (
         <p className="mt-2 flex flex-wrap gap-1.5">
           {kinds.map(([k, n]) => <span key={k} className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700">{k} × {n}</span>)}
         </p>
       )}
-      <p className="mt-2 text-xs text-content-secondary">Orders in window: {p.orders} · failed {p.ordersFailed} · held {p.ordersHeld}</p>
+      <p className="mt-2 text-xs text-content-secondary">Заказов за период: {p.orders} · неудачных {p.ordersFailed} · на удержании {p.ordersHeld}</p>
     </article>
   )
 }

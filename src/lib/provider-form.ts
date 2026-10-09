@@ -28,12 +28,12 @@ export const draftOf = (p: AdminProvider): ProviderDraft => ({ name: p.name, api
 /** The frontend half of the URL rule (the server also refuses private hosts): https:// and a parsable URL. */
 export function checkProviderUrl(raw: string): string | null {
   const text = raw.trim()
-  if (!text) return 'API URL is required.'
-  if (!text.startsWith('https://')) return 'API URL must start with https://'
+  if (!text) return 'Укажите адрес API.'
+  if (!text.startsWith('https://')) return 'Адрес API должен начинаться с https://'
   try {
     new URL(text)
   } catch {
-    return 'API URL is not a valid URL.'
+    return 'Адрес API не похож на ссылку.'
   }
   return null
 }
@@ -41,19 +41,19 @@ export function checkProviderUrl(raw: string): string | null {
 export function checkProviderDraft(draft: ProviderDraft, editing: AdminProvider | null): ProviderDraftCheck {
   const errors: ProviderDraftCheck['errors'] = {}
   const name = draft.name.trim()
-  if (!name) errors.name = 'Name is required.'
-  else if (name.length > 80) errors.name = 'Name must be at most 80 characters.'
+  if (!name) errors.name = 'Укажите название.'
+  else if (name.length > 80) errors.name = 'Название не длиннее 80 символов.'
 
   const urlError = checkProviderUrl(draft.apiUrl)
   if (urlError) errors.apiUrl = urlError
 
   const key = draft.apiKey.trim()
-  if (key && (key.length < 8 || key.length > 512)) errors.apiKey = 'API key must be 8 to 512 characters.'
-  else if (/\s/.test(key)) errors.apiKey = 'API key must not contain spaces.'
+  if (key && (key.length < 8 || key.length > 512)) errors.apiKey = 'API-ключ: от 8 до 512 символов.'
+  else if (/\s/.test(key)) errors.apiKey = 'В API-ключе не должно быть пробелов.'
 
   const priorityText = draft.priority.trim()
   const priority = /^-?\d{1,5}$/.test(priorityText) ? Number(priorityText) : null
-  if (priority === null || Math.abs(priority) > 10_000) errors.priority = 'Priority must be a whole number from -10000 to 10000.'
+  if (priority === null || Math.abs(priority) > 10_000) errors.priority = 'Приоритет: целое число от -10000 до 10000.'
 
   if (Object.keys(errors).length > 0 || priority === null) return { errors, request: null }
 

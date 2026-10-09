@@ -29,29 +29,29 @@ export const PAYMENT_TRANSITIONS: Record<ProviderPaymentStatus, readonly Provide
 export type PaymentTone = 'neutral' | 'progress' | 'action' | 'ok' | 'warn' | 'bad'
 
 export const PAYMENT_STATUS: Record<ProviderPaymentStatus, { label: string; tone: PaymentTone }> = {
-  PROPOSED: { label: 'Proposed', tone: 'neutral' },
-  APPROVED: { label: 'Approved', tone: 'neutral' },
-  VALIDATED: { label: 'Validated', tone: 'action' },
-  PAYMENT_CREATED: { label: 'Ready to send', tone: 'action' },
-  BROADCASTED: { label: 'Broadcast', tone: 'progress' },
-  CONFIRMING: { label: 'Confirming', tone: 'progress' },
-  CONFIRMED: { label: 'Confirmed on chain', tone: 'progress' },
-  PROVIDER_BALANCE_VERIFIED: { label: 'Balance verified', tone: 'progress' },
-  COMPLETED: { label: 'Completed', tone: 'ok' },
-  FAILED: { label: 'Failed', tone: 'bad' },
-  UNKNOWN: { label: 'Outcome unknown', tone: 'warn' },
-  RECONCILIATION_REQUIRED: { label: 'Needs reconciliation', tone: 'warn' },
-  CANCELED: { label: 'Canceled', tone: 'neutral' },
+  PROPOSED: { label: 'Предложен', tone: 'neutral' },
+  APPROVED: { label: 'Одобрен', tone: 'neutral' },
+  VALIDATED: { label: 'Проверен', tone: 'action' },
+  PAYMENT_CREATED: { label: 'Готов к отправке', tone: 'action' },
+  BROADCASTED: { label: 'Отправлен в сеть', tone: 'progress' },
+  CONFIRMING: { label: 'Подтверждается', tone: 'progress' },
+  CONFIRMED: { label: 'Подтверждён в сети', tone: 'progress' },
+  PROVIDER_BALANCE_VERIFIED: { label: 'Баланс проверен', tone: 'progress' },
+  COMPLETED: { label: 'Завершён', tone: 'ok' },
+  FAILED: { label: 'Неудачен', tone: 'bad' },
+  UNKNOWN: { label: 'Результат неизвестен', tone: 'warn' },
+  RECONCILIATION_REQUIRED: { label: 'Нужна сверка', tone: 'warn' },
+  CANCELED: { label: 'Отменён', tone: 'neutral' },
 }
 
 export const isPaymentOpen = (status: ProviderPaymentStatus): boolean => PAYMENT_TRANSITIONS[status].length > 0
 
 /** What confirming each manual step asserts (shown before the second tap). */
 export const ADVANCE_STEP: Record<PaymentAdvanceTarget, { label: string; assert: string }> = {
-  CONFIRMING: { label: 'Mark Confirming', assert: 'The transaction is visible on chain and waiting for confirmations.' },
-  CONFIRMED: { label: 'Mark Confirmed', assert: 'The transaction is final on chain (checked in an explorer).' },
-  PROVIDER_BALANCE_VERIFIED: { label: 'Balance Verified', assert: 'You checked the provider panel: its balance rose by about the amount paid.' },
-  COMPLETED: { label: 'Complete', assert: 'Closes the payment: the provider has the money.' },
+  CONFIRMING: { label: 'Отметить «Подтверждается»', assert: 'Транзакция видна в сети и ждёт подтверждений.' },
+  CONFIRMED: { label: 'Отметить «Подтверждён»', assert: 'Транзакция окончательно подтверждена в сети (проверено в обозревателе).' },
+  PROVIDER_BALANCE_VERIFIED: { label: 'Баланс проверен', assert: 'Вы проверили панель провайдера: его баланс вырос примерно на оплаченную сумму.' },
+  COMPLETED: { label: 'Завершить', assert: 'Закрывает платёж: деньги у провайдера.' },
 }
 
 /** The next step of the happy path an admin can confirm by hand, if any. */
@@ -89,11 +89,11 @@ export function paymentOps(p: { status: ProviderPaymentStatus; txHash: string | 
 
 /** Headline + detail for a reconciliation reason written by the payment detector (provider_payment_issue). */
 export function describePaymentIssue(reason: string): { title: string; detail: string } {
-  if (reason.startsWith('outcome unknown:')) return { title: 'Payment outcome unknown', detail: reason.replace(/^outcome unknown:\s*/, '') || 'No reason was recorded.' }
-  if (reason.startsWith('Stuck in')) return { title: 'Payment stuck in limbo', detail: reason }
-  if (reason.includes('did not rise in proportion')) return { title: 'Provider balance not credited', detail: reason }
-  if (reason.startsWith('Confirmed on chain')) return { title: 'Confirmed, not completed', detail: reason }
-  return { title: 'Provider payment needs attention', detail: reason }
+  if (reason.startsWith('outcome unknown:')) return { title: 'Результат платежа неизвестен', detail: reason.replace(/^outcome unknown:\s*/, '') || 'Причина не записана.' }
+  if (reason.startsWith('Stuck in')) return { title: 'Платёж завис', detail: reason }
+  if (reason.includes('did not rise in proportion')) return { title: 'Баланс провайдера не пополнился', detail: reason }
+  if (reason.startsWith('Confirmed on chain')) return { title: 'Подтверждён, но не завершён', detail: reason }
+  return { title: 'Платёж провайдеру требует внимания', detail: reason }
 }
 
 /** "EQDtFp…p4q2" */
@@ -128,23 +128,23 @@ export function checkPayoutDraft(d: PayoutDraft): PayoutCheck {
   if (wallet !== '') {
     try {
       parseTonAddress(wallet)
-      if (d.network === 'mainnet' && tonAddressFlags(wallet)?.testOnly) errors.wallet = 'This is a testnet-only address, but the network is mainnet.'
+      if (d.network === 'mainnet' && tonAddressFlags(wallet)?.testOnly) errors.wallet = 'Это адрес только для тестовой сети, а выбрана основная сеть (mainnet).'
     } catch {
-      errors.wallet = 'Not a valid TON address: use 0:<64 hex> or EQ…/UQ… (48 characters, copied completely).'
+      errors.wallet = 'Это не адрес TON: используйте 0:<64 hex> или EQ…/UQ… (48 символов, скопированных полностью).'
     }
   }
   const limit = (text: string, key: 'maxPerTx' | 'maxDaily'): number | null => {
     if (text.trim() === '') return null
     const n = parseAmount(text)
     if (n === null || n <= 0 || n >= 1_000_000_000) {
-      errors[key] = 'Enter an amount greater than 0.'
+      errors[key] = 'Введите сумму больше 0.'
       return null
     }
     return n
   }
   const maxPerTx = limit(d.maxPerTx, 'maxPerTx')
   const maxDaily = limit(d.maxDaily, 'maxDaily')
-  if (maxPerTx !== null && maxDaily !== null && maxDaily < maxPerTx) errors.maxDaily = 'The daily limit cannot be below the per-transaction limit.'
+  if (maxPerTx !== null && maxDaily !== null && maxDaily < maxPerTx) errors.maxDaily = 'Дневной лимит не может быть меньше лимита на одно пополнение.'
   const ok = Object.keys(errors).length === 0
   return {
     input: ok ? { wallet: wallet === '' ? null : wallet, network: d.network, asset: d.asset, maxTopupPerTx: maxPerTx, maxDailyTopup: maxDaily } : null,

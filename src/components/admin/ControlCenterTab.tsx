@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useLoader } from '@/hooks/useLoader'
 import { haptic } from '@/lib/haptics'
-import { timeAgo } from '@/lib/time'
+import { timeAgoRu } from '@/lib/admin-view'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { getPlatformSettings, updatePlatformSettings } from '@/services/api/admin'
@@ -22,9 +22,9 @@ interface SwitchSpec {
 }
 
 const SWITCHES: SwitchSpec[] = [
-  { key: 'orders', title: 'Global Orders', on: 'Customers can place new orders.', off: 'New orders are refused. Orders already placed keep being processed.' },
-  { key: 'payments', title: 'Global Payments', on: 'Customers can start new deposits.', off: 'New deposits are refused. Deposits already paid on-chain are still credited.' },
-  { key: 'maintenance', title: 'Maintenance Mode', on: 'The platform is under maintenance: orders AND deposits are refused for everyone.', off: 'Off. The platform runs normally.', danger: true },
+  { key: 'orders', title: 'Приём заказов', on: 'Клиенты могут создавать новые заказы.', off: 'Новые заказы не принимаются. Уже созданные заказы продолжают выполняться.' },
+  { key: 'payments', title: 'Приём платежей', on: 'Клиенты могут пополнять баланс.', off: 'Новые пополнения не принимаются. Уже оплаченные в сети пополнения всё равно зачисляются.' },
+  { key: 'maintenance', title: 'Технические работы', on: 'Идут технические работы: заказы И пополнения отключены для всех.', off: 'Выключено. Платформа работает в обычном режиме.', danger: true },
 ]
 
 /** Whether the *service* is running for this switch (maintenance is "running" when it is OFF). */
@@ -47,8 +47,8 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
     return (
       <Card className="space-y-3 text-center">
         <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
-        <p className="text-sm font-medium text-content-secondary">{error ?? 'Could not load the controls.'}</p>
-        <Button className="w-full" onClick={() => void reload()}>Retry</Button>
+        <p className="text-sm font-medium text-content-secondary">{error ?? 'Не удалось загрузить настройки.'}</p>
+        <Button className="w-full" onClick={() => void reload()}>Повторить</Button>
       </Card>
     )
   }
@@ -60,10 +60,10 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
     try {
       await updatePlatformSettings(session, patchFor(spec.key, turnOn))
       haptic.success()
-      setMessage({ kind: 'ok', text: `${spec.title}: ${spec.key === 'maintenance' ? (turnOn ? 'ON' : 'OFF') : (turnOn ? 'enabled' : 'stopped')}.` })
+      setMessage({ kind: 'ok', text: `${spec.title}: ${spec.key === 'maintenance' ? (turnOn ? 'ВКЛЮЧЕНО' : 'ВЫКЛЮЧЕНО') : (turnOn ? 'включено' : 'остановлено')}.` })
     } catch (e) {
       haptic.error()
-      setMessage({ kind: 'error', text: e instanceof Error ? e.message : 'Could not save.' })
+      setMessage({ kind: 'error', text: e instanceof Error ? e.message : 'Не удалось сохранить.' })
     } finally {
       setBusy(null)
       await reload() // always show what the server really has
@@ -75,11 +75,11 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
       {data.maintenanceMode && (
         <div role="alert" className="flex items-start gap-2.5 rounded-2xl bg-rose-600 px-3.5 py-3 text-sm font-bold text-white">
           <AlertTriangle size={18} strokeWidth={2} className="mt-0.5 shrink-0" />
-          Maintenance mode is ON. No customer can place orders or start deposits.
+          Включены технические работы. Никто из клиентов не может создавать заказы и пополнять баланс.
         </div>
       )}
       <p className="rounded-2xl bg-brand-light/60 px-3.5 py-2.5 text-[13px] font-medium text-brand-text">
-        Emergency controls act at once and are enforced on the server for every request. Stopping a switch asks you to confirm.
+        Аварийные переключатели действуют сразу и проверяются на сервере при каждом запросе. Остановка переключателя требует подтверждения.
       </p>
       {message && (
         <p role="status" className={cn('rounded-2xl px-3.5 py-2.5 text-[13px] font-medium', message.kind === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700')}>
@@ -127,17 +127,17 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
             {confirming === spec.key && (
               <div className="mt-3 flex items-center gap-2 rounded-2xl bg-amber-50 px-3 py-2.5">
                 <p className="flex-1 text-xs font-semibold text-amber-800">
-                  {spec.key === 'maintenance' ? 'Block ALL orders and deposits for everyone?' : spec.key === 'orders' ? 'Stop all new orders?' : 'Stop all new deposits?'}
+                  {spec.key === 'maintenance' ? 'Отключить ВСЕ заказы и пополнения для всех?' : spec.key === 'orders' ? 'Остановить приём новых заказов?' : 'Остановить приём новых пополнений?'}
                 </p>
-                <button type="button" onClick={() => void apply(spec, spec.key === 'maintenance')} className="h-8 rounded-full bg-rose-600 px-3 text-xs font-bold text-white active:scale-95">Confirm</button>
-                <button type="button" onClick={() => setConfirming(null)} className="h-8 rounded-full bg-white px-3 text-xs font-semibold text-content-secondary active:scale-95">Cancel</button>
+                <button type="button" onClick={() => void apply(spec, spec.key === 'maintenance')} className="h-8 rounded-full bg-rose-600 px-3 text-xs font-bold text-white active:scale-95">Подтвердить</button>
+                <button type="button" onClick={() => setConfirming(null)} className="h-8 rounded-full bg-white px-3 text-xs font-semibold text-content-secondary active:scale-95">Отмена</button>
               </div>
             )}
           </article>
         )
       })}
 
-      <p className="px-1 text-xs text-content-secondary">{data.updatedAt ? `Last changed ${timeAgo(data.updatedAt)}.` : 'Never changed.'}</p>
+      <p className="px-1 text-xs text-content-secondary">{data.updatedAt ? `Последнее изменение: ${timeAgoRu(data.updatedAt)}.` : 'Ещё не менялось.'}</p>
     </div>
   )
 }

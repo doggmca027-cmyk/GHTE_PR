@@ -4,12 +4,11 @@ import { StatusBadge } from '@/components/orders/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useLoader } from '@/hooks/useLoader'
-import { describeNote, recoverProviderOrderId, usd, type NoteDescription } from '@/lib/admin-view'
+import { describeNote, recoverProviderOrderId, timeAgoRu, usd, type NoteDescription } from '@/lib/admin-view'
 import { haptic } from '@/lib/haptics'
 import { formatInt } from '@/lib/order-calc'
 import { formatOrderDate, truncateUrl } from '@/lib/order-view'
 import { PAYMENT_STATUS, describePaymentIssue, shortId } from '@/lib/payment-view'
-import { timeAgo } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { getReconCases, resolveCaseManual, resolveCaseRefund, retryCase } from '@/services/api/admin'
@@ -24,9 +23,9 @@ interface Props {
 }
 
 const SEVERITY: Record<Severity, { label: string; badge: string; border: string }> = {
-  critical: { label: 'Critical', badge: 'bg-rose-600 text-white', border: 'border-rose-300' },
-  high: { label: 'High', badge: 'bg-amber-500 text-white', border: 'border-amber-300' },
-  normal: { label: 'Normal', badge: 'bg-slate-200 text-slate-700', border: 'border-amber-200' },
+  critical: { label: 'Критично', badge: 'bg-rose-600 text-white', border: 'border-rose-300' },
+  high: { label: 'Важно', badge: 'bg-amber-500 text-white', border: 'border-amber-300' },
+  normal: { label: 'Обычно', badge: 'bg-slate-200 text-slate-700', border: 'border-amber-200' },
 }
 const RANK: Record<Severity, number> = { critical: 0, high: 1, normal: 2 }
 
@@ -51,8 +50,8 @@ export function ReconciliationTab({ session, onProblemCount, onOpenPayments }: P
     return (
       <Card className="space-y-3 text-center">
         <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
-        <p className="text-sm font-medium text-content-secondary">{error ?? 'Could not load the cases.'}</p>
-        <Button className="w-full" onClick={() => void reload()}>Retry</Button>
+        <p className="text-sm font-medium text-content-secondary">{error ?? 'Не удалось загрузить кейсы.'}</p>
+        <Button className="w-full" onClick={() => void reload()}>Повторить</Button>
       </Card>
     )
   }
@@ -73,9 +72,9 @@ export function ReconciliationTab({ session, onProblemCount, onOpenPayments }: P
           <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
             <CheckCircle2 size={28} strokeWidth={1.75} />
           </span>
-          <p className="text-base font-bold text-content-primary">All clear</p>
+          <p className="text-base font-bold text-content-primary">Всё в порядке</p>
           <p className="mx-auto max-w-[250px] text-sm text-content-secondary">
-            Nothing is waiting on a human. Held orders appear here after 10 minutes, stalled provider payments within 5 minutes of stalling.
+            Ничего не ждёт вашего решения. Зависшие заказы появляются здесь через 10 минут, застрявшие платежи провайдерам — через 5 минут.
           </p>
         </Card>
       ) : (
@@ -119,7 +118,7 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
       onDone(doneMessage)
     } catch (e) {
       haptic.error()
-      setError(e instanceof Error ? e.message : 'Action failed.')
+      setError(e instanceof Error ? e.message : 'Действие не удалось.')
       setBusy(false)
       onFailed() // the case may have changed (a retry that timed out, a case someone else closed)
     }
@@ -140,10 +139,10 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-1.5">
             <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', style.badge)}>{style.label}</span>
-            <span className="text-[11px] font-semibold text-content-muted">{timeAgo(kase.createdAt)} old</span>
+            <span className="text-[11px] font-semibold text-content-muted">возраст: {timeAgoRu(kase.createdAt).replace(/ назад$/, '')}</span>
           </div>
           <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-content-primary">
-            {order?.serviceName ?? (payment ? `Top-up of ${payment.providerName}` : `${kase.entityType} ${kase.entityId}`)}
+            {order?.serviceName ?? (payment ? `Пополнение провайдера ${payment.providerName}` : `${kase.entityType} ${kase.entityId}`)}
           </h3>
           {order && (
             <p className="mt-0.5 text-xs text-content-secondary">
@@ -152,7 +151,7 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
           )}
           {payment && (
             <p className="mt-0.5 text-xs text-content-secondary">
-              {payment.asset} · {payment.network} · created {formatOrderDate(payment.createdAt)}
+              {payment.asset} · {payment.network} · создан {formatOrderDate(payment.createdAt)}
             </p>
           )}
         </div>
@@ -166,8 +165,8 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
 
       {payment && (
         <dl className="mt-2 space-y-1 rounded-2xl bg-surface-sub px-3 py-2 text-xs">
-          <div className="flex justify-between gap-2"><dt className="text-content-secondary">To</dt><dd><code className="font-mono" title={payment.destinationWallet}>{shortId(payment.destinationWallet)}</code></dd></div>
-          <div className="flex justify-between gap-2"><dt className="text-content-secondary">Tx</dt><dd>{payment.txHash ? <code className="font-mono" title={payment.txHash}>{shortId(payment.txHash)}</code> : 'not recorded'}</dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-content-secondary">Кому</dt><dd><code className="font-mono" title={payment.destinationWallet}>{shortId(payment.destinationWallet)}</code></dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-content-secondary">Транзакция</dt><dd>{payment.txHash ? <code className="font-mono" title={payment.txHash}>{shortId(payment.txHash)}</code> : 'не записана'}</dd></div>
         </dl>
       )}
 
@@ -187,13 +186,13 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
 
       {order && (
         <div className="mt-3 flex items-end justify-between text-xs font-medium text-content-secondary">
-          <span>Qty <b className="text-content-primary">{formatInt(order.quantity)}</b></span>
+          <span>Кол-во <b className="text-content-primary">{formatInt(order.quantity)}</b></span>
           <span className="text-lg font-extrabold text-content-primary">{usd(order.chargeAmount)}</span>
         </div>
       )}
       {payment && (
         <div className="mt-3 flex items-end justify-between text-xs font-medium text-content-secondary">
-          <span>Paid from the treasury</span>
+          <span>Оплачено из казны</span>
           <span className="text-lg font-extrabold text-content-primary">{usd(payment.amount)}</span>
         </div>
       )}
@@ -206,21 +205,21 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
         <div className="mt-3 space-y-2 rounded-2xl border border-blue-100/70 bg-surface-sub p-3">
           {needsProviderId && (
             <label className="block text-xs font-bold text-content-primary">
-              Provider order id
+              Номер заказа у провайдера
               <input
                 value={providerId}
                 onChange={(e) => setProviderId(e.target.value)}
-                placeholder="e.g. 90210"
+                placeholder="например 90210"
                 className="mt-1 w-full rounded-xl border border-blue-100/70 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-brand"
               />
             </label>
           )}
           <label className="block text-xs font-bold text-content-primary">
-            Note {needsProviderId ? '(optional)' : '(required)'}
+            Заметка {needsProviderId ? '(необязательно)' : '(обязательно)'}
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder={needsProviderId ? 'Verified in provider panel' : 'Handled outside the app'}
+              placeholder={needsProviderId ? 'Проверено в панели провайдера' : 'Решено вне приложения'}
               className="mt-1 w-full rounded-xl border border-blue-100/70 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-brand"
             />
           </label>
@@ -231,14 +230,14 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
               onClick={() =>
                 void run(
                   () => resolveCaseManual(session, kase.id, { providerOrderId: providerId || undefined, note: text || undefined }),
-                  needsProviderId ? 'Case resolved. The sync worker will track the order.' : 'Case marked as resolved.',
+                  needsProviderId ? 'Кейс закрыт. Воркер синхронизации будет отслеживать заказ.' : 'Кейс отмечен как решённый.',
                 )
               }
             >
-              Confirm
+              Подтвердить
             </Button>
             <button type="button" onClick={() => setResolving(false)} className="h-11 flex-1 rounded-2xl bg-white text-sm font-semibold text-content-secondary active:scale-95">
-              Cancel
+              Отмена
             </button>
           </div>
         </div>
@@ -248,26 +247,26 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
             <button
               type="button"
               disabled={busy}
-              onClick={confirm === 'refund' ? () => void run(() => resolveCaseRefund(session, kase.id, text || undefined), 'Order refunded to the customer.') : () => ask('refund')}
+              onClick={confirm === 'refund' ? () => void run(() => resolveCaseRefund(session, kase.id, text || undefined), 'Деньги за заказ возвращены клиенту.') : () => ask('refund')}
               className={cn(
                 'min-h-11 rounded-2xl px-1 text-[13px] font-bold leading-tight transition-all active:scale-95 disabled:opacity-50',
                 confirm === 'refund' ? 'bg-rose-600 text-white' : 'border border-rose-200 bg-white text-rose-600',
               )}
             >
-              {confirm === 'refund' ? `Confirm ${usd(order.chargeAmount)}` : 'Force Refund'}
+              {confirm === 'refund' ? `Подтвердить ${usd(order.chargeAmount)}` : 'Вернуть деньги'}
             </button>
           )}
           {order?.canRetry && (
             <button
               type="button"
               disabled={busy}
-              onClick={confirm === 'retry' ? () => void run(() => retryCase(session, kase.id), 'Order re-submitted to the provider.') : () => ask('retry')}
+              onClick={confirm === 'retry' ? () => void run(() => retryCase(session, kase.id), 'Заказ отправлен провайдеру повторно.') : () => ask('retry')}
               className={cn(
                 'flex min-h-11 items-center justify-center gap-1 rounded-2xl px-1 text-[13px] font-bold leading-tight transition-all active:scale-95 disabled:opacity-50',
                 confirm === 'retry' ? 'bg-amber-500 text-white' : 'border border-amber-300 bg-white text-amber-700',
               )}
             >
-              <RotateCw size={14} strokeWidth={2} className={cn(busy && 'animate-spin')} /> {confirm === 'retry' ? 'Confirm' : 'Retry Order'}
+              <RotateCw size={14} strokeWidth={2} className={cn(busy && 'animate-spin')} /> {confirm === 'retry' ? 'Подтвердить' : 'Повторить'}
             </button>
           )}
           {payment && onOpenPayments && (
@@ -276,7 +275,7 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
               onClick={() => { haptic.tap(); onOpenPayments() }}
               className="flex min-h-11 items-center justify-center gap-1 rounded-2xl bg-brand px-1 text-[13px] font-bold leading-tight text-white transition-all active:scale-95"
             >
-              <Landmark size={15} strokeWidth={1.75} /> Open Payment
+              <Landmark size={15} strokeWidth={1.75} /> Открыть платёж
             </button>
           )}
           <button
@@ -285,23 +284,23 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
             onClick={() => { haptic.tap(); setResolving(true); setConfirm(null) }}
             className="flex min-h-11 items-center justify-center gap-1 rounded-2xl bg-brand-light px-1 text-[13px] font-bold leading-tight text-brand-text transition-all active:scale-95 disabled:opacity-50"
           >
-            <ShieldCheck size={15} strokeWidth={1.75} /> Mark Resolved
+            <ShieldCheck size={15} strokeWidth={1.75} /> Решено
           </button>
         </div>
       )}
       {confirm === 'refund' && isProcessing && !note.refundOwed && (
         <p className="mt-2 text-[12px] font-medium text-rose-600">
-          If the provider did accept this order it will still be delivered, and refunding costs you the provider charge.
+          Если провайдер всё-таки принял этот заказ, он будет выполнен, а возврат клиенту обойдётся вам в сумму провайдера.
         </p>
       )}
       {confirm === 'retry' && (
         <p className="mt-2 text-[12px] font-medium text-amber-700">
-          Check the provider panel first. If it already created this order, retrying delivers it twice. The retry goes to the same provider the customer was charged for.
+          Сначала проверьте панель провайдера. Если он уже создал этот заказ, повтор выполнит его дважды. Повтор уходит тому же провайдеру, за которого списали деньги с клиента.
         </p>
       )}
       {payment && !resolving && (
         <p className="mt-2 text-[12px] font-medium text-content-secondary">
-          Decide the payment in Treasury → Provider payments: advance it once the chain and the provider panel agree, or mark it failed if the transfer never arrived. The case then closes by itself.
+          Решите судьбу платежа в разделе «Финансы» → «Платежи провайдерам»: продвиньте его, когда сеть и панель провайдера сходятся, или отметьте неудачным, если перевод так и не пришёл. Кейс закроется сам.
         </p>
       )}
     </article>

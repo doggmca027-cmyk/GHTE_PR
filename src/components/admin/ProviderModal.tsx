@@ -36,40 +36,40 @@ export function ProviderModal({ provider, onClose, onSave }: {
       await onSave(check.request)
     } catch (e) {
       // the message comes from the server and never contains the key
-      setErr(e instanceof Error ? e.message : 'Could not save.')
+      setErr(e instanceof Error ? e.message : 'Не удалось сохранить.')
       setBusy(false)
     }
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={editing ? `Edit provider ${provider.name}` : 'Add provider'} className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+    <div role="dialog" aria-modal="true" aria-label={editing ? `Изменить провайдера ${provider.name}` : 'Добавить провайдера'} className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
       <form
         onSubmit={(e) => { e.preventDefault(); void save() }}
         autoComplete="off"
         className="max-h-[92vh] w-full max-w-md space-y-3 overflow-y-auto rounded-3xl bg-white p-4 shadow-card"
       >
-        <h3 className="text-[15px] font-bold text-content-primary">{editing ? `Edit ${provider.name}` : 'Add provider'}</h3>
+        <h3 className="text-[15px] font-bold text-content-primary">{editing ? `Изменить: ${provider.name}` : 'Добавить провайдера'}</h3>
 
         {editing && !provider.hasApiKey && (
           <p role="status" className="flex items-start gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
             <TriangleAlert size={16} strokeWidth={1.75} className="mt-px shrink-0" />
-            This provider has no API key yet. Routing cannot be switched on until one is saved.
+            У этого провайдера ещё нет API-ключа. Пока ключ не сохранён, маршрутизацию включить нельзя.
           </p>
         )}
 
-        <Field label="Name" error={show('name')}>
+        <Field label="Название" error={show('name')}>
           <input value={draft.name} onChange={(e) => set({ name: e.target.value })} maxLength={80} aria-invalid={Boolean(show('name'))} required className={input(show('name'))} />
         </Field>
 
-        <Field label="API URL" error={show('apiUrl')} hint="Must start with https:// and point to a public host.">
+        <Field label="API URL" error={show('apiUrl')} hint="Адрес должен начинаться с https:// и вести на публичный хост.">
           <input value={draft.apiUrl} onChange={(e) => set({ apiUrl: e.target.value })} type="url" inputMode="url" spellCheck={false} placeholder="https://panel.example.com/api/v2"
             aria-invalid={Boolean(show('apiUrl'))} required className={cn(input(show('apiUrl')), 'font-mono text-[13px]')} />
         </Field>
 
         <Field
-          label="API key"
+          label="API-ключ"
           error={show('apiKey')}
-          hint={editing ? (provider.hasApiKey ? 'A key is stored. Leave empty to keep it.' : undefined) : 'Optional now, required before routing can be switched on.'}
+          hint={editing ? (provider.hasApiKey ? 'Ключ сохранён. Оставьте поле пустым, чтобы не менять его.' : undefined) : 'Можно добавить позже, но без ключа маршрутизацию не включить.'}
         >
           <div className="relative">
             <KeyRound size={16} strokeWidth={1.75} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-secondary" />
@@ -80,32 +80,32 @@ export function ProviderModal({ provider, onClose, onSave }: {
               name="provider-api-key"
               autoComplete="new-password"
               spellCheck={false}
-              placeholder={editing ? 'Leave empty to keep current key' : 'Paste the provider API key'}
+              placeholder={editing ? 'Пусто — оставить текущий ключ' : 'Вставьте API-ключ провайдера'}
               aria-invalid={Boolean(show('apiKey'))}
               className={cn(input(show('apiKey')), 'pl-9')}
             />
           </div>
         </Field>
 
-        <Field label="Priority" error={show('priority')} hint="Higher priority is listed first.">
+        <Field label="Приоритет" error={show('priority')} hint="Чем выше приоритет, тем выше провайдер в списке.">
           <input value={draft.priority} onChange={(e) => set({ priority: e.target.value.replace(/[^\d-]/g, '') })} inputMode="numeric" aria-invalid={Boolean(show('priority'))} className={input(show('priority'))} />
         </Field>
 
         <label className="flex items-center justify-between gap-3 rounded-2xl bg-surface-sub px-3.5 py-3 text-sm font-semibold text-content-primary">
-          Active
+          Включён
           <input type="checkbox" checked={draft.isActive} onChange={(e) => set({ isActive: e.target.checked })} className="h-5 w-5 accent-[var(--color-brand,#2563eb)]" />
         </label>
-        {editing && !draft.isActive && provider.routingEnabled && <p className="text-xs font-semibold text-amber-700">Switching the provider off also switches its routing off.</p>}
+        {editing && !draft.isActive && provider.routingEnabled && <p className="text-xs font-semibold text-amber-700">Если выключить провайдера, его маршрутизация тоже выключится.</p>}
 
-        {editing && touched && !check.request && Object.keys(check.errors).length === 0 && <p className="text-xs text-content-secondary">Nothing has changed.</p>}
+        {editing && touched && !check.request && Object.keys(check.errors).length === 0 && <p className="text-xs text-content-secondary">Ничего не изменилось.</p>}
         {err && <p role="alert" className="text-xs font-semibold text-rose-600">{err}</p>}
 
         <div className="flex gap-2">
           <Button type="submit" className="h-11 flex-1 text-sm" disabled={busy || (touched && !check.request)}>
-            <Check size={16} strokeWidth={2} /> {busy ? 'Saving…' : editing ? 'Save' : 'Add provider'}
+            <Check size={16} strokeWidth={2} /> {busy ? 'Сохраняем…' : editing ? 'Сохранить' : 'Добавить провайдера'}
           </Button>
           <button type="button" onClick={onClose} className="flex h-11 flex-1 items-center justify-center gap-1 rounded-2xl bg-surface-sub text-sm font-semibold text-content-secondary active:scale-95">
-            <X size={16} strokeWidth={2} /> Cancel
+            <X size={16} strokeWidth={2} /> Отмена
           </button>
         </div>
       </form>

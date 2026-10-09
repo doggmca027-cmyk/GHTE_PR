@@ -3,7 +3,7 @@ import { AlertCircle, Check, Pencil, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useLoader } from '@/hooks/useLoader'
-import { formatRuleValue, usd } from '@/lib/admin-view'
+import { formatRuleValue, ruleScopeRu, ruleTypeRu, usd } from '@/lib/admin-view'
 import { haptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
@@ -27,7 +27,7 @@ export function PriceRulesTab({ session }: { session: AuthSession }) {
       return true
     } catch (e) {
       haptic.error()
-      setMessage({ kind: 'error', text: e instanceof Error ? e.message : 'Could not save.' })
+      setMessage({ kind: 'error', text: e instanceof Error ? e.message : 'Не удалось сохранить.' })
       return false
     } finally {
       setBusyId(null)
@@ -47,8 +47,8 @@ export function PriceRulesTab({ session }: { session: AuthSession }) {
     return (
       <Card className="space-y-3 text-center">
         <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
-        <p className="text-sm font-medium text-content-secondary">{error ?? 'Could not load price rules.'}</p>
-        <Button className="w-full" onClick={() => void reload()}>Retry</Button>
+        <p className="text-sm font-medium text-content-secondary">{error ?? 'Не удалось загрузить правила цен.'}</p>
+        <Button className="w-full" onClick={() => void reload()}>Повторить</Button>
       </Card>
     )
   }
@@ -56,14 +56,14 @@ export function PriceRulesTab({ session }: { session: AuthSession }) {
   return (
     <div className="space-y-3">
       <p className="rounded-2xl bg-brand-light/60 px-3.5 py-2.5 text-[13px] font-medium text-brand-text">
-        Rule changes reach customer prices the next time the catalog sync runs. The most specific active rule wins: service, then category, then platform, then global.
+        Изменения правил попадают в цены клиентов при следующей синхронизации каталога (она идёт раз в час). Чтобы поменять цены сразу, используйте раздел «Цены и наценки». Побеждает самое узкое активное правило: услуга, затем категория, затем платформа, затем все услуги.
       </p>
       {message && (
         <p role={message.kind === 'ok' ? 'status' : 'alert'} className={cn('rounded-2xl px-3.5 py-2.5 text-[13px] font-medium', message.kind === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700')}>
           {message.text}
         </p>
       )}
-      {data.length === 0 && <Card className="p-4 text-sm text-content-secondary">No price rules yet.</Card>}
+      {data.length === 0 && <Card className="p-4 text-sm text-content-secondary">Правил цен пока нет.</Card>}
       {data.map((rule) => (
         <RuleCard key={rule.id} rule={rule} busy={busyId === rule.id} onSave={save} />
       ))}
@@ -86,16 +86,16 @@ function RuleCard({ rule, busy, onSave }: { rule: PriceRuleView; busy: boolean; 
     <article className={cn('rounded-3xl border bg-white p-4 shadow-card', rule.isActive ? 'border-blue-100/70' : 'border-slate-200 opacity-80')}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-[15px] font-bold leading-snug text-content-primary">{rule.name}</h3>
-          <p className="mt-0.5 text-xs text-content-secondary">{rule.scope} · {rule.type}</p>
+          <h3 className="text-[15px] font-bold leading-snug text-content-primary">{rule.name.replace(/^Admin margin: ?/, 'Наценка: ')}</h3>
+          <p className="mt-0.5 text-xs text-content-secondary">{ruleScopeRu(rule.scope)} · {ruleTypeRu(rule.type)}</p>
         </div>
         <button
           type="button"
           role="switch"
           aria-checked={rule.isActive}
-          aria-label={`${rule.isActive ? 'Disable' : 'Enable'} ${rule.name}`}
+          aria-label={`${rule.isActive ? 'Выключить' : 'Включить'} ${rule.name}`}
           disabled={busy}
-          onClick={() => { haptic.select(); void onSave(rule, { isActive: !rule.isActive }, `${rule.name} ${rule.isActive ? 'disabled' : 'enabled'}.`) }}
+          onClick={() => { haptic.select(); void onSave(rule, { isActive: !rule.isActive }, `${rule.name}: правило ${rule.isActive ? 'выключено' : 'включено'}.`) }}
           className={cn('relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50', rule.isActive ? 'bg-brand' : 'bg-slate-300')}
         >
           <span className={cn('absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform', rule.isActive && 'translate-x-5')} />
@@ -105,7 +105,7 @@ function RuleCard({ rule, busy, onSave }: { rule: PriceRuleView; busy: boolean; 
       {editing ? (
         <div className="mt-3 space-y-2">
           <label className="block text-xs font-bold text-content-primary">
-            {rule.type === 'fixed' ? 'Markup (USD per 1,000)' : 'Markup (%)'}
+            {rule.type === 'fixed' ? 'Наценка (USD за 1000)' : 'Наценка (%)'}
             <input
               value={draft}
               inputMode="decimal"
@@ -115,18 +115,18 @@ function RuleCard({ rule, busy, onSave }: { rule: PriceRuleView; busy: boolean; 
             />
           </label>
           <p className="text-xs font-medium text-content-secondary">
-            {preview !== null ? `A $1.00 provider rate would sell for ${usd(preview)}.` : 'Enter a number from 0 to 100000 (up to 2 decimals).'}
+            {preview !== null ? `Услуга с закупкой $1.00 за 1000 будет продаваться за ${usd(preview)}.` : 'Число от 0 до 100000, до 2 знаков после точки.'}
           </p>
           <div className="flex gap-2">
             <Button
               className="h-11 flex-1 text-sm"
               disabled={!valid || busy}
-              onClick={async () => { if (valid && (await onSave(rule, { value: parsed }, `${rule.name} updated to ${formatRuleValue(rule.type, parsed)}.`))) setEditing(false) }}
+              onClick={async () => { if (valid && (await onSave(rule, { value: parsed }, `${rule.name}: теперь ${formatRuleValue(rule.type, parsed)}.`))) setEditing(false) }}
             >
-              <Check size={16} strokeWidth={2} /> Save
+              <Check size={16} strokeWidth={2} /> Сохранить
             </Button>
             <button type="button" onClick={() => { setEditing(false); setDraft(String(rule.value)) }} className="flex h-11 flex-1 items-center justify-center gap-1 rounded-2xl bg-surface-sub text-sm font-semibold text-content-secondary active:scale-95">
-              <X size={16} strokeWidth={2} /> Cancel
+              <X size={16} strokeWidth={2} /> Отмена
             </button>
           </div>
         </div>
@@ -138,7 +138,7 @@ function RuleCard({ rule, busy, onSave }: { rule: PriceRuleView; busy: boolean; 
             onClick={() => { haptic.tap(); setDraft(String(rule.value)); setEditing(true) }}
             className="flex h-9 items-center gap-1.5 rounded-full bg-brand-light px-3.5 text-[13px] font-bold text-brand-text active:scale-95"
           >
-            <Pencil size={14} strokeWidth={1.75} /> Edit
+            <Pencil size={14} strokeWidth={1.75} /> Изменить
           </button>
         </div>
       )}

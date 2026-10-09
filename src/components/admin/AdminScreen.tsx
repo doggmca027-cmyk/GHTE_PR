@@ -8,12 +8,13 @@ import { ObservabilityTab } from './ObservabilityTab'
 import { OverviewTab } from './OverviewTab'
 import { PriceRulesTab } from './PriceRulesTab'
 import { PricingTab } from './PricingTab'
+import { PromosTab } from './PromosTab'
 import { ProvidersTab } from './ProvidersTab'
 import { ReconciliationTab } from './ReconciliationTab'
 import { SupportTab } from './SupportTab'
 import { TreasuryTab } from './TreasuryTab'
 
-type AdminTab = 'overview' | 'analytics' | 'support' | 'health' | 'queue' | 'prices' | 'pricing' | 'providers' | 'treasury' | 'controls'
+type AdminTab = 'overview' | 'analytics' | 'support' | 'health' | 'queue' | 'prices' | 'pricing' | 'promos' | 'providers' | 'treasury' | 'controls'
 
 export function AdminScreen({ session }: { session: AuthSession }) {
   const [tab, setTab] = useState<AdminTab>('overview')
@@ -22,23 +23,24 @@ export function AdminScreen({ session }: { session: AuthSession }) {
   const onProblemCount = useCallback((n: number) => setProblems(n), [])
 
   const tabs: { id: AdminTab; label: string; badge?: number }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'analytics', label: 'Analytics' },
-    { id: 'support', label: 'Support', badge: waiting },
-    { id: 'health', label: 'System Health' },
-    { id: 'queue', label: 'Reconciliation', badge: problems },
-    { id: 'prices', label: 'Price rules' },
-    { id: 'pricing', label: 'Pricing & Margins' },
-    { id: 'providers', label: 'Providers' },
-    { id: 'treasury', label: 'Treasury' },
-    { id: 'controls', label: 'Controls' },
+    { id: 'overview', label: 'Обзор' },
+    { id: 'analytics', label: 'Аналитика' },
+    { id: 'support', label: 'Поддержка', badge: waiting },
+    { id: 'health', label: 'Состояние системы' },
+    { id: 'queue', label: 'Сверка', badge: problems },
+    { id: 'pricing', label: 'Цены и наценки' },
+    { id: 'promos', label: 'Промокоды' },
+    { id: 'prices', label: 'Правила цен' },
+    { id: 'providers', label: 'Провайдеры' },
+    { id: 'treasury', label: 'Финансы' },
+    { id: 'controls', label: 'Управление' },
   ]
 
   return (
     <>
-      <h1 className="mb-3 text-2xl font-extrabold tracking-tight text-content-primary">Admin</h1>
+      <h1 className="mb-3 text-2xl font-extrabold tracking-tight text-content-primary">Админка</h1>
 
-      <div role="tablist" aria-label="Admin sections" className="no-scrollbar -mx-5 mb-4 flex gap-1.5 overflow-x-auto px-5 py-1">
+      <div role="tablist" aria-label="Разделы админки" className="no-scrollbar -mx-5 mb-4 flex gap-1.5 overflow-x-auto px-5 py-1">
         {tabs.map(({ id, label, badge }) => (
           <button
             key={id}
@@ -66,6 +68,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
       {tab === 'queue' && <ReconciliationTab session={session} onProblemCount={onProblemCount} onOpenPayments={() => setTab('treasury')} />}
       {tab === 'prices' && <PriceRulesTab session={session} />}
       {tab === 'pricing' && <PricingTab session={session} />}
+      {tab === 'promos' && <PromosTab session={session} />}
       {tab === 'providers' && <ProvidersTab session={session} />}
       {tab === 'treasury' && <TreasuryTab session={session} />}
       {tab === 'controls' && <ControlCenterTab session={session} />}

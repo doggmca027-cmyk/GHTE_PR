@@ -57,10 +57,51 @@ export interface PricingRow {
   marginPercent: number | null
 }
 
+/** A markup on the provider cost. No scope = every service; otherwise exactly one of service / category / platform (slug). */
 export interface MarginRuleInput {
-  serviceId: string
+  serviceId?: string
+  categoryId?: string
+  platform?: string
   type: 'fixed' | 'percentage'
   value: number
+}
+
+/** Which services the pricing grid shows; the catalogue has thousands, so it comes a page at a time. */
+export interface PricingQuery {
+  search?: string
+  platform?: string
+  categoryId?: string
+  offset?: number
+  limit?: number
+}
+
+export interface PricingPage {
+  rows: PricingRow[]
+  /** Rows matching the filter (not only this page). */
+  total: number
+}
+
+/** A promo code as shown in Admin → Promo codes (admin-promos). */
+export interface PromoView {
+  id: string
+  code: string
+  discountType: 'percentage' | 'fixed'
+  discountValue: number
+  maxUses: number | null
+  currentUses: number
+  expiresAt: string | null
+  isActive: boolean
+  createdAt: string
+}
+
+export interface PromoInput {
+  /** Empty = the server generates "PROMO-XXXXXX". */
+  code?: string
+  discountType: 'percentage' | 'fixed'
+  discountValue: number
+  maxUses?: number | null
+  /** ISO date; empty = never expires. */
+  expiresAt?: string | null
 }
 
 export type ProviderHealth = 'healthy' | 'degraded' | 'unavailable' | 'disabled'

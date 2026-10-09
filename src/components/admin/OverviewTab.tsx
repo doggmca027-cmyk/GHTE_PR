@@ -5,8 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { useLoader } from '@/hooks/useLoader'
 import { haptic } from '@/lib/haptics'
 import { formatInt } from '@/lib/order-calc'
-import { timeAgo } from '@/lib/time'
-import { usd } from '@/lib/admin-view'
+import { plural, timeAgoRu, usd } from '@/lib/admin-view'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { getAdminMetrics, getProviderStatus } from '@/services/api/admin'
@@ -46,8 +45,8 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
     return (
       <Card className="space-y-3 text-center">
         <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
-        <p className="text-sm font-medium text-content-secondary">{error ?? 'Could not load metrics.'}</p>
-        <Button className="w-full" onClick={() => void reload()}>Retry</Button>
+        <p className="text-sm font-medium text-content-secondary">{error ?? 'Не удалось загрузить показатели.'}</p>
+        <Button className="w-full" onClick={() => void reload()}>Повторить</Button>
       </Card>
     )
   }
@@ -56,10 +55,10 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-content-secondary">Delivered orders only; refunds excluded.</p>
+        <p className="text-xs font-medium text-content-secondary">Только выполненные заказы, возвраты не учитываются.</p>
         <button
           type="button"
-          aria-label="Refresh metrics"
+          aria-label="Обновить показатели"
           onClick={() => { haptic.tap(); setRefreshKey((k) => k + 1); void reload() }}
           className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100/70 bg-white text-content-secondary shadow-sm active:scale-90"
         >
@@ -70,27 +69,27 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
       <ProfitPanel session={session} refreshKey={refreshKey} />
 
       <div className="grid grid-cols-2 gap-3">
-        <MetricCard label="Active orders" value={formatInt(m.activeOrders)} hint={`${formatInt(m.totalOrders)} total`} />
-        <MetricCard label="Users" value={formatInt(m.totalUsers)} />
+        <MetricCard label="Активные заказы" value={formatInt(m.activeOrders)} hint={`всего ${formatInt(m.totalOrders)}`} />
+        <MetricCard label="Пользователи" value={formatInt(m.totalUsers)} />
         <MetricCard
-          label="Needs attention"
+          label="Требуют внимания"
           value={formatInt(m.problematicOrders)}
           tone={m.problematicOrders > 0 ? 'warning' : 'default'}
-          hint={m.problematicOrders > 0 ? 'Open reconciliation' : 'All clear'}
+          hint={m.problematicOrders > 0 ? 'Открыть сверку' : 'Всё в порядке'}
           onClick={m.problematicOrders > 0 ? onOpenQueue : undefined}
         />
       </div>
 
       <Card className="space-y-2.5 p-4 text-sm">
-        <Row label="In progress (not yet earned)" value={usd(m.pendingRevenue)} />
-        <Row label="User balances (owed to users)" value={usd(m.userBalances)} />
-        <Row label="Total deposited" value={usd(m.depositsTotal)} />
+        <Row label="В работе (ещё не заработано)" value={usd(m.pendingRevenue)} />
+        <Row label="Балансы пользователей (наш долг)" value={usd(m.userBalances)} />
+        <Row label="Всего пополнено" value={usd(m.depositsTotal)} />
       </Card>
 
       <div>
-        <h2 className="mb-2 text-base font-extrabold text-content-primary">Providers</h2>
+        <h2 className="mb-2 text-base font-extrabold text-content-primary">Провайдеры</h2>
         <div className="space-y-2.5">
-          {providers.length === 0 && <Card className="p-4 text-sm text-content-secondary">No providers configured.</Card>}
+          {providers.length === 0 && <Card className="p-4 text-sm text-content-secondary">Провайдеры не настроены.</Card>}
           {providers.map((p) => (
             <Card key={p.id} className="p-4">
               <div className="flex items-center justify-between gap-2">
@@ -101,7 +100,7 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
                 <p className="text-lg font-extrabold text-content-primary">{usd(p.balance)}</p>
               </div>
               <p className="mt-1 text-xs text-content-secondary">
-                {p.isActive ? `${formatInt(p.activeServices)} active services` : 'Inactive'} · balance checked {timeAgo(p.balanceUpdatedAt)} · catalog synced {timeAgo(p.lastSyncedAt)}
+                {p.isActive ? `${formatInt(p.activeServices)} ${plural(p.activeServices, ['активная услуга', 'активные услуги', 'активных услуг'])}` : 'Выключен'} · баланс проверен {timeAgoRu(p.balanceUpdatedAt)} · каталог обновлён {timeAgoRu(p.lastSyncedAt)}
               </p>
             </Card>
           ))}

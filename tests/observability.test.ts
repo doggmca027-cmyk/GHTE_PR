@@ -773,7 +773,7 @@ describe('System Health tab', () => {
 
   it('shows overall status, cron heartbeat and database status', async () => {
     const out = await render(buildSystemHealth(raw(), NOW, 41))
-    for (const text of ['All systems operational', 'Cron heartbeat', 'All jobs on time', 'Database', 'Reachable · 41 ms', 'No active alerts', 'Scheduled jobs', 'Reconciliation detector', 'Provider API health', 'Panel']) expect(out).toContain(text)
+    for (const text of ['Все системы работают', 'Фоновые задачи', 'Все вовремя', 'База данных', 'Доступна · 41 мс', 'Активных тревог нет', 'Reconciliation detector', 'Состояние API провайдеров', 'Panel']) expect(out).toContain(text)
   })
 
   it('highlights critical reconciliation cases and the failing job among the active alerts', async () => {
@@ -782,8 +782,8 @@ describe('System Health tab', () => {
       cron: healthyCron().map((j) => (j.name === 'sync-reconciliation-cases' ? { ...j, last_run_at: ago(40), last_success_at: ago(40) } : j)),
     }), NOW)
     const out = await render(h)
-    for (const text of ['Critical', 'Act now', '1 critical reconciliation case', 'Reconciliation detector: late', 'role="alert"', 'Late']) expect(out).toContain(text)
-    expect(out).not.toContain('No active alerts')
+    for (const text of ['Критично', 'Действуйте сейчас', '1 critical reconciliation case', 'Reconciliation detector: late', 'role="alert"', 'Опаздывает']) expect(out).toContain(text)
+    expect(out).not.toContain('Активных тревог нет')
   })
 
   it('provider API health: error rate, latency, error kinds, order outcomes and recent errors', async () => {
@@ -791,19 +791,19 @@ describe('System Health tab', () => {
       providers: [{ ...raw().providers[0], name: 'Backup', health_status: 'unavailable', checks: 100, failed_checks: 62, avg_latency_ms: 4200, max_latency_ms: 8000, errors_by_kind: { 'http 503': 50, timeout: 12 }, orders: 9, orders_failed: 4, orders_held: 2 }],
       recent_provider_errors: [{ provider_id: 'p1', provider_name: 'Backup', error_kind: 'http 503', status: 'unavailable', latency_ms: 4100, checked_at: ago(1) }],
     }), NOW), 6)
-    for (const text of ['Backup', 'Unavailable', '62%', '62 of 100', '4200 ms', 'max 8000 ms', 'http 503 × 50', 'timeout × 12', 'Orders in window: 9 · failed 4 · held 2', 'Recent provider API errors', 'last 6 h']) expect(out).toContain(text)
+    for (const text of ['Backup', 'Недоступен', '62%', '62 из 100', '4200 мс', 'макс. 8000 мс', 'http 503 × 50', 'timeout × 12', 'Заказов за период: 9 · неудачных 4 · на удержании 2', 'Последние ошибки API провайдеров', 'последние 6 ч']) expect(out).toContain(text)
   })
 
   it('queues: stuck orders, open cases by severity, pipeline depth', async () => {
     const out = await render(buildSystemHealth(raw({ orders: { stuck: 2, stuck_oldest_minutes: 47, held: 3, queue: { processing: 4, in_progress: 9 } } }), NOW))
-    for (const text of ['Stuck orders', 'oldest 47 min', 'In the pipeline', '13', '4 processing · 9 in progress', 'Held orders']) expect(out).toContain(text)
+    for (const text of ['Зависшие заказы', 'самый старый 47 мин', 'В обработке', '13', '4 processing · 9 in progress', 'Заказы на удержании']) expect(out).toContain(text)
   })
 
   it('offers the three windows and says when a refresh failed', async () => {
     const out = await render(buildSystemHealth(raw(), NOW), 6, 'Connection lost.')
-    expect(out).toContain('aria-label="Time window"')
-    for (const w of ['1 h', '6 h', '24 h']) expect(out).toContain(w)
-    expect(out).toContain('Refresh failed: Connection lost.')
+    expect(out).toContain('aria-label="Период"')
+    for (const w of ['1 ч', '6 ч', '24 ч']) expect(out).toContain(w)
+    expect(out).toContain('Не удалось обновить: Connection lost.')
   })
 
   it('is a tab of the admin screen', async () => {
@@ -811,6 +811,6 @@ describe('System Health tab', () => {
     const { renderToStaticMarkup } = await import('react-dom/server')
     const { AdminScreen } = await import('../src/components/admin/AdminScreen')
     const session = { token: 't', isMock: true, user: { isAdmin: true } } as never
-    expect(renderToStaticMarkup(createElement(AdminScreen, { session }))).toContain('System Health')
+    expect(renderToStaticMarkup(createElement(AdminScreen, { session }))).toContain('Состояние системы')
   })
 })

@@ -17,8 +17,8 @@ export function ProfitPanel({ session, refreshKey }: { session: AuthSession; ref
   const { data, error, loading, reload } = useLoader(() => getProfitAnalytics(session, range), [session.token, session.isMock, range, refreshKey])
 
   return (
-    <section aria-label="Profit and loss" className="space-y-3">
-      <div role="radiogroup" aria-label="Period" className="no-scrollbar -mx-5 flex gap-1.5 overflow-x-auto px-5">
+    <section aria-label="Прибыль и убытки" className="space-y-3">
+      <div role="radiogroup" aria-label="Период" className="no-scrollbar -mx-5 flex gap-1.5 overflow-x-auto px-5">
         {ANALYTICS_RANGES.map(({ key, label }) => (
           <button
             key={key}
@@ -45,37 +45,37 @@ export function ProfitPanel({ session, refreshKey }: { session: AuthSession; ref
       {!data && !loading && (
         <Card className="space-y-3 text-center">
           <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
-          <p className="text-sm font-medium text-content-secondary">{error ?? 'Could not load analytics.'}</p>
-          <Button className="w-full" onClick={() => void reload()}>Retry</Button>
+          <p className="text-sm font-medium text-content-secondary">{error ?? 'Не удалось загрузить аналитику.'}</p>
+          <Button className="w-full" onClick={() => void reload()}>Повторить</Button>
         </Card>
       )}
 
       {data && (
         <div className={cn('grid grid-cols-2 gap-3 transition-opacity', loading && 'opacity-60')} aria-busy={loading}>
           <MetricCard
-            label="Gross revenue"
+            label="Выручка"
             value={usd(data.grossRevenue)}
-            hint={`${formatInt(data.completedOrders + data.partialOrders)} delivered of ${formatInt(data.totalOrders)} orders`}
+            hint={`выполнено ${formatInt(data.completedOrders + data.partialOrders)} из ${formatInt(data.totalOrders)} заказов`}
           />
-          <MetricCard label="Provider cost" value={usd(data.providerCost)} hint="Of what was delivered" />
+          <MetricCard label="Затраты на провайдеров" value={usd(data.providerCost)} hint="За выполненное" />
           <MetricCard
-            label="Gross profit"
+            label="Валовая прибыль"
             value={usd(data.grossProfit)}
             tone={data.grossProfit < 0 ? 'danger' : 'default'}
-            hint={data.marginPct === null ? 'No revenue yet' : `${data.marginPct.toFixed(1)}% margin`}
+            hint={data.marginPct === null ? 'Выручки пока нет' : `маржа ${data.marginPct.toFixed(1)}%`}
           />
-          <MetricCard label="Treasury fees" value={usd(data.treasuryFees)} hint="Operational costs" />
-          <MetricCard label="Network fees" value={usd(data.networkFees)} hint="Blockchain fees we paid" />
-          <MetricCard label="Refunds" value={usd(data.refundCost)} hint="Returned to customers; not revenue" />
+          <MetricCard label="Комиссии казны" value={usd(data.treasuryFees)} hint="Операционные расходы" />
+          <MetricCard label="Комиссии сети" value={usd(data.networkFees)} hint="Комиссии блокчейна, которые мы заплатили" />
+          <MetricCard label="Возвраты" value={usd(data.refundCost)} hint="Вернули клиентам, это не выручка" />
           <div className="col-span-2">
             <MetricCard
-              label="Net profit"
+              label="Чистая прибыль"
               value={`${data.netProfit < 0 ? '-' : ''}${usd(Math.abs(data.netProfit))}`}
               tone={data.netProfit < 0 ? 'danger' : 'success'}
-              hint={data.netProfit < 0 ? 'Loss in this period: costs exceed profit' : 'Gross profit minus treasury and network fees'}
+              hint={data.netProfit < 0 ? 'Убыток за период: расходы больше прибыли' : 'Валовая прибыль минус комиссии казны и сети'}
             />
           </div>
-          {data.netProfit < 0 && <p role="alert" className="col-span-2 rounded-2xl bg-rose-50 px-3.5 py-2.5 text-[13px] font-semibold text-rose-700">Net profit is negative for this period.</p>}
+          {data.netProfit < 0 && <p role="alert" className="col-span-2 rounded-2xl bg-rose-50 px-3.5 py-2.5 text-[13px] font-semibold text-rose-700">За этот период чистая прибыль отрицательная.</p>}
         </div>
       )}
     </section>

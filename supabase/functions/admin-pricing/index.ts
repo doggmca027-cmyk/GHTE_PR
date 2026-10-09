@@ -14,7 +14,7 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
 import { groupByService, OFFER_PRICING_COLUMNS, serviceCostBasis, toPricingOffer, type PricingOfferRow } from '../_shared/service-cost.ts'
-import { affectedServices, parsePricingRequest, repriceServices, type RepriceService } from '../_shared/admin-pricing.ts'
+import { affectedServices, pagePricingRows, parsePricingRequest, repriceServices, type RepriceService } from '../_shared/admin-pricing.ts'
 import type { Platform, PriceRule } from '../_shared/types.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -22,7 +22,8 @@ type Db = SupabaseClient<any, 'public', any>
 
 // platform is the joined slug: the pricing engine and the reprice logic keep working with the slug
 const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, priority, is_active'
-const WRITE_BATCH = 20
+const WRITE_CHUNK = 500
+const ALL_OFFERS_ABOVE = 300
 const OFFER_ID_CHUNK = 100
 const OFFER_PAGE = 1000
 
@@ -39,9 +40,33 @@ const toRule = (r: Record<string, unknown>): PriceRule => ({
   max_rate: r.max_rate == null ? null : Number(r.max_rate),
 })
 
-/** All offers of the given services (chunked: the ids travel in the URL). */
+/** Active services with their platform, a page at a time (PostgREST cuts a response at 1000 rows). */
+async function loadActiveServices(db: Db): Promise<{ id: string; category_id: string; customer_rate_per_1000: number; category: { platform: { slug: Platform } } }[]> {
+  const out: { id: string; category_id: string; customer_rate_per_1000: number; category: { platform: { slug: Platform } } }[] = []
+  for (let from = 0; ; from += OFFER_PAGE) {
+    const page = must(
+      await db.from('services')
+        .select('id, category_id, customer_rate_per_1000, category:categories!inner(platform:platforms!inner(slug))')
+        .eq('is_active', true).order('id').range(from, from + OFFER_PAGE - 1),
+      'load services',
+    ) as unknown as typeof out
+    out.push(...page)
+    if (page.length < OFFER_PAGE) break
+  }
+  return out
+}
+
+/** All offers of the given services. A few services: chunked by id (the ids travel in the URL); a whole catalogue: the table in pages. */
 async function loadOffers(db: Db, serviceIds: string[]): Promise<PricingOfferRow[]> {
   const out: PricingOfferRow[] = []
+  if (serviceIds.length > ALL_OFFERS_ABOVE) {
+    for (let from = 0; ; from += OFFER_PAGE) {
+      const page = must(await db.from('provider_service_offers').select(OFFER_PRICING_COLUMNS).order('id').range(from, from + OFFER_PAGE - 1), 'load offers') as unknown as PricingOfferRow[]
+      out.push(...page)
+      if (page.length < OFFER_PAGE) break
+    }
+    return out
+  }
   for (let i = 0; i < serviceIds.length; i += OFFER_ID_CHUNK) {
     for (let from = 0; ; from += OFFER_PAGE) {
       const page = must(
@@ -86,7 +111,9 @@ Deno.serve(instrument('admin-pricing', async (req: Request, { log }): Promise<Re
         auth: { persistSession: false },
         global: { headers: { Authorization: req.headers.get('authorization') ?? '' } },
       })
-      return json({ success: true, services: must(await asUser.rpc('get_admin_pricing_view'), 'pricing view') })
+      const view = must(await asUser.rpc('get_admin_pricing_view'), 'pricing view') as Record<string, unknown>[]
+      const page = pagePricingRows(view, parsed)
+      return json({ success: true, services: page.rows, total: page.total })
     }
 
     // ---- UPDATE_RULE ---------------------------------------------------------------------------------
@@ -122,23 +149,19 @@ Deno.serve(instrument('admin-pricing', async (req: Request, { log }): Promise<Re
 
     // Re-price immediately with the shared engine, from the same basis as sync-catalog: the cheapest offer that can receive orders.
     const rules = (must(await db.from('price_rules').select(RULE_COLUMNS).eq('is_active', true), 'load price_rules') as Record<string, unknown>[]).map(toRule)
-    const rows = must(
-      await db.from('services')
-        .select('id, category_id, customer_rate_per_1000, category:categories!inner(platform:platforms!inner(slug))')
-        .eq('is_active', true),
-      'load services',
-    ) as unknown as { id: string; category_id: string; customer_rate_per_1000: number; category: { platform: { slug: Platform } } }[]
-    const offerRows = rows.length === 0 ? [] : await loadOffers(db, rows.map((r) => r.id))
+    const all = await loadActiveServices(db)
+    const inScope = all.filter((r) => (serviceId ? r.id === serviceId : categoryId ? r.category_id === categoryId : platform ? r.category.platform.slug === platform : true))
+    const offerRows = inScope.length === 0 ? [] : await loadOffers(db, inScope.map((r) => r.id))
     const offersByService = groupByService(offerRows.map(toPricingOffer))
-    const services: RepriceService[] = rows.flatMap((r) => {
+    const services: RepriceService[] = inScope.flatMap((r) => {
       const basis = serviceCostBasis(offersByService.get(r.id) ?? [])
       // no offer can receive an order: there is no cost to mark up, so the price is left alone
       return basis ? [{ id: r.id, category_id: r.category_id, platform: r.category.platform.slug, customer_rate_per_1000: Number(r.customer_rate_per_1000), provider_rate: basis.cost }] : []
     })
     const changes = repriceServices(affectedServices(services, parsed), rules)
-    for (let i = 0; i < changes.length; i += WRITE_BATCH) {
-      await Promise.all(changes.slice(i, i + WRITE_BATCH).map(async (c) =>
-        must(await db.from('services').update({ customer_rate_per_1000: c.rate }).eq('id', c.id).select('id').single(), 'update service price')))
+    // the engine computes the rates; the database writes them a chunk at a time
+    for (let i = 0; i < changes.length; i += WRITE_CHUNK) {
+      must(await db.rpc('apply_service_rates', { p_rows: changes.slice(i, i + WRITE_CHUNK).map((c) => ({ id: c.id, rate: c.rate })) }), 'apply service rates')
     }
 
     must(await db.from('admin_audit_log').insert({
