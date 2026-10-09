@@ -132,6 +132,10 @@ customer action that would need a real counterpart is refused before anyone is c
 
 **Goal:** one order goes all the way: charged, routed, accepted by the provider, delivered, and synced to *completed*.
 
+> **Flight test without a TON deposit:** stage 1 and this stage can be run together, with the test wallet funded by a ledger entry
+> instead of a deposit, using [`LIVE_TEST_RUNBOOK.md`](LIVE_TEST_RUNBOOK.md) and the read-only observer `npm run observe:live`.
+> The stage-3 smoke gate then reports `deposit-functions` and `ton` as FAIL by design.
+
 **Entry criteria:**
 * Stage 2 passed. Your wallet holds the micro-deposit.
 * Pick the cheapest service the provider sells, at its minimum quantity, sent to a target you own.

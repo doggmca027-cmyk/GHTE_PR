@@ -23,7 +23,8 @@
     "e2e:provider": "node --disable-warning=ExperimentalWarning scripts/provider-e2e.ts",
     "test:ton": "node --disable-warning=ExperimentalWarning scripts/ton-e2e.ts",
     "secrets:rotate": "node --disable-warning=ExperimentalWarning scripts/rotate-secrets.ts",
-    "smoke:live": "node --disable-warning=ExperimentalWarning scripts/live-smoke-test.ts"
+    "smoke:live": "node --disable-warning=ExperimentalWarning scripts/live-smoke-test.ts",
+    "observe:live": "node --disable-warning=ExperimentalWarning scripts/observe-live-test.ts"
   },
   "dependencies": {
     "@tonconnect/ui-react": "^3.0.2",
