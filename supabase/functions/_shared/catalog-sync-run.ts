@@ -31,6 +31,7 @@ import {
   type ProviderSyncReport,
   type ServiceRow,
 } from './catalog-sync.ts'
+import { buildPublishRows, type PublishRow } from './catalog-publish.ts'
 import type { Logger } from './logger.ts'
 import type { IProviderAdapter } from './providers/contract.ts'
 import { groupByService, serviceCostBasis, type PricingOffer } from './service-cost.ts'
@@ -42,6 +43,8 @@ export type CatalogAdapter = Pick<IProviderAdapter, 'getServices' | 'getBalance'
 /** Refuse to deactivate more than this share of a large catalogue in one run (guards against partial provider responses). */
 export const MAX_DEACTIVATION_RATIO = 0.5
 export const MIN_CATALOG_FOR_RATIO_GUARD = 20
+/** Rows per publish_provider_services call (a few hundred KB of JSON). */
+export const PUBLISH_CHUNK = 600
 
 /** Everything the run reads or writes. Implementations page and chunk as they need. */
 export interface CatalogStore {
@@ -58,6 +61,10 @@ export interface CatalogStore {
   loadServiceOffers(serviceIds: string[]): Promise<PricingOffer[]>
   updateServices(rows: ServiceRow[]): Promise<void>
   saveBalance(providerId: string, balance: number): Promise<void>
+  /** Put the provider's qualifying services on the storefront (publish_provider_services). Optional: a store without it publishes nothing. */
+  publishServices?(providerId: string, rows: PublishRow[]): Promise<{ categories_changed: number; services_created: number; services_updated: number }>
+  /** Slugs of the platforms of the registry (a category on an unknown platform goes to "other"). */
+  loadPlatformSlugs?(): Promise<string[]>
 }
 
 export interface SyncProviderInput {
@@ -115,7 +122,7 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
   }
 
   // 3. Upsert provider_services (new ones are only stored, never put on the storefront).
-  await store.upsertProviderServices(diff.rows)
+  const saved = await store.upsertProviderServices(diff.rows)
   report.added = diff.added.length
   report.updated = diff.updated.length
 
@@ -131,6 +138,30 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
     await store.deactivateProviderServices(missingIds)
     for (const id of missingIds) deactivatedPsIds.add(id)
     report.deactivated = missingIds.length
+  }
+
+  // 5b. Publish: every service of this provider that can be sold as it is gets a storefront service (new ones appear, renamed ones are
+  //     refreshed). A failure here is reported but never stops the pricing of what is already on the storefront.
+  if (store.publishServices && store.loadPlatformSlugs) {
+    try {
+      const idByExternal = new Map(saved.map((s) => [s.external_service_id, s.id]))
+      const candidates = valid.flatMap((s) => {
+        const id = idByExternal.get(s.externalServiceId)
+        return id ? [{ id, name: s.name, categoryRaw: s.categoryRaw, serviceType: s.type ?? null, rate: s.ratePer1000, min: s.minQuantity, max: s.maxQuantity }] : []
+      })
+      const built = buildPublishRows(candidates, new Set(await store.loadPlatformSlugs()))
+      const total = { created: 0, updated: 0, categories: 0 }
+      for (let i = 0; i < built.rows.length; i += PUBLISH_CHUNK) {
+        const r = await store.publishServices(provider.id, built.rows.slice(i, i + PUBLISH_CHUNK))
+        total.created += r.services_created
+        total.updated += r.services_updated
+        total.categories += r.categories_changed
+      }
+      report.published = { ...total, skipped: built.skipped, untranslatedServices: built.untranslatedServices, untranslatedCategories: built.untranslatedCategories }
+    } catch (e) {
+      log.error('publishing the catalogue failed', { err: e, providerId: provider.id, error_code: 'catalog_publish_failed' })
+      report.warning = [report.warning, `publishing failed: ${e instanceof Error ? e.message : 'unknown error'}`].filter(Boolean).join('; ')
+    }
   }
 
   // 6. Storefront services that sell through this provider: priced from their cheapest usable offer (read after steps 3-5, so a

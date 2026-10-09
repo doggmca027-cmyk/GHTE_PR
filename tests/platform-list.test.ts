@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { BRAND_COLORS, FALLBACK_PLATFORMS, platformColor, platformInitials, type PlatformInfo } from '../src/constants/platforms'
 import { MOCK_CATALOG, MOCK_PLATFORMS } from '../src/constants/dev'
 import { mergePlatforms, platformEntries } from '../src/components/services/ServicesScreen'
-import type { ICatalog } from '../src/types/catalog'
+import type { ICategory } from '../src/types/catalog'
 
 const ROOT = path.resolve(__dirname, '..')
 
@@ -32,31 +32,32 @@ describe('platform tiles', () => {
 })
 
 describe('the platform list', () => {
-  const catalog = (over: Partial<ICatalog> = {}): ICatalog => ({ ...MOCK_CATALOG, ...over })
+  // what the database keeps per category: how many active services it holds
+  const counted = (): ICategory[] => MOCK_CATALOG.categories.map((c) => ({ ...c, count: MOCK_CATALOG.services.filter((s) => s.categoryId === c.id).length }))
   const info = (slug: string, name: string, sortOrder: number): PlatformInfo => ({ slug, name, category: 'social', sortOrder })
 
   it('lists the platforms with services first (busiest first), then by the registry\'s order, then by name', () => {
     const platforms = [info('zzz', 'Zzz', 5), info('telegram', 'Telegram', 10), info('instagram', 'Instagram', 20), info('tiktok', 'TikTok', 30), info('aaa', 'Aaa', 5), info('youtube', 'YouTube', 40)]
-    const entries = platformEntries(platforms, catalog())
+    const entries = platformEntries(platforms, counted())
     // the mock catalog: telegram has 4 services, instagram 2, tiktok 2
     expect(entries.map((e) => [e.slug, e.count])).toEqual([['telegram', 4], ['instagram', 2], ['tiktok', 2], ['aaa', 0], ['zzz', 0], ['youtube', 0]])
   })
 
   it('every platform is listed whether or not it has services: that is the point of the list', () => {
-    const entries = platformEntries([...MOCK_PLATFORMS], catalog({ services: [], categories: [] }))
+    const entries = platformEntries([...MOCK_PLATFORMS], [])
     expect(entries).toHaveLength(MOCK_PLATFORMS.length)
     expect(entries.every((e) => e.count === 0)).toBe(true)
   })
 
   it('a platform with categories but missing from the registry is added, so its services stay reachable', () => {
-    const merged = mergePlatforms([info('telegram', 'Telegram', 10)], catalog())
+    const merged = mergePlatforms([info('telegram', 'Telegram', 10)], counted())
     expect(merged.map((p) => p.slug).sort()).toEqual(['instagram', 'telegram', 'tiktok'])
     expect(merged.find((p) => p.slug === 'tiktok')?.name).toBe('Tiktok')
-    expect(mergePlatforms([info('apple-music', 'Apple Music', 1)], catalog({ categories: [{ ...MOCK_CATALOG.categories[0], platform: 'apple-music' }] })).find((p) => p.slug === 'apple-music')?.name).toBe('Apple Music')
+    expect(mergePlatforms([info('apple-music', 'Apple Music', 1)], [{ ...MOCK_CATALOG.categories[0], platform: 'apple-music' }]).find((p) => p.slug === 'apple-music')?.name).toBe('Apple Music')
   })
 
   it('when the registry cannot be read, the built-in platforms are used', () => {
-    expect(mergePlatforms(null, catalog({ categories: [], services: [] })).map((p) => p.slug)).toEqual(FALLBACK_PLATFORMS.map((p) => p.slug))
+    expect(mergePlatforms(null, []).map((p) => p.slug)).toEqual(FALLBACK_PLATFORMS.map((p) => p.slug))
   })
 
   it('the dev list and the services screen no longer use tabs', () => {
@@ -114,7 +115,7 @@ describe('the registry migration (real schema)', () => {
     expect(seeded.length).toBeGreaterThanOrEqual(85)
     expect(new Set(seeded.map((s) => s.slug)).size).toBe(seeded.length)
     const total = Number((await rows(`select count(*) n from platforms`))[0].n)
-    expect(total).toBe(seeded.length + 11) // the 11 of the first registry migration
+    expect(total).toBe(seeded.length + 11 + 4) // the 11 of the first registry migration, the four added by 20261113000000_catalog_publish.sql
   })
 
   it('every new platform has a valid slug and category, and the registry holds it', async () => {
@@ -135,7 +136,7 @@ describe('the registry migration (real schema)', () => {
     await db.exec(`reset role`)
     expect(slugs).toContain('twitch')
     expect(slugs).not.toContain('onlyfans')
-    expect(slugs).toHaveLength(seeded.filter((s) => s.active).length + 11)
+    expect(slugs).toHaveLength(seeded.filter((s) => s.active).length + 11 + 4)
   })
 
   it('running it again changes nothing: an admin\'s edits to a platform survive', async () => {

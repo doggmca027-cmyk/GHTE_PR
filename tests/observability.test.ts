@@ -403,8 +403,8 @@ describe('cron pulse', () => {
   })
 
   it('right after a deploy a worker has not reported yet: trusted while the scheduler fires, late once overdue', () => {
-    expect(classifyJob(job('sync-catalog'), [cronJob('sync-catalog', { last_run_at: ago(100) })], [], NOW)).toMatchObject({ state: 'ok' })
-    expect(classifyJob(job('sync-catalog'), [cronJob('sync-catalog', { last_run_at: ago(500) })], [], NOW).state).toBe('late')
+    expect(classifyJob(job('sync-catalog'), [cronJob('sync-catalog', { last_run_at: ago(60) })], [], NOW)).toMatchObject({ state: 'ok' })
+    expect(classifyJob(job('sync-catalog'), [cronJob('sync-catalog', { last_run_at: ago(200) })], [], NOW).state).toBe('late')
   })
 
   it('a job scheduled but never run is never_ran; without a readable pg_cron a sql job is unknown and an http job falls back to its heartbeat', () => {

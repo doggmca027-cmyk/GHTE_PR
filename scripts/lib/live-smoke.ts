@@ -200,8 +200,8 @@ export function evaluate(s: Snapshot, stage: Stage): CheckResult[] {
   }
   const catalog = s.heartbeats.find((h) => h.worker === 'sync-catalog')
   const catAge = minutesAgo(catalog?.last_success_at ?? null, s.now)
-  add('cron', 'sync-catalog', catAge !== null && catAge <= 7 * 60, 5, `sync-catalog completed ${catAge} min ago`,
-    catalog ? `sync-catalog has not completed for ${catAge} min` : 'sync-catalog has not reported yet (it runs every 6 h)', 'Trigger it once (DEPLOYMENT.md 1.6) or wait for the next 6-hour run.')
+  add('cron', 'sync-catalog', catAge !== null && catAge <= 90, 5, `sync-catalog completed ${catAge} min ago`,
+    catalog ? `sync-catalog has not completed for ${catAge} min` : 'sync-catalog has not reported yet (it runs every hour)', 'Trigger it once (DEPLOYMENT.md 1.6) or wait for the next hourly run.')
 
   return out
 }

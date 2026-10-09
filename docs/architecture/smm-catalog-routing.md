@@ -42,7 +42,7 @@ Provider data does not belong here, with one legacy exception (section 4).
 
 ### provider_services
 One row per service in a **provider's own catalog**: `external_service_id` (the id at the panel), `rate_per_1000` (the
-panel's price), its own limits and flags, `is_active`. `sync-catalog` keeps it in step with the panel every 6 hours.
+panel's price), its own limits and flags, `is_active`. `sync-catalog` keeps it in step with the panel every hour.
 `unique (provider_id, external_service_id)`.
 
 ### provider_service_offers (the provider offer)
@@ -74,7 +74,7 @@ An order points at what actually served it: `service_id` (what was bought), `pro
 
 ## 3. How an order travels
 
-1. **Catalog sync** (`sync-catalog`, every 6 hours) reads each panel through `IProviderAdapter.getServices()` and upserts `provider_services`.
+1. **Catalog sync** (`sync-catalog`, every hour) reads each panel through `IProviderAdapter.getServices()` and upserts `provider_services`.
    It does **not** create `categories` or `services`: a new panel service waits in `provider_services` until an admin links it
    (`admin-catalog-mapping`). Offers' cost, limits and flags are kept equal to their provider service by the trigger
    `trg_provider_services_sync_offers` and re-checked by the sync itself (`planOfferSync`; `is_active` / `routing_score` untouched).

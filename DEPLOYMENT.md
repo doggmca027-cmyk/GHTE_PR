@@ -209,7 +209,7 @@ Review prices in the app's **Admin → Price rules** and the services in the SQL
 
 Three jobs must run on a timer: **`sync-order-status` every minute** (progress, refunds, partial refunds, stuck orders),
 **`provider-health-monitor` every minute** (pings routing-enabled providers, flips `health_status`, alerts admins on Telegram; routing fails over automatically)
-and **`sync-catalog` every 6 hours** (prices, catalogue, cached provider balance).
+and **`sync-catalog` every hour** (prices, limits, new and removed services, names, cached provider balance; it also puts every service that can be sold on the storefront).
 
 **Option A: inside Supabase (recommended).**
 Dashboard → Database → Extensions: enable **`pg_cron`** and **`pg_net`**. Then open
@@ -224,7 +224,7 @@ select status_code, content::text from net._http_response order by created desc 
 
 **Option B: any external scheduler** (GitHub Actions cron, cron-job.org, a VPS): send
 `POST https://<PROJECT_REF>.supabase.co/functions/v1/sync-order-status` with header `x-cron-secret: <CRON_SECRET>` every minute
-and the same for `sync-catalog` every 6 hours. Overlapping runs are safe: money movement is idempotent in the database.
+and the same for `sync-catalog` every hour. Overlapping runs are safe: money movement is idempotent in the database.
 
 > There is **no Telegram webhook** to configure: the bot only *sends* messages. Users must have opened the bot at least once
 > (they have, if they launch the Mini App from the bot). Users who blocked the bot are skipped silently.

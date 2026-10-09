@@ -21,7 +21,7 @@ export const MOCK_SESSION: AuthSession = {
 
 // Offline catalogue for `npm run dev` outside Telegram. Mirrors supabase/seed.sql.
 const cat = (n: number, platform: ICategory['platform'], name: string, slug: string): ICategory => ({
-  id: `00000000-0000-4000-8000-00000000c00${n}`, platform, name, slug, iconUrl: null, sortOrder: n * 10,
+  id: `00000000-0000-4000-8000-00000000c00${n}`, platform, name, slug, iconUrl: null, sortOrder: n * 10, count: 0,
 })
 const svc = (
   n: number, c: ICategory, name: string, rate: number, min: number, max: number, refill: boolean, sort: number,

@@ -5,6 +5,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import type { CatalogStore } from '../_shared/catalog-sync-run.ts'
 import type { ExistingOffer, ExistingProviderService, LinkedService, OfferSource } from '../_shared/catalog-sync.ts'
 import { OFFER_PRICING_COLUMNS, toPricingOffer, type PricingOffer, type PricingOfferRow } from '../_shared/service-cost.ts'
+import type { PublishRow } from '../_shared/catalog-publish.ts'
 import type { Platform } from '../_shared/types.ts'
 
 const PAGE = 1000
@@ -54,7 +55,7 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       fetchAll<ExistingProviderService>(
         (from, to) =>
           db.from('provider_services')
-            .select('id, external_service_id, name, category_raw, rate_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, is_active')
+            .select('id, external_service_id, name, category_raw, rate_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, service_type, is_active')
             .eq('provider_id', providerId).order('id').range(from, to),
         'load provider_services',
       ),
@@ -136,6 +137,17 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
     async deactivateProviderServices(ids) {
       for (const part of chunks(ids, ID_CHUNK)) {
         must(await db.from('provider_services').update({ is_active: false }).in('id', part), 'deactivate provider_services')
+      }
+    },
+
+    async loadPlatformSlugs() {
+      const rows = await fetchAll<{ slug: string }>((from, to) => db.from('platforms').select('slug').order('slug').range(from, to), 'load platforms')
+      return rows.map((r) => r.slug)
+    },
+
+    async publishServices(providerId, rows: PublishRow[]) {
+      return must(await db.rpc('publish_provider_services', { p_provider_id: providerId, p_rows: rows }), 'publish services') as {
+        categories_changed: number; services_created: number; services_updated: number
       }
     },
 

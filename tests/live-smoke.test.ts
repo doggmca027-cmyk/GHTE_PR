@@ -51,7 +51,7 @@ function fullyReady(): Snapshot {
   s.providers = [{ name: 'Panel', is_active: true, routing_enabled: true, health_status: 'healthy', last_health_check: ago(1), has_db_key: true, has_wallet: true, max_topup_per_tx: '50.0000', max_daily_topup: '200.0000' }]
   s.settings = { ...s.settings!, minimum_treasury_reserve: '25.0000' }
   s.treasuryBalance = '500.0000'
-  s.heartbeats.push({ worker: 'sync-catalog', last_success_at: ago(120), last_error_at: null, last_error: null })
+  s.heartbeats.push({ worker: 'sync-catalog', last_success_at: ago(30), last_error_at: null, last_error: null })
   return s
 }
 

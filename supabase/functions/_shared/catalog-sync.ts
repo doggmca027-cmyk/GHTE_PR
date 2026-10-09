@@ -122,6 +122,8 @@ export interface ExistingProviderService {
   max_quantity: number
   refill_supported: boolean
   cancel_supported: boolean
+  /** The panel's type of service ("Default", "Package", ...). Absent on rows read before the column existed. */
+  service_type?: string | null
   is_active: boolean
 }
 
@@ -135,6 +137,7 @@ export interface ProviderServiceRow {
   max_quantity: number
   refill_supported: boolean
   cancel_supported: boolean
+  service_type: string
   is_active: true
   last_synced_at: string
 }
@@ -176,6 +179,7 @@ export function diffProviderServices(
       max_quantity: s.maxQuantity,
       refill_supported: s.refillSupported,
       cancel_supported: s.cancelSupported,
+      service_type: (s.type ?? '').trim() || 'Default',
       is_active: true,
       last_synced_at: nowIso,
     }
@@ -195,7 +199,8 @@ export function diffProviderServices(
       prev.min_quantity !== row.min_quantity ||
       prev.max_quantity !== row.max_quantity ||
       prev.refill_supported !== row.refill_supported ||
-      prev.cancel_supported !== row.cancel_supported
+      prev.cancel_supported !== row.cancel_supported ||
+      (prev.service_type ?? 'Default') !== row.service_type
     if (changed) diff.updated.push(s.externalServiceId)
     else diff.unchanged++
   }
@@ -480,6 +485,8 @@ export interface ProviderSyncReport {
   /** Offers whose cost / limits were brought back in line with their provider service. */
   offers: { synced: number }
   skippedInvalid: number
+  /** What putting this provider's services on the storefront did in this run (absent when the store cannot publish). */
+  published?: { created: number; updated: number; categories: number; skipped: number; untranslatedServices: number; untranslatedCategories: number }
 }
 
 export interface SyncReport {

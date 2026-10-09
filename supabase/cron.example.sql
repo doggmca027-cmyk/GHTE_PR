@@ -26,10 +26,11 @@ select cron.schedule(
   $$
 );
 
--- Every 6 hours: refresh the provider catalogue, prices and cached provider balances.
+-- Every hour: refresh the provider catalogue (prices, limits, new and removed services, their names and facts), put what can be sold on the
+-- storefront and refresh the cached provider balances.
 select cron.schedule(
   'sync-catalog',
-  '0 */6 * * *',
+  '0 * * * *',
   $$
   select net.http_post(
     url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/sync-catalog',

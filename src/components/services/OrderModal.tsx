@@ -3,7 +3,8 @@ import { CheckCircle2, Clock, Link2, Loader2, ShieldCheck, TriangleAlert, X, Zap
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Toast, type ToastMessage } from '@/components/ui/Toast'
-import { tr, useT } from '@/i18n'
+import { currentLocale, tr, useLanguage, useT } from '@/i18n'
+import { describeService, localizedName } from '@/lib/service-view'
 import { tm } from '@/i18n/messages'
 import { useAuth } from '@/context/AuthContext'
 import { track } from '@/lib/analytics-client'
@@ -56,6 +57,7 @@ const inputClass = (invalid: boolean) =>
 
 export function OrderModal({ service, platform, platformName, session, onClose, onTopUp, onViewOrders }: Props) {
   const t = useT()
+  const { lang } = useLanguage()
   const { applyWallet } = useAuth()
   const wallet = session.wallet
 
@@ -205,7 +207,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
                 <PlatformIcon platform={platform} name={platformName} size={22} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-bold leading-snug text-content-primary">{service.name}</p>
+                <p className="text-[15px] font-bold leading-snug text-content-primary">{localizedName(service.name, service.nameI18n, lang)}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <Badge><Zap size={12} strokeWidth={2} /> {t(deriveSpeed(service.name))}</Badge>
                   {service.refillSupported && <Badge><ShieldCheck size={12} strokeWidth={2} /> {t('Refill')}</Badge>}
@@ -215,6 +217,15 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
                 </p>
               </div>
             </div>
+
+            {/* What the panel promises, from the service's facts, in the customer's language */}
+            {describeService(service.attributes, currentLocale()).length > 0 && (
+              <ul className="mt-3 space-y-1 rounded-2xl bg-surface-sub px-4 py-3 text-[13px] font-medium text-content-secondary" aria-label={t('Details')}>
+                {describeService(service.attributes, currentLocale()).map((line) => (
+                  <li key={line} className="flex gap-2"><span aria-hidden="true" className="text-brand">•</span> {line}</li>
+                ))}
+              </ul>
+            )}
 
             {/* Link */}
             <label className="mt-5 block">
