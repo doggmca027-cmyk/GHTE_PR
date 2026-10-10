@@ -30,7 +30,7 @@ import type { Platform, PriceRule } from '../_shared/types.ts'
 // deno-lint-ignore no-explicit-any
 type Db = SupabaseClient<any, 'public', any>
 
-const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, priority, is_active'
+const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, name_all, name_any, priority, is_active'
 
 function must<T>(res: { data: T | null; error: { message: string } | null }, what: string): T {
   if (res.error) throw new Error(`${what}: ${res.error.message}`)
@@ -113,7 +113,7 @@ Deno.serve(instrument('admin-catalog-mapping', async (req: Request, { log }): Pr
       ) as unknown as { id: string; platform: { slug: Platform } | null } | null
       if (!category) return fail(404, 'category_not_found', 'Category not found or inactive.')
       const rules = (must(await db.from('price_rules').select(RULE_COLUMNS).eq('is_active', true), 'load price_rules') as Record<string, unknown>[]).map(toRule)
-      rate = calculateCustomerRate(Number(ps.rate_per_1000), rules, { categoryId: category.id, platform: category.platform?.slug ?? 'other' })
+      rate = calculateCustomerRate(Number(ps.rate_per_1000), rules, { categoryId: category.id, platform: category.platform?.slug ?? 'other', serviceName: parsed.name })
     }
 
     const r = await call('admin_create_service_with_offer', {

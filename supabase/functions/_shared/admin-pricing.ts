@@ -97,6 +97,8 @@ export interface RepriceService {
   id: string
   category_id: string
   platform: Platform
+  /** Matched by keyword rules (name_all / name_any); without it only scope and tier rules apply. */
+  name?: string
   customer_rate_per_1000: number
   /** The cheapest offer that can receive an order (service-cost.ts): the same basis sync-catalog prices from. */
   provider_rate: number
@@ -116,7 +118,7 @@ const r4 = (n: number) => Math.round(n * 10_000) / 10_000
 export function repriceServices(services: RepriceService[], rules: PriceRule[]): { id: string; rate: number }[] {
   const changes: { id: string; rate: number }[] = []
   for (const s of services) {
-    const rate = calculateCustomerRate(s.provider_rate, rules, { serviceId: s.id, categoryId: s.category_id, platform: s.platform })
+    const rate = calculateCustomerRate(s.provider_rate, rules, { serviceId: s.id, categoryId: s.category_id, platform: s.platform, serviceName: s.name })
     if (r4(rate) !== r4(s.customer_rate_per_1000)) changes.push({ id: s.id, rate })
   }
   return changes

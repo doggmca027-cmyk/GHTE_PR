@@ -4,7 +4,8 @@ import type { PriceContext, PriceOptions, PriceRule } from './types.ts'
 // carry binary floating-point artifacts (0.1 + 0.2 style errors).
 const SCALE = 8 // provider rates / margins / fixed markups: 1e-8 units
 const PERCENT_SCALE = 4 // percent markups: P / 10000 of the rate (value has 2 decimals => value * 100 / 10000)
-const DEFAULT_MIN_MARGIN = 0.01
+/** Anti-loss floor: the price is never below cost + this, whatever the rules say (covers gateway / network fees on tiny orders). */
+export const DEFAULT_MIN_MARGIN = 0.02
 
 function toFixedPoint(n: number, decimals: number): bigint {
   if (!Number.isFinite(n)) throw new RangeError(`Not a finite number: ${n}`)
@@ -16,11 +17,37 @@ function ceilDiv(num: bigint, den: bigint): bigint {
   return num <= 0n ? 0n : (num + den - 1n) / den
 }
 
+const hasKeywords = (rule: PriceRule): boolean => (rule.name_all?.length ?? 0) > 0 || (rule.name_any?.length ?? 0) > 0
+
+/** service > category > keywords (within a platform or global) > platform > global. An explicit admin scope beats an automatic keyword rule. */
 function specificity(rule: PriceRule): number {
-  if (rule.service_id) return 3
-  if (rule.category_id) return 2
+  if (rule.service_id) return 4
+  if (rule.category_id) return 3
+  if (hasKeywords(rule)) return 2
   if (rule.platform) return 1
   return 0
+}
+
+const phraseCache = new Map<string, RegExp>()
+
+/** Whole-word, case-insensitive phrase test: letters and digits on either side disqualify ("0% drop" is not inside "10% drop"). */
+function containsPhrase(haystack: string, phrase: string): boolean {
+  let re = phraseCache.get(phrase)
+  if (!re) {
+    const body = phrase.trim().toLowerCase().split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')
+    re = new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, 'u')
+    phraseCache.set(phrase, re)
+  }
+  return re.test(haystack)
+}
+
+function keywordsMatch(rule: PriceRule, name: string | undefined): boolean {
+  if (!hasKeywords(rule)) return true
+  if (!name) return false
+  const text = name.toLowerCase()
+  const all = (rule.name_all ?? []).filter((p) => p.trim() !== '')
+  const any = (rule.name_any ?? []).filter((p) => p.trim() !== '')
+  return all.every((p) => containsPhrase(text, p)) && (any.length === 0 || any.some((p) => containsPhrase(text, p)))
 }
 
 function matches(rule: PriceRule, rate: number, ctx: PriceContext): boolean {
@@ -28,6 +55,7 @@ function matches(rule: PriceRule, rate: number, ctx: PriceContext): boolean {
   if (rule.service_id && rule.service_id !== ctx.serviceId) return false
   if (rule.category_id && rule.category_id !== ctx.categoryId) return false
   if (rule.platform && rule.platform !== ctx.platform) return false
+  if (!keywordsMatch(rule, ctx.serviceName)) return false
   if (rule.type === 'tier') {
     if (rule.min_rate == null || rate < rule.min_rate) return false
     if (rule.max_rate != null && rate > rule.max_rate) return false
@@ -37,7 +65,7 @@ function matches(rule: PriceRule, rate: number, ctx: PriceContext): boolean {
 
 /**
  * Picks the winning rule: most specific scope first (service > category >
- * platform > global), then highest `priority`, then lowest `id` for determinism.
+ * keywords > platform > global), then highest `priority`, then lowest `id` for determinism.
  * Rules whose scope or tier range does not match are ignored, so a tier that
  * misses falls through to the next-most-specific rule.
  */

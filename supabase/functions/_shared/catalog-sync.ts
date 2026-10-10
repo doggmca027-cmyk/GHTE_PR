@@ -367,7 +367,7 @@ export function planService(input: PlanServiceInput): ServicePlan {
     return { action: 'update', repriced: false, reactivated: false, deactivated: true, row: { ...serviceRow(existing), is_active: false } }
   }
 
-  const context = { serviceId: existing.id, categoryId: existing.category_id, platform: existing.platform }
+  const context = { serviceId: existing.id, categoryId: existing.category_id, platform: existing.platform, serviceName: existing.name }
   const floor = calculateCustomerRate(basis.cost, [], context, { minMargin: input.minMargin })
   // A price comes from a rule. With no rule that applies, the price the service has is kept (it was set by hand or by the publisher's default
   // markup) and only lifted when it has fallen below cost + the minimum margin: an empty rule table must never reprice a storefront to cost.

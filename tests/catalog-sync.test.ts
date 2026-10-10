@@ -134,7 +134,7 @@ describe('planService', () => {
     expect(planService({ ...noRules, existing: svc({ customer_rate_per_1000: 2.5 }), basis: basis({ cost: 1 }) }).action).toBe('none')
     expect(planService({ ...noRules, existing: svc({ customer_rate_per_1000: 7 }), basis: basis({ cost: 1 }) }).action).toBe('none')
     const lifted = planService({ ...noRules, existing: svc({ customer_rate_per_1000: 1 }), basis: basis({ cost: 1 }) })
-    expect(lifted.row?.customer_rate_per_1000).toBe(1.01)
+    expect(lifted.row?.customer_rate_per_1000).toBe(1.02)
     // a rule for another platform does not apply either
     expect(planService({ ...base, rules: [{ ...globalRule(150), platform: 'youtube' }], existing: svc({ customer_rate_per_1000: 2.5 }), basis: basis({ cost: 2 }) }).action).toBe('none')
     // and as soon as a rule applies, it decides

@@ -21,7 +21,7 @@ import type { Platform, PriceRule } from '../_shared/types.ts'
 type Db = SupabaseClient<any, 'public', any>
 
 // platform is the joined slug: the pricing engine and the reprice logic keep working with the slug
-const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, priority, is_active'
+const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, name_all, name_any, priority, is_active'
 const WRITE_CHUNK = 500
 const ALL_OFFERS_ABOVE = 300
 const OFFER_ID_CHUNK = 100
@@ -41,12 +41,12 @@ const toRule = (r: Record<string, unknown>): PriceRule => ({
 })
 
 /** Active services with their platform, a page at a time (PostgREST cuts a response at 1000 rows). */
-async function loadActiveServices(db: Db): Promise<{ id: string; category_id: string; customer_rate_per_1000: number; category: { platform: { slug: Platform } } }[]> {
-  const out: { id: string; category_id: string; customer_rate_per_1000: number; category: { platform: { slug: Platform } } }[] = []
+async function loadActiveServices(db: Db): Promise<{ id: string; category_id: string; name: string; customer_rate_per_1000: number; category: { platform: { slug: Platform } } }[]> {
+  const out: { id: string; category_id: string; name: string; customer_rate_per_1000: number; category: { platform: { slug: Platform } } }[] = []
   for (let from = 0; ; from += OFFER_PAGE) {
     const page = must(
       await db.from('services')
-        .select('id, category_id, customer_rate_per_1000, category:categories!inner(platform:platforms!inner(slug))')
+        .select('id, category_id, name, customer_rate_per_1000, category:categories!inner(platform:platforms!inner(slug))')
         .eq('is_active', true).order('id').range(from, from + OFFER_PAGE - 1),
       'load services',
     ) as unknown as typeof out
@@ -119,9 +119,10 @@ Deno.serve(instrument('admin-pricing', async (req: Request, { log }): Promise<Re
     // ---- UPDATE_RULE ---------------------------------------------------------------------------------
     const { serviceId, categoryId, platform, type, value } = parsed
 
-    // Upsert: one flat (non-tier) rule per scope.
+    // Upsert: one flat (non-tier) rule per scope. Keyword rules (name_all / name_any) belong to the pricing strategy and are never
+    // taken over by an admin margin on the same platform.
     // deno-lint-ignore no-explicit-any
-    let q: any = db.from('price_rules').select('id').neq('type', 'tier').is('min_rate', null)
+    let q: any = db.from('price_rules').select('id').neq('type', 'tier').is('min_rate', null).is('name_all', null).is('name_any', null)
     q = serviceId ? q.eq('service_id', serviceId) : q.is('service_id', null)
     q = categoryId ? q.eq('category_id', categoryId) : q.is('category_id', null)
     let platformId: string | null = null
@@ -156,7 +157,7 @@ Deno.serve(instrument('admin-pricing', async (req: Request, { log }): Promise<Re
     const services: RepriceService[] = inScope.flatMap((r) => {
       const basis = serviceCostBasis(offersByService.get(r.id) ?? [])
       // no offer can receive an order: there is no cost to mark up, so the price is left alone
-      return basis ? [{ id: r.id, category_id: r.category_id, platform: r.category.platform.slug, customer_rate_per_1000: Number(r.customer_rate_per_1000), provider_rate: basis.cost }] : []
+      return basis ? [{ id: r.id, category_id: r.category_id, name: r.name, platform: r.category.platform.slug, customer_rate_per_1000: Number(r.customer_rate_per_1000), provider_rate: basis.cost }] : []
     })
     const changes = repriceServices(affectedServices(services, parsed), rules)
     // the engine computes the rates; the database writes them a chunk at a time

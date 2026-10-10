@@ -63,8 +63,8 @@ describe('re-pricing', () => {
 
   it('uses the shared price engine and only returns changed services', () => {
     const rules = [{ id: 'r1', type: 'percentage' as const, value: 100, service_id: 'a', priority: 0 }]
-    const changes = repriceServices([svc('a', { provider_rate: 0.5, customer_rate_per_1000: 0.1 }), svc('b', { provider_rate: 0.5, customer_rate_per_1000: 0.51 })], rules)
-    // a: +100% -> 1.0 (changed). b: no matching rule -> provider rate + min margin 0.01 = 0.51 (unchanged)
+    const changes = repriceServices([svc('a', { provider_rate: 0.5, customer_rate_per_1000: 0.1 }), svc('b', { provider_rate: 0.5, customer_rate_per_1000: 0.52 })], rules)
+    // a: +100% -> 1.0 (changed). b: no matching rule -> provider rate + min margin 0.02 = 0.52 (unchanged)
     expect(changes).toEqual([{ id: 'a', rate: calculateCustomerRate(0.5, rules, { serviceId: 'a' }) }])
     expect(changes[0].rate).toBe(1)
   })
@@ -75,7 +75,7 @@ describe('re-pricing', () => {
       { id: 's', type: 'fixed' as const, value: 0, service_id: 'a', priority: 0 },
     ]
     const [c] = repriceServices([svc('a', { provider_rate: 2, customer_rate_per_1000: 8 })], rules)
-    expect(c).toEqual({ id: 'a', rate: 2.01 })
+    expect(c).toEqual({ id: 'a', rate: 2.02 })
   })
 })
 

@@ -180,6 +180,12 @@ export interface PriceRule {
   service_id?: string | null
   min_rate?: number | null
   max_rate?: number | null
+  /**
+   * Keyword scope (optional, combines with `platform`): the service name must contain EVERY phrase of `name_all`
+   * and at least one phrase of `name_any`. Whole-word, case-insensitive ("0% drop" does not match "10% drop").
+   */
+  name_all?: string[] | null
+  name_any?: string[] | null
   priority: number
   is_active?: boolean
 }
@@ -189,9 +195,11 @@ export interface PriceContext {
   serviceId?: string
   categoryId?: string
   platform?: string
+  /** The storefront service name: what keyword rules (name_all / name_any) are matched against. */
+  serviceName?: string
 }
 
 export interface PriceOptions {
-  /** Minimum absolute profit per 1000 units. Default 0.01. */
+  /** Minimum absolute profit per 1000 units. Default 0.02. */
   minMargin?: number
 }
