@@ -25,6 +25,7 @@ export function parseQuoteBody(raw: unknown): { ok: true; value: QuoteInput } | 
 
 /** A database error (message of the SQL exception) -> the HTTP answer. 500 means "not a business error". */
 export function mapQuoteError(message: string): { status: number; error: string; message: string } {
+  if (/user_banned/.test(message)) return { status: 403, error: 'banned', message: 'Your account is suspended.' }
   if (/promo_not_found/.test(message)) return { status: 404, error: 'promo_not_found', message: 'This promo code does not exist.' }
   if (/promo_inactive|promo_expired/.test(message)) return { status: 409, error: 'promo_expired', message: 'This promo code is no longer valid.' }
   if (/promo_exhausted/.test(message)) return { status: 409, error: 'promo_exhausted', message: 'This promo code has been used up.' }

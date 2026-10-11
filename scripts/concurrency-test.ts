@@ -812,11 +812,24 @@ async function main() {
       return JSON.stringify(r.rows[0].r.filter((b) => ordersV.includes(b.order_id)).map((b) => b.order_id))
     })
     const rV = await raceOps(pool, Array.from({ length: 8 }, () => claimOp))
-    const claimedV = rV.ok.flatMap((o) => JSON.parse(o) as string[])
+    const waveV = rV.ok.flatMap((o) => JSON.parse(o) as string[])
+    // SKIP LOCKED + LIMIT may hand a racing run FEWER rows than are free (it skips rows another run is locking at that instant): that is
+    // the point of SKIP LOCKED, not a loss. What must hold is "never twice"; what is left is taken by the next runs. Up to 3 drain passes.
+    const drainedV: string[] = []
+    for (let pass = 0; pass < 3 && waveV.length + drainedV.length < 60; pass++) {
+      for (let i = 0; i < 6 && waveV.length + drainedV.length < 60; i++) {
+        const c = await pool.connect()
+        try { drainedV.push(...(JSON.parse(await claimOp(c)) as string[])) } finally { c.release() }
+      }
+    }
+    const claimedV = [...waveV, ...drainedV]
     const rowsV = await admin.query<{ n: number; maxa: number; mina: number }>(`select count(*)::int n, max(attempts)::int maxa, min(attempts)::int mina from notification_outbox where order_id = any($1::uuid[]) and attempts > 0`, [ordersV])
     check('claim calls answered (none failed, no deadlock)', [rV.ok.length, rV.errors], [8, []])
-    check('messages claimed in total (8 runs x 10, capped by the 60 available)', claimedV.length, 60)
-    check('messages claimed by more than one run', claimedV.length - new Set(claimedV).size, 0)
+    check('racing wave: messages claimed by more than one run', waveV.length - new Set(waveV).size, 0)
+    check('racing wave took messages (at most the 60 available)', waveV.length > 0 && waveV.length <= 60, true)
+    console.log(`  racing wave claimed ${waveV.length}, drain passes claimed ${drainedV.length}`)
+    check('messages claimed in total after draining', claimedV.length, 60)
+    check('messages claimed by more than one run (wave + drain)', claimedV.length - new Set(claimedV).size, 0)
     check('every claimed message was leased exactly once', [rowsV.rows[0].n, rowsV.rows[0].mina, rowsV.rows[0].maxa], [60, 1, 1])
 
     // ---- W. Ticket cap ---------------------------------------------------------------------

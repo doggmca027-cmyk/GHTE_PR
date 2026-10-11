@@ -194,6 +194,9 @@ export interface ChainTransfer {
 interface ToncenterTx {
   hash?: unknown
   now?: unknown
+  /** "finalized" once the block is committed in the masterchain; anything else (or an emulated trace) is not money yet. */
+  finality?: unknown
+  emulated?: unknown
   description?: { aborted?: unknown }
   in_msg?: {
     source?: unknown
@@ -203,6 +206,34 @@ interface ToncenterTx {
     bounced?: unknown
     message_content?: { decoded?: { type?: unknown; comment?: unknown } | null } | null
   } | null
+}
+
+/**
+ * The one form a transaction hash is stored and compared in: standard base64 of the 32 hash bytes (what Toncenter v3 returns).
+ * Accepts 64 hex characters (any case, optional 0x), standard base64 and base64url (padding optional). Anything that is not exactly
+ * 32 bytes is not a TON transaction hash: null. The database applies the same rule (public.normalize_ton_tx_hash), so the verifier,
+ * an admin pasting a hash from an explorer (hex) and the UNIQUE index all agree that it is ONE transaction.
+ */
+export function canonicalTxHash(raw: string): string | null {
+  const v = raw.trim()
+  let bytes: Uint8Array | null = null
+  if (/^(0x)?[0-9a-f]{64}$/i.test(v)) {
+    const hex = v.replace(/^0x/i, '')
+    bytes = new Uint8Array(32)
+    for (let i = 0; i < 32; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+  } else if (/^[A-Za-z0-9+/_-]{43}=?$/.test(v)) {
+    const std = v.replace(/-/g, '+').replace(/_/g, '/')
+    try {
+      const bin = atob(std.length === 43 ? `${std}=` : std)
+      bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
+    } catch {
+      bytes = null
+    }
+  }
+  if (!bytes || bytes.length !== 32) return null
+  let s = ''
+  for (const b of bytes) s += String.fromCharCode(b)
+  return btoa(s)
 }
 
 /**
@@ -218,6 +249,10 @@ export function normalizeToncenterTransactions(json: unknown): ChainTransfer[] {
     const m = tx?.in_msg
     // Only internal messages carry value (external-in messages have no source and no value).
     if (typeof tx?.hash !== 'string' || typeof tx.now !== 'number' || !m || typeof m.source !== 'string') continue
+    // Only committed history counts: an emulated trace, or a transaction whose block is not finalized yet, may still never happen.
+    if (tx.emulated === true || (tx.finality !== undefined && tx.finality !== null && tx.finality !== 'finalized')) continue
+    const hash = canonicalTxHash(tx.hash)
+    if (!hash) continue
     let value: bigint
     try {
       value = BigInt(String(m.value ?? '0'))
@@ -226,7 +261,7 @@ export function normalizeToncenterTransactions(json: unknown): ChainTransfer[] {
     }
     const d = m.message_content?.decoded
     out.push({
-      hash: tx.hash,
+      hash,
       utime: tx.now,
       source: m.source,
       destination: typeof m.destination === 'string' ? m.destination : null,

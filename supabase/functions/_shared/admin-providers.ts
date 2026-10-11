@@ -55,6 +55,61 @@ export function validateProviderUrl(raw: string): { url: string } | { error: str
   return { url: `${u.origin}${u.pathname === '/' ? '' : u.pathname.replace(/\/+$/, '')}${u.search}` }
 }
 
+/**
+ * Addresses a provider host must never resolve to: this network, loopback, private ranges, carrier-grade NAT, link-local (cloud
+ * metadata 169.254.169.254 / fd00:ec2::254), benchmarking, multicast / reserved, and IPv4-mapped IPv6 forms of all of them.
+ */
+export function isBlockedIp(ip: string): boolean {
+  const s = ip.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/%.*$/, '')
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s)
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])]
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 0) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || a >= 224
+  }
+  if (!s.includes(':')) return true // not an address at all: refuse
+  // IPv4-mapped / -translated: ::ffff:a.b.c.d or ::ffff:7f00:1
+  const mappedDotted = /^(?:::ffff:|::ffff:0:|64:ff9b::)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s)
+  if (mappedDotted) return isBlockedIp(mappedDotted[1])
+  const mappedHex = /^(?:::ffff:|64:ff9b::)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(s)
+  if (mappedHex) {
+    const hi = parseInt(mappedHex[1], 16), lo = parseInt(mappedHex[2], 16)
+    return isBlockedIp(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`)
+  }
+  if (s === '::' || s === '::1') return true
+  const first = parseInt(s.split(':')[0] || '0', 16)
+  return (first & 0xfe00) === 0xfc00 /* fc00::/7 unique local */ || (first & 0xffc0) === 0xfe80 /* fe80::/10 link-local */ ||
+    (first & 0xff00) === 0xff00 /* multicast */ || first === 0 /* ::/8 and other reserved forms */
+}
+
+export type DnsResolver = (host: string, type: 'A' | 'AAAA') => Promise<string[]>
+
+/**
+ * The second half of the SSRF guard: the NAME must resolve, and only to public addresses. validateProviderUrl() already refused
+ * literal private addresses and internal names. With no resolver available (a runtime without DNS) the check is skipped and says so.
+ * What it cannot see: a name re-pointed AFTER it was saved (DNS rebinding) - the URL is only re-checked when it is saved again.
+ */
+export async function checkResolvedHost(apiUrl: string, resolve: DnsResolver | null): Promise<{ ok: true; skipped?: true } | { error: string }> {
+  if (!resolve) return { ok: true, skipped: true }
+  let host: string
+  try {
+    host = new URL(apiUrl).hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  } catch {
+    return { error: 'apiUrl must be a valid URL.' }
+  }
+  const addresses: string[] = []
+  for (const type of ['A', 'AAAA'] as const) {
+    try {
+      addresses.push(...(await resolve(host, type)))
+    } catch {
+      // no record of this type (or a lookup error): judged on what the other type returns
+    }
+  }
+  if (addresses.length === 0) return { error: 'apiUrl does not resolve to any address.' }
+  if (addresses.some(isBlockedIp)) return { error: 'apiUrl resolves to a private or internal address.' }
+  return { ok: true }
+}
+
 /** Validates the request body. Returns an error message instead of throwing. Unknown fields are ignored. */
 export function parseProviderRequest(body: unknown): ParsedProviderRequest | { error: string } {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { error: 'Body must be a JSON object.' }

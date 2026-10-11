@@ -90,11 +90,14 @@ async function newDeposit(db: PGlite, user: string, usd = 10, crypto = 2) {
 // Issue #1 / #7: Toncenter pagination, bounded window, short cache
 // ---------------------------------------------------------------------------
 
+/** A distinct, valid 32-byte transaction hash per number, in canonical base64. */
+const txHash = (n: number) => { const b = Buffer.alloc(32); b.writeUInt32BE(n); return b.toString('base64') }
+
 describe('#1 Toncenter pagination blindness', () => {
   const ACCOUNT = '0:' + 'ab'.repeat(32)
   const BASE = 1_700_000_000
   const tx = (i: number, comment: string | null = null) => ({
-    hash: `hash-${i}`, now: BASE + 10_000 - i * 10, description: { aborted: false },
+    hash: txHash(i), now: BASE + 10_000 - i * 10, description: { aborted: false },
     in_msg: { source: '0:' + 'cd'.repeat(32), destination: ACCOUNT, value: '1000000000', bounce: false, bounced: false,
       message_content: { decoded: comment ? { type: 'text_comment', comment } : null } },
   })
@@ -118,7 +121,7 @@ describe('#1 Toncenter pagination blindness', () => {
     const all = Array.from({ length: 250 }, (_, i) => tx(i, i === 230 ? 'dep_target' : null))
     const { fetchImpl, urls } = toncenter(all)
     const got = await fetchRecentTransfers({ baseUrl: 'https://toncenter.test', account: ACCOUNT, sinceUtime: BASE + 7_000, untilUtime: BASE + 10_100, fetchImpl })
-    expect(got.map((t) => t.hash)).toContain('hash-230')
+    expect(got.map((t) => t.hash)).toContain(txHash(230))
     expect(got).toHaveLength(250)
     expect(urls).toHaveLength(3) // 100 + 100 + 50: a short page ends the walk
     expect(urls.every((u) => u.searchParams.get('end_utime') === String(BASE + 10_100))).toBe(true)
@@ -211,9 +214,9 @@ describe('database remediation', () => {
     it('records what was received and opens an overpaid case; an exact payment opens none', async () => {
       const user = await newUser(db, 0)
       const exact = await newDeposit(db, user, 10, 2)
-      await db.query(`select complete_deposit($1::uuid, 'tx-exact', null, 2000000000)`, [exact])
+      await db.query(`select complete_deposit($1::uuid, $2, null, 2000000000)`, [exact, txHash(9001)])
       const over = await newDeposit(db, user, 10, 2)
-      await db.query(`select complete_deposit($1::uuid, 'tx-over', null, 4000000000)`, [over])
+      await db.query(`select complete_deposit($1::uuid, $2, null, 4000000000)`, [over, txHash(9002)])
 
       const cols = (await db.query<{ id: string; received_amount_nano: string | null }>(`select id, received_amount_nano::text from deposits where id in ($1, $2)`, [exact, over])).rows
       expect(cols.find((c) => c.id === exact)?.received_amount_nano).toBe('2000000000')
@@ -232,19 +235,19 @@ describe('database remediation', () => {
       await db.query(`select flag_deposit_issue($1::uuid, 'underpaid: received 1 TON of 2')`, [dep])
 
       await actAs(db, user)
-      expect(await sqlError(db.query(`select admin_resolve_deposit($1::uuid, 'credit', 'tx-late-1', 1000000000, 'x')`, [dep]))).toMatch(/forbidden/)
+      expect(await sqlError(db.query(`select admin_resolve_deposit($1::uuid, 'credit', $2, 1000000000, 'x')`, [dep, txHash(9003)]))).toMatch(/forbidden/)
       await actAs(db, admin)
-      const r = (await db.query<{ r: { credited: number; status: string } }>(`select admin_resolve_deposit($1::uuid, 'credit', 'tx-late-1', 1000000000, 'user paid half') r`, [dep])).rows[0].r
+      const r = (await db.query<{ r: { credited: number; status: string } }>(`select admin_resolve_deposit($1::uuid, 'credit', $2, 1000000000, 'user paid half') r`, [dep, txHash(9003)])).rows[0].r
       expect(r.status).toBe('completed')
       expect(Number(r.credited)).toBe(5)
       expect(await bal(db, user)).toBe(5)
 
-      const again = (await db.query<{ r: { credited: number } }>(`select admin_resolve_deposit($1::uuid, 'credit', 'tx-late-1', 1000000000, 'retry') r`, [dep])).rows[0].r
+      const again = (await db.query<{ r: { credited: number } }>(`select admin_resolve_deposit($1::uuid, 'credit', $2, 1000000000, 'retry') r`, [dep, txHash(9003)])).rows[0].r
       expect(Number(again.credited)).toBe(0)
       expect(await bal(db, user)).toBe(5)
 
       const other = await newDeposit(db, user, 10, 2)
-      expect(await sqlError(db.query(`select admin_resolve_deposit($1::uuid, 'credit', 'tx-late-1', 2000000000, 'reuse')`, [other]))).toMatch(/tx_already_used/)
+      expect(await sqlError(db.query(`select admin_resolve_deposit($1::uuid, 'credit', $2, 2000000000, 'reuse')`, [other, txHash(9003)]))).toMatch(/tx_already_used/)
 
       const caseRow = (await db.query<{ status: string; resolution: string }>(`select status, resolution from reconciliation_cases where entity_type = 'deposit' and entity_id = $1`, [dep])).rows[0]
       expect(caseRow).toMatchObject({ status: 'resolved', resolution: 'manual' })

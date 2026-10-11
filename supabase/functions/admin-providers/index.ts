@@ -26,6 +26,7 @@ import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../
 import { mapProviderError, parseProviderRequest, toProviderDto } from '../_shared/admin-providers.ts'
 import { registerSecret } from '../_shared/logger.ts'
 import { encryptSecret } from '../_shared/secrets.ts'
+import { checkResolvedHost, type DnsResolver } from '../_shared/admin-providers.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = SupabaseClient<any, 'public', any>
@@ -82,6 +83,14 @@ Deno.serve(instrument('admin-providers', async (req: Request, { log }): Promise<
     }
 
     // ---- UPSERT_PROVIDER -----------------------------------------------------------------------------
+    // The URL is called by our servers: its host must resolve, and only to public addresses (SSRF guard, second half).
+    if (parsed.apiUrl !== null) {
+      const dns = (Deno as unknown as { resolveDns?: (h: string, t: 'A' | 'AAAA') => Promise<string[]> }).resolveDns
+      const resolver: DnsResolver | null = typeof dns === 'function' ? (h, t) => dns(h, t) : null
+      const host = await checkResolvedHost(parsed.apiUrl, resolver)
+      if ('error' in host) return fail(400, 'invalid_input', host.error)
+      if (host.skipped) log.warn('DNS is not available here: the provider host was not resolved before saving', { error_code: 'dns_check_skipped' })
+    }
     let apiKeyEncrypted: string | null = null
     if (parsed.apiKey !== null) {
       const master = Deno.env.get('PROVIDER_KEY_SECRET')

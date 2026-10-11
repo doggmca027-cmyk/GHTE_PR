@@ -99,6 +99,9 @@ describe('verifyDeposit (the decision verify-deposit runs)', () => {
   })
 })
 
+// A transaction hash is 32 bytes; stored and compared in canonical base64 (normalize_ton_tx_hash).
+const HASH = (n: number) => Buffer.alloc(32, n).toString('base64')
+
 describe('complete_deposit / flag_deposit_issue (real SQL)', () => {
   let db: PGlite
   let user: string
@@ -121,19 +124,20 @@ describe('complete_deposit / flag_deposit_issue (real SQL)', () => {
 
   it('credits once, refuses underpayment by itself and keeps old 3-argument calls working', async () => {
     const d = await newDeposit(MEMO)
-    await expect(db.query(`select complete_deposit($1::uuid, 'H', null, 9999999999)`, [d])).rejects.toThrow(/underpaid/)
+    await expect(db.query(`select complete_deposit($1::uuid, $2, null, 9999999999)`, [d, HASH(1)])).rejects.toThrow(/underpaid/)
     expect(await balance()).toBe(0)
-    await db.query(`select complete_deposit($1::uuid, 'H', null, 10000000000)`, [d])
-    await db.query(`select complete_deposit($1::uuid, 'H')`, [d]) // replay, 3 args
+    await db.query(`select complete_deposit($1::uuid, $2, null, 10000000000)`, [d, HASH(1)])
+    await db.query(`select complete_deposit($1::uuid, $2)`, [d, HASH(1)]) // replay, 2 args
     expect(await balance()).toBe(50)
   })
 
   it('validates the transaction hash and refuses a hash used by another deposit', async () => {
     const d1 = await newDeposit(MEMO)
     const d2 = await newDeposit(`dep_${'2'.repeat(32)}`)
-    for (const bad of ['', 'a b', 'x'.repeat(129)]) await expect(db.query(`select complete_deposit($1::uuid, $2)`, [d1, bad])).rejects.toThrow(/tx hash/)
-    await db.query(`select complete_deposit($1::uuid, 'SAME')`, [d1])
-    await expect(db.query(`select complete_deposit($1::uuid, 'SAME')`, [d2])).rejects.toThrow(/tx_already_used/)
+    for (const bad of ['', 'a b', 'x'.repeat(129), 'SAME', 'ab'.repeat(31)]) await expect(db.query(`select complete_deposit($1::uuid, $2)`, [d1, bad])).rejects.toThrow(/tx hash/)
+    await db.query(`select complete_deposit($1::uuid, $2)`, [d1, HASH(7)])
+    await expect(db.query(`select complete_deposit($1::uuid, $2)`, [d2, HASH(7)])).rejects.toThrow(/tx_already_used/)
+    await expect(db.query(`select complete_deposit($1::uuid, $2)`, [d2, Buffer.alloc(32, 7).toString('hex')])).rejects.toThrow(/tx_already_used/) // same tx, hex
   })
 
   it('flag_deposit_issue opens one open case per deposit and refreshes its reason', async () => {

@@ -48,10 +48,20 @@ export function signedString(protocol: AdProtocol, user: string, tx: string, sec
  * Order of refusals: unknown network (404) -> no secret configured (503, fails closed: never accepts unsigned traffic) ->
  * malformed parameters (400) -> wrong signature (401). The 401 never says which part was wrong.
  */
+/**
+ * Compensating controls for the MD5 network (Adsgram signs MD5(user:tx:secret) without a time): a transaction id is paid at most once
+ * (UNIQUE(provider_id, external_tx_id) in user_ad_ledger) and every user is capped per 24 h (per network and in total), so a replayed
+ * or guessed postback can never pay twice or pay more than the cap. When a network DOES send a time (timestamp / ts, seconds or
+ * milliseconds), it must be within the window below: an old postback captured and replayed later is refused outright.
+ */
+export const POSTBACK_MAX_AGE_SECONDS = 24 * 60 * 60
+export const POSTBACK_MAX_FUTURE_SECONDS = 5 * 60
+
 export async function checkPostback(
   providerRaw: unknown,
   params: Pick<URLSearchParams, 'get'>,
   env: { get(name: string): string | undefined },
+  nowMs: number = Date.now(),
 ): Promise<PostbackDecision> {
   const provider = typeof providerRaw === 'string' ? providerRaw.trim().toLowerCase() : ''
   const protocol = PROVIDER_RE.test(provider) ? AD_PROTOCOLS[provider] : undefined
@@ -68,6 +78,14 @@ export async function checkPostback(
   const payload = signedString(protocol, user, tx, secret)
   const valid = protocol.method === 'md5' ? verifyMd5(payload, signature) : await verifyHmacSha256(payload, secret, signature)
   if (!valid) return { ok: false, status: 401, error: 'invalid_signature' }
+
+  const stamp = params.get('timestamp') ?? params.get('ts')
+  if (stamp !== null && stamp !== '') {
+    if (!/^\d{9,13}$/.test(stamp)) return { ok: false, status: 400, error: 'invalid_postback' }
+    const seconds = stamp.length >= 12 ? Number(stamp) / 1000 : Number(stamp)
+    const age = nowMs / 1000 - seconds
+    if (age > POSTBACK_MAX_AGE_SECONDS || age < -POSTBACK_MAX_FUTURE_SECONDS) return { ok: false, status: 400, error: 'stale_postback' }
+  }
 
   const telegramId = Number(user)
   if (!Number.isSafeInteger(telegramId)) return { ok: false, status: 400, error: 'invalid_postback' }

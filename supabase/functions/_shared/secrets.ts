@@ -30,9 +30,7 @@ export async function encryptSecret(plaintext: string, masterKeyB64: string): Pr
   return `v1:${b64encode(iv)}:${b64encode(ct)}`
 }
 
-export async function decryptSecret(payload: string, masterKeyB64: string): Promise<string> {
-  const [version, iv, ct] = payload.split(':')
-  if (version !== 'v1' || !iv || !ct) throw new Error('unsupported secret format')
+async function decryptWith(iv: string, ct: string, masterKeyB64: string): Promise<string> {
   const key = await importKey(masterKeyB64)
   const pt = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: b64decode(iv) as BufferSource },
@@ -40,6 +38,32 @@ export async function decryptSecret(payload: string, masterKeyB64: string): Prom
     b64decode(ct) as BufferSource,
   )
   return new TextDecoder().decode(pt)
+}
+
+const isValidMasterKey = (b64: string | undefined): b64 is string => {
+  if (!b64) return false
+  try {
+    return b64decode(b64).length === 32
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Decrypts a "v1:" envelope. During a rotation of PROVIDER_KEY_SECRET the stored ciphertexts may still be the OLD key's: when the
+ * current key fails authentication (OperationError) and a valid previous key is given, that one is tried. Malformed input never
+ * falls back, and errors carry no key, IV or text.
+ */
+export async function decryptSecret(payload: string, masterKeyB64: string, previousKeyB64?: string): Promise<string> {
+  const [version, iv, ct] = payload.split(':')
+  if (version !== 'v1' || !iv || !ct) throw new Error('unsupported secret format')
+  try {
+    return await decryptWith(iv, ct, masterKeyB64)
+  } catch (e) {
+    const authFailed = e instanceof Error && e.name === 'OperationError'
+    if (!authFailed || !isValidMasterKey(previousKeyB64) || previousKeyB64 === masterKeyB64) throw e
+    return await decryptWith(iv, ct, previousKeyB64)
+  }
 }
 
 /** Env var name for a provider's plaintext key fallback, e.g. "Secsers Mock" -> PROVIDER_SECSERS_MOCK_API_KEY. */
@@ -53,6 +77,7 @@ export async function resolveProviderApiKey(
   env: { get(name: string): string | undefined },
 ): Promise<string> {
   const master = env.get('PROVIDER_KEY_SECRET')
-  if (provider.api_key_encrypted && master) return await decryptSecret(provider.api_key_encrypted, master)
+  // PROVIDER_KEY_SECRET_PREVIOUS: set it to the old key BEFORE a rotation and remove it after; encryption always uses the current key.
+  if (provider.api_key_encrypted && master) return await decryptSecret(provider.api_key_encrypted, master, env.get('PROVIDER_KEY_SECRET_PREVIOUS'))
   return env.get(providerKeyEnvName(provider.name)) ?? ''
 }

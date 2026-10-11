@@ -34,6 +34,15 @@ import type { LedgerType } from '../src/types/wallet'
 // 1. Amount conversions and nanoton calculations
 // ---------------------------------------------------------------------------
 
+// Real 32-byte transaction hashes in their canonical base64 form (normalize_ton_tx_hash refuses anything else).
+const H1 = Buffer.alloc(32, 1).toString('base64')
+const H2 = Buffer.alloc(32, 2).toString('base64')
+const H9 = Buffer.alloc(32, 9).toString('base64')
+const HA = Buffer.alloc(32, 0xa).toString('base64')
+const HB = Buffer.alloc(32, 0xb).toString('base64')
+const HC = Buffer.alloc(32, 0xc).toString('base64')
+const HD = Buffer.alloc(32, 0xd).toString('base64')
+
 describe('deposit amount validation', () => {
   it.each([
     [1, true], [10, true], [12.5, true], [499.99, true], [500, true],
@@ -218,23 +227,23 @@ describe('findMatchingTransfer (memo / recipient / amount / window)', () => {
 
 describe('Toncenter response normalisation', () => {
   const tx = (over: Record<string, unknown> = {}) => ({
-    hash: 'abc=', now: T0 + 5, description: { aborted: false },
+    hash: HA, now: T0 + 5, description: { aborted: false },
     in_msg: { source: SENDER_RAW, destination: RECIPIENT_RAW, value: '2000000000', message_content: { decoded: { type: 'text_comment', comment: MEMO } } },
     ...over,
   })
 
   it('maps a text-comment transfer', () => {
     expect(normalizeToncenterTransactions({ transactions: [tx()] })).toEqual([
-      { hash: 'abc=', utime: T0 + 5, source: SENDER_RAW, destination: RECIPIENT_RAW, valueBase: 2_000_000_000n, comment: MEMO, success: true },
+      { hash: HA, utime: T0 + 5, source: SENDER_RAW, destination: RECIPIENT_RAW, valueBase: 2_000_000_000n, comment: MEMO, success: true },
     ])
   })
 
   it('skips external messages, flags aborted txs and ignores non-text bodies', () => {
     const external = tx({ in_msg: { source: null, destination: RECIPIENT_RAW, value: null } })
-    const aborted = tx({ hash: 'bad', description: { aborted: true } })
-    const binary = tx({ hash: 'bin', in_msg: { source: SENDER_RAW, destination: RECIPIENT_RAW, value: '5', message_content: { decoded: { type: 'jetton_notify' } } } })
+    const aborted = tx({ hash: HB, description: { aborted: true } })
+    const binary = tx({ hash: HC, in_msg: { source: SENDER_RAW, destination: RECIPIENT_RAW, value: '5', message_content: { decoded: { type: 'jetton_notify' } } } })
     const out = normalizeToncenterTransactions({ transactions: [external, aborted, binary] })
-    expect(out.map((t) => t.hash)).toEqual(['bad', 'bin'])
+    expect(out.map((t) => t.hash)).toEqual([HB, HC])
     expect(out[0].success).toBe(false)
     expect(out[1].comment).toBeNull()
   })
@@ -249,7 +258,7 @@ describe('Toncenter response normalisation', () => {
     const incoming = (inMsg: Record<string, unknown>, description: Record<string, unknown>) =>
       normalizeToncenterTransactions({
         transactions: [{
-          hash: 'h=', now: T0 + 5, description,
+          hash: HD, now: T0 + 5, description,
           in_msg: { source: SENDER_RAW, destination: RECIPIENT_RAW, value: '2883568391', message_content: { decoded: { type: 'text_comment', comment: MEMO } }, ...inMsg },
         }],
       })[0]
@@ -406,15 +415,15 @@ describe('deposit crediting in the database (replay attack prevention)', () => {
     const d = await mk(users[0], 1, 10)
     expect(await balance(users[0])).toBe('0.0000') // an intent alone credits nothing
 
-    await complete(d, 'TX-1')
-    await complete(d, 'TX-1')
-    await complete(d, 'TX-ANOTHER') // even a different hash cannot re-credit a completed deposit
+    await complete(d, H1)
+    await complete(d, H1)
+    await complete(d, H2) // even a different hash cannot re-credit a completed deposit
     expect(await balance(users[0])).toBe('10.0000')
 
     const ledger = (await db.query<{ type: string; amount: string; reference_id: string; idempotency_key: string }>(
       `select type, amount::text, reference_id, idempotency_key from wallet_transactions`)).rows
     expect(ledger).toEqual([{ type: 'deposit', amount: '10.0000', reference_id: d, idempotency_key: `deposit:${d}` }])
-    expect((await db.query<{ tx_hash: string }>(`select tx_hash from deposits where id=$1`, [d])).rows[0].tx_hash).toBe('TX-1')
+    expect((await db.query<{ tx_hash: string }>(`select tx_hash from deposits where id=$1`, [d])).rows[0].tx_hash).toBe(H1)
   }, 60_000)
 
   it('blocks the same tx_hash from crediting a second deposit (same user or another user)', async () => {
@@ -422,10 +431,10 @@ describe('deposit crediting in the database (replay attack prevention)', () => {
     const a = await mk(users[0], 1, 10)
     const sameUser = await mk(users[0], 2, 10)
     const otherUser = await mk(users[1], 3, 10)
-    await complete(a, 'TX-1')
+    await complete(a, H1)
 
-    await expect(complete(sameUser, 'TX-1')).rejects.toThrow(/tx_already_used/)
-    await expect(complete(otherUser, 'TX-1')).rejects.toThrow(/tx_already_used/)
+    await expect(complete(sameUser, H1)).rejects.toThrow(/tx_already_used/)
+    await expect(complete(otherUser, H1)).rejects.toThrow(/tx_already_used/)
     expect(await balance(users[0])).toBe('10.0000')
     expect(await balance(users[1])).toBe('0.0000')
   }, 60_000)
@@ -434,15 +443,15 @@ describe('deposit crediting in the database (replay attack prevention)', () => {
     const { db, users, mk, complete } = await setup()
     const a = await mk(users[0], 1)
     const b = await mk(users[0], 2)
-    await complete(a, 'TX-1')
-    await expect(db.query(`update deposits set tx_hash='TX-1' where id=$1`, [b])).rejects.toThrow(/unique|duplicate/i)
+    await complete(a, H1)
+    await expect(db.query(`update deposits set tx_hash=$2 where id=$1`, [b, H1])).rejects.toThrow(/unique|duplicate/i)
   }, 60_000)
 
   it('a failed credit rolls back the status change (no "completed but not credited")', async () => {
     const { db, users, mk, balance } = await setup()
     const d = await mk(users[0], 1)
     await db.query(`alter table wallet_transactions add constraint boom check (amount < 0)`) // force the ledger insert to fail
-    await expect(db.query(`select * from complete_deposit($1,'TX-9','0:s')`, [d])).rejects.toThrow()
+    await expect(db.query(`select * from complete_deposit($1,$2,'0:s')`, [d, H9])).rejects.toThrow()
     expect((await db.query<{ status: string; tx_hash: string | null }>(`select status, tx_hash from deposits where id=$1`, [d])).rows[0]).toEqual({ status: 'pending', tx_hash: null })
     expect(await balance(users[0])).toBe('0.0000')
   }, 60_000)
@@ -452,7 +461,7 @@ describe('deposit crediting in the database (replay attack prevention)', () => {
     const d = await mk(users[0], 1)
     await expect(mk(users[0], 1)).rejects.toThrow(/unique|duplicate/i)
     await expect(db.query(`update deposits set memo='dep_short' where id=$1`, [d])).rejects.toThrow()
-    await complete(d, 'TX-1')
+    await complete(d, H1)
     await expect(db.query(`update deposits set status='pending' where id=$1`, [d])).rejects.toThrow(/immutable/)
   }, 60_000)
 

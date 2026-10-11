@@ -77,6 +77,14 @@ if (applied === migrations.length) {
   const writes = await rows<{ grantee: string; table_name: string; privilege_type: string }>(`select grantee, table_name, privilege_type from information_schema.role_table_grants where table_schema = 'public' and grantee in ('anon','authenticated') and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE')`)
   for (const g of writes) bad(`${g.grantee} has ${g.privilege_type} on public.${g.table_name}: all writes must go through service-role functions`)
 
+  // Money tables that only their SECURITY DEFINER ledger functions may write: the API role (which bypasses RLS on Supabase) must not.
+  for (const table of ['wallets', 'treasury_state']) {
+    for (const privilege of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
+      const r = await rows<{ ok: boolean }>(`select has_table_privilege('service_role', 'public.${table}', '${privilege}') as ok`)
+      if (r[0].ok) bad(`service_role can ${privilege} public.${table}: balances must change only through their ledger functions`)
+    }
+  }
+
   const READABLE: Record<string, string[]> = {
     anon: ['categories', 'services', 'platforms'],
     authenticated: ['categories', 'services', 'platforms', 'users', 'wallets', 'wallet_transactions', 'orders', 'order_status_history', 'deposits'],
