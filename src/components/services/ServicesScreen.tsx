@@ -27,6 +27,8 @@ interface Props {
   session: AuthSession
   onTopUp: (shortfallUsd?: number) => void
   onViewOrders: () => void
+  /** Open straight on this platform (a tile of the Home screen was tapped). */
+  initialPlatform?: string | null
 }
 
 function SkeletonCard() {
@@ -57,7 +59,7 @@ export function platformEntries(platforms: PlatformInfo[], categories: ReadonlyA
     .map(({ slug, name, count }) => ({ slug, name, count }))
 }
 
-export function ServicesScreen({ session, onTopUp, onViewOrders }: Props) {
+export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform = null }: Props) {
   const t = useT()
   const { lang } = useLanguage()
   const { refreshWallet } = useAuth()
@@ -132,6 +134,14 @@ export function ServicesScreen({ session, onTopUp, onViewOrders }: Props) {
     // a platform with a single category goes straight to its services
     setCategoryId(own.length === 1 ? own[0].id : null)
   }
+
+  // A platform picked on the Home screen: opened once the catalogue is here (a single-category platform goes to its services).
+  const opened = useRef(false)
+  useEffect(() => {
+    if (opened.current || !initialPlatform || state.status !== 'ready') return
+    opened.current = true
+    if (state.categories.some((c) => c.platform === initialPlatform)) selectPlatform(initialPlatform)
+  }, [state, initialPlatform]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const back = () => {
     haptic.select()

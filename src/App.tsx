@@ -1,10 +1,10 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
-import { AlertCircle, Loader2, Sparkles } from 'lucide-react'
+import { AlertCircle, Loader2 } from 'lucide-react'
 import { Layout } from '@/components/layout/Layout'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { NAV_ITEMS, type TabId } from '@/constants/navigation'
+import type { TabId } from '@/constants/navigation'
+import { HomeScreen } from '@/components/home/HomeScreen'
 import { WalletScreen, type DepositRequest } from '@/components/wallet/WalletScreen'
 import { OrdersScreen } from '@/components/orders/OrdersScreen'
 import { ServicesScreen } from '@/components/services/ServicesScreen'
@@ -14,6 +14,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import { tm } from '@/i18n/messages'
 import { bindAnalytics, track } from '@/lib/analytics-client'
+import { applyStartReferral } from '@/lib/referral-start'
 import { WebApp } from '@/lib/webapp'
 
 // Admin code is split into its own chunk: regular users never download it.
@@ -35,6 +36,9 @@ export default function App() {
   const clearDepositRequest = useCallback(() => setDepositRequest(null), [])
   const [supportRequest, setSupportRequest] = useState<SupportRequest | null>(null)
   const clearSupportRequest = useCallback(() => setSupportRequest(null), [])
+  // a platform tile of the Home screen: the services tab opens on it
+  const [servicesPlatform, setServicesPlatform] = useState<string | null>(null)
+  const changeTab = (next: TabId) => { setServicesPlatform(null); setTab(next) }
 
   // Product analytics (after the first paint, never blocking): bind the signed-in session, report the app opening once and the
   // screen the customer lands on. The services screen reports its own catalog views.
@@ -45,6 +49,8 @@ export default function App() {
     if (session && !opened.current) {
       opened.current = true
       track('app_opened', { platform: String(WebApp.platform ?? 'unknown').toLowerCase() })
+      // opened through a friend's invite link: attach the invite (once; the server decides whether it counts)
+      void applyStartReferral(session, WebApp.initDataUnsafe?.start_param)
     }
   }, [session?.token, session?.isMock]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -83,21 +89,19 @@ export default function App() {
     )
   }
 
-  const { user, wallet, isMock } = state.session
-  const navLabel = NAV_ITEMS.find((i) => i.id === tab)?.label
-  const title = navLabel ? t(navLabel) : undefined
+  const { user, wallet } = state.session
 
   return (
     <Layout
       activeTab={tab}
-      onTabChange={setTab}
+      onTabChange={changeTab}
       balance={wallet.balance}
       currency={wallet.currency}
       onTopUp={() => topUp()}
       isAdmin={user.isAdmin}
     >
       {tab === 'services' ? (
-        <ServicesScreen session={state.session} onTopUp={topUp} onViewOrders={() => setTab('orders')} />
+        <ServicesScreen session={state.session} onTopUp={topUp} onViewOrders={() => changeTab('orders')} initialPlatform={servicesPlatform} />
       ) : tab === 'wallet' ? (
         <WalletScreen session={state.session} depositRequest={depositRequest} onRequestHandled={clearDepositRequest} />
       ) : tab === 'admin' && user.isAdmin ? (
@@ -111,24 +115,12 @@ export default function App() {
       ) : tab === 'orders' ? (
         <OrdersScreen session={state.session} onBrowse={() => setTab('services')} onReportIssue={(order) => { setSupportRequest({ orderId: order.id }); setTab('support') }} />
       ) : (
-        <>
-          <h1 className="mb-4 text-2xl font-extrabold tracking-tight text-content-primary">{title}</h1>
-          <Card className="space-y-3">
-            <div className="flex gap-2">
-              <Badge>
-                <Sparkles size={12} strokeWidth={2} /> {t('New')}
-              </Badge>
-              {isMock && <Badge>{t('Dev mock user')}</Badge>}
-            </div>
-            <h2 className="text-lg font-bold">{t('Boost your socials')}</h2>
-            <p className="text-sm text-content-secondary">
-              {t('Placeholder content for the {title} screen.', { title: title?.toLowerCase() ?? '' })}
-            </p>
-            <Button className="w-full" onClick={() => setTab('services')}>
-              {t('Browse services')}
-            </Button>
-          </Card>
-        </>
+        <HomeScreen
+          session={state.session}
+          onBrowse={(platform) => { setServicesPlatform(platform ?? null); setTab('services') }}
+          onTopUp={topUp}
+          onViewOrders={() => changeTab('orders')}
+        />
       )}
     </Layout>
   )
