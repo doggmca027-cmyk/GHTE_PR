@@ -12,7 +12,6 @@ const id: Record<string, string> = {
   'About order': 'Tentang pesanan',
   'Account': 'Akun',
   'Active': 'Aktif',
-  'Ad reward': 'Hadiah iklan',
   'Adjustment': 'Penyesuaian',
   'Admin': 'Admin',
   'All': 'Semua',

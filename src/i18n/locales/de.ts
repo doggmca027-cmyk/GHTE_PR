@@ -12,7 +12,6 @@ const de: Record<string, string> = {
   'About order': 'Zur Bestellung',
   'Account': 'Konto',
   'Active': 'Aktiv',
-  'Ad reward': 'Werbeprämie',
   'Adjustment': 'Anpassung',
   'Admin': 'Admin',
   'All': 'Alle',

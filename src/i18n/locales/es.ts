@@ -12,7 +12,6 @@ const es: Record<string, string> = {
   'About order': 'Sobre el pedido',
   'Account': 'Cuenta',
   'Active': 'Activos',
-  'Ad reward': 'Recompensa por anuncio',
   'Adjustment': 'Ajuste',
   'Admin': 'Admin',
   'All': 'Todos',

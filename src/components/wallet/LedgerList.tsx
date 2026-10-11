@@ -12,7 +12,6 @@ const ICONS: Record<LedgerType, typeof ArrowDownLeft> = {
   refund: RotateCcw,
   bonus: Sparkles,
   manual_adjustment: Sparkles,
-  ad_reward: Sparkles,
 }
 
 export function LedgerRow({ entry }: { entry: LedgerEntry }) {

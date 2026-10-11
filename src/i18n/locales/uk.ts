@@ -12,7 +12,6 @@ const uk: Record<string, string> = {
   'About order': 'Про замовлення',
   'Account': 'Акаунт',
   'Active': 'Активні',
-  'Ad reward': 'Нагорода за рекламу',
   'Adjustment': 'Коригування',
   'Admin': 'Адмін',
   'All': 'Усі',

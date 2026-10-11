@@ -12,7 +12,6 @@ const tr: Record<string, string> = {
   'About order': 'Sipariş hakkında',
   'Account': 'Hesap',
   'Active': 'Aktif',
-  'Ad reward': 'Reklam ödülü',
   'Adjustment': 'Düzeltme',
   'Admin': 'Yönetici',
   'All': 'Tümü',

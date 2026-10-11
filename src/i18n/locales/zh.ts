@@ -12,7 +12,6 @@ const zh: Record<string, string> = {
   'About order': '关于订单',
   'Account': '账户',
   'Active': '进行中',
-  'Ad reward': '广告奖励',
   'Adjustment': '调整',
   'Admin': '管理员',
   'All': '全部',

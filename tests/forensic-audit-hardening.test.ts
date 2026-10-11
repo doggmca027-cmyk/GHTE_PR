@@ -1,7 +1,7 @@
 // Forensic verification V1-V5 follow-up: every finding is reproduced here first (red), then fixed (green).
 //   #1 one transaction hash in two encodings (hex / base64) must be ONE hash      #6 provider host must not resolve to a private address
 //   #2 service_role cannot write wallets / treasury_state directly                  #7 a referral clawback after a payout is a tracked debt
-//   #3 a user without a wallet counts as ledger drift                                #8 ad postbacks carrying a timestamp are bounded in time
+//   #3 a user without a wallet counts as ledger drift                                (#8 ad postbacks: the ad module was removed, 20261120000000)
 //   #4 only finalized, non-emulated Toncenter transactions count                     #9 a banned customer gets nothing from the remaining endpoints
 //   #5 PROVIDER_KEY_SECRET rotation without an outage (previous key as fallback)     (#10 lives in scripts/concurrency-test.ts, scenario V)
 import { randomBytes } from 'node:crypto'
@@ -9,8 +9,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { checkPostback } from '../supabase/functions/_shared/ad-postback.ts'
-import { hmacSha256Hex } from '../supabase/functions/_shared/ad-signatures.ts'
 import { checkResolvedHost, isBlockedIp } from '../supabase/functions/_shared/admin-providers.ts'
 import { mapQuoteError } from '../supabase/functions/_shared/discounts.ts'
 import { decryptSecret, encryptSecret, resolveProviderApiKey } from '../supabase/functions/_shared/secrets.ts'
@@ -268,23 +266,5 @@ describe('#6 the provider host must resolve to public addresses only', () => {
   })
   it('is wired into admin-providers before a URL is saved', () => {
     expect(fs.readFileSync(path.join(ROOT, 'supabase/functions/admin-providers/index.ts'), 'utf8')).toMatch(/checkResolvedHost\(/)
-  })
-})
-
-describe('#8 ad postbacks with a timestamp are bounded in time', () => {
-  const env = { get: (k: string) => ({ MONETAG_SECRET: 'monetag-secret-value' } as Record<string, string>)[k] }
-  const params = async (extra: Record<string, string>) => {
-    const p = new URLSearchParams({ telegram_id: '42', ymid: 'tx-1', ...extra })
-    p.set('sign', await hmacSha256Hex('42:tx-1', 'monetag-secret-value'))
-    return p
-  }
-  const NOW = 1_800_000_000_000
-  it('accepts no timestamp, a fresh one (seconds or milliseconds); refuses an old or a future one', async () => {
-    expect(await checkPostback('monetag', await params({}), env, NOW)).toMatchObject({ ok: true })
-    expect(await checkPostback('monetag', await params({ timestamp: String(NOW / 1000 - 60) }), env, NOW)).toMatchObject({ ok: true })
-    expect(await checkPostback('monetag', await params({ ts: String(NOW - 60_000) }), env, NOW)).toMatchObject({ ok: true })
-    expect(await checkPostback('monetag', await params({ timestamp: String(NOW / 1000 - 3 * 86400) }), env, NOW)).toMatchObject({ ok: false, error: 'stale_postback' })
-    expect(await checkPostback('monetag', await params({ timestamp: String(NOW / 1000 + 3600) }), env, NOW)).toMatchObject({ ok: false, error: 'stale_postback' })
-    expect(await checkPostback('monetag', await params({ timestamp: 'yesterday' }), env, NOW)).toMatchObject({ ok: false, error: 'invalid_postback' })
   })
 })

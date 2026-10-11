@@ -12,7 +12,6 @@ const hi: Record<string, string> = {
   'About order': 'ऑर्डर के बारे में',
   'Account': 'खाता',
   'Active': 'सक्रिय',
-  'Ad reward': 'विज्ञापन इनाम',
   'Adjustment': 'समायोजन',
   'Admin': 'एडमिन',
   'All': 'सभी',

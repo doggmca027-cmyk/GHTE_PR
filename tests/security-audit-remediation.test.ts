@@ -514,8 +514,6 @@ describe('#12 request bodies are bounded while they are read', () => {
   it('is used by the unauthenticated entry points', () => {
     expect(read('supabase/functions/telegram-auth/index.ts')).not.toMatch(/req\.json\(\)/)
     expect(read('supabase/functions/telegram-auth/index.ts')).toMatch(/readBoundedText|readJson/)
-    expect(read('supabase/functions/ad-webhook/index.ts')).not.toMatch(/req\.text\(\)/)
-    expect(read('supabase/functions/ad-webhook/index.ts')).toMatch(/readBoundedText/)
     expect(read('supabase/functions/place-order/index.ts')).not.toMatch(/req\.text\(\)/)
   })
 })

@@ -12,7 +12,6 @@ const ar: Record<string, string> = {
   'About order': 'عن الطلب',
   'Account': 'الحساب',
   'Active': 'النشطة',
-  'Ad reward': 'مكافأة إعلان',
   'Adjustment': 'تعديل',
   'Admin': 'المشرف',
   'All': 'الكل',

@@ -12,7 +12,6 @@ const ja: Record<string, string> = {
   'About order': '注文について',
   'Account': 'アカウント',
   'Active': '進行中',
-  'Ad reward': '広告報酬',
   'Adjustment': '調整',
   'Admin': '管理者',
   'All': 'すべて',

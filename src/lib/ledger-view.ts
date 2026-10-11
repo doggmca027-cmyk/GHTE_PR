@@ -23,5 +23,4 @@ export const LEDGER_LABELS: Record<LedgerType, string> = {
   refund: tr('Refund'),
   bonus: tr('Bonus'),
   manual_adjustment: tr('Adjustment'),
-  ad_reward: tr('Ad reward'),
 }

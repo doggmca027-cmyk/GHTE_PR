@@ -12,7 +12,6 @@ const ru: Record<string, string> = {
   'About order': 'О заказе',
   'Account': 'Аккаунт',
   'Active': 'Активные',
-  'Ad reward': 'Награда за рекламу',
   'Adjustment': 'Корректировка',
   'Admin': 'Админ',
   'All': 'Все',

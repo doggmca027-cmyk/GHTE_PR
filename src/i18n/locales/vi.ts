@@ -12,7 +12,6 @@ const vi: Record<string, string> = {
   'About order': 'Về đơn hàng',
   'Account': 'Tài khoản',
   'Active': 'Đang hoạt động',
-  'Ad reward': 'Thưởng quảng cáo',
   'Adjustment': 'Điều chỉnh',
   'Admin': 'Quản trị',
   'All': 'Tất cả',
