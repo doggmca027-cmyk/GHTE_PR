@@ -24,6 +24,8 @@ export type ParsedProviderRequest =
   | { action: 'LIST_PROVIDERS' }
   | ({ action: 'UPSERT_PROVIDER' } & UpsertProviderInput)
   | { action: 'TOGGLE_ROUTING'; id: string; enabled: boolean }
+  | { action: 'ARBITRAGE_STATUS' }
+  | { action: 'SET_ARBITRAGE_MODE'; enabled: boolean }
 
 type Obj = Record<string, unknown>
 
@@ -118,7 +120,12 @@ export function parseProviderRequest(body: unknown): ParsedProviderRequest | { e
   const b = body as Obj
   const action = typeof b.action === 'string' ? b.action.toUpperCase() : ''
 
-  if (action === 'LIST_PROVIDERS') return { action }
+  if (action === 'LIST_PROVIDERS' || action === 'ARBITRAGE_STATUS') return { action }
+
+  if (action === 'SET_ARBITRAGE_MODE') {
+    if (typeof b.enabled !== 'boolean') return { error: 'enabled must be true or false.' }
+    return { action, enabled: b.enabled }
+  }
 
   if (action === 'TOGGLE_ROUTING') {
     if (!isUuid(b.id)) return { error: 'id must be a UUID.' }
@@ -201,6 +208,53 @@ export function mapProviderError(message: string): { status: number; error: stri
   if (/no_api_key/.test(message)) return { status: 409, error: 'no_api_key', message: 'Save the API key of the provider before switching routing on.' }
   if (/invalid_parameter_value/.test(message)) return { status: 400, error: 'invalid_input', message: message.replace(/^.*invalid_parameter_value: ?/, '') || 'Invalid input.' }
   return { status: 500, error: 'server_error', message: 'Something went wrong. Please try again.' }
+}
+
+// ---- Smart Arbitrage (donor networks: catalog_mode = 'linked_only') -------------------------------------------------------
+
+/** A donor the switch may turn on: active, with a stored key. */
+export interface ArbitrageDonor {
+  id: string
+  name: string
+}
+
+/** What admin_set_arbitrage_mode receives per donor: ok = the panel answered with a readable balance. */
+export interface BalanceReading {
+  id: string
+  ok: boolean
+  balance?: number
+  currency?: string
+}
+
+/**
+ * Asks every donor's panel for its balance at once, so switching on does not wait for the minute monitor. One panel failing
+ * (timeout, bad key, unreadable answer) only marks that donor; the others are still read.
+ */
+export async function readDonorBalances(
+  donors: ArbitrageDonor[],
+  readBalance: (d: ArbitrageDonor) => Promise<{ balance: number; currency?: string }>,
+): Promise<BalanceReading[]> {
+  return Promise.all(donors.map(async (d): Promise<BalanceReading> => {
+    try {
+      const r = await readBalance(d)
+      if (!Number.isFinite(r.balance) || r.balance < 0) return { id: d.id, ok: false }
+      return { id: d.id, ok: true, balance: r.balance, ...(r.currency && /^[A-Z]{3,10}$/.test(r.currency) ? { currency: r.currency } : {}) }
+    } catch {
+      return { id: d.id, ok: false }
+    }
+  }))
+}
+
+/** One donor in the answer: ready = it can receive orders now (routing on, panel answered). */
+export function toArbitrageDonorDto(r: Record<string, unknown>) {
+  const routingEnabled = r.routing_enabled === true
+  const healthStatus = String(r.health_status)
+  return {
+    id: String(r.id), name: String(r.name), isActive: r.is_active === true, routingEnabled, healthStatus,
+    balance: Number(r.provider_balance), currency: String(r.currency), lastBalanceSync: (r.last_balance_sync as string | null) ?? null,
+    hasApiKey: r.has_api_key === true, activeOffers: Number(r.active_offers),
+    ready: routingEnabled && healthStatus === 'healthy',
+  }
 }
 
 /** What the API returns for a provider: the SQL view's columns in camelCase. There is deliberately no key field, not even encrypted. */

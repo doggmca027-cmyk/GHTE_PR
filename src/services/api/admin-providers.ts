@@ -1,16 +1,19 @@
-// Client of the admin-providers Edge Function (LIST_PROVIDERS / UPSERT_PROVIDER / TOGGLE_ROUTING). Admins only; the server checks it.
+// Client of the admin-providers Edge Function (LIST_PROVIDERS / UPSERT_PROVIDER / TOGGLE_ROUTING / ARBITRAGE_STATUS /
+// SET_ARBITRAGE_MODE). Admins only; the server checks it.
 // The API key travels only in the body of an UPSERT_PROVIDER request and is never logged, kept or echoed here.
 
 import { AdminApiError } from './mock-admin'
 import { mockProviders } from './mock-providers'
 import type { AuthSession } from './auth'
-import type { AdminProvider, UpsertProviderRequest, UpsertProviderResponse } from '@/types/admin-providers'
+import type { AdminProvider, ArbitrageStatus, SetArbitrageModeResponse, UpsertProviderRequest, UpsertProviderResponse } from '@/types/admin-providers'
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 const TIMEOUT_MS = 15_000
+// switching arbitrage on asks every donor panel for its balance first (8 s each, in parallel)
+const ARBITRAGE_TIMEOUT_MS = 30_000
 
-async function call<T>(session: AuthSession, body: Record<string, unknown>): Promise<T> {
+async function call<T>(session: AuthSession, body: Record<string, unknown>, timeoutMs = TIMEOUT_MS): Promise<T> {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new AdminApiError('server', 'Backend is not configured.')
   let res: Response
   try {
@@ -18,7 +21,7 @@ async function call<T>(session: AuthSession, body: Record<string, unknown>): Pro
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     })
   } catch {
     // never include the error: it could carry request details
@@ -59,4 +62,22 @@ export async function toggleProviderRouting(session: AuthSession, id: string, en
     return mockProviders().toggleRouting(id, enabled)
   }
   return (await call<{ provider: AdminProvider }>(session, { action: 'TOGGLE_ROUTING', id, enabled })).provider
+}
+
+export async function getArbitrageStatus(session: AuthSession): Promise<ArbitrageStatus> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockProviders().arbitrageStatus()
+  }
+  const r = await call<ArbitrageStatus>(session, { action: 'ARBITRAGE_STATUS' })
+  return { enabled: r.enabled, primary: r.primary, donors: r.donors }
+}
+
+/** One switch for every donor network; the primary network is never touched. */
+export async function setArbitrageMode(session: AuthSession, enabled: boolean): Promise<SetArbitrageModeResponse> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockProviders().setArbitrageMode(enabled)
+  }
+  return call<SetArbitrageModeResponse>(session, { action: 'SET_ARBITRAGE_MODE', enabled }, ARBITRAGE_TIMEOUT_MS)
 }

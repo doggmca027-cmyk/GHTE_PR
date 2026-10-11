@@ -73,4 +73,42 @@ export interface ToggleRoutingResponse {
   provider: AdminProvider
 }
 
-export type AdminProvidersRequest = ListProvidersRequest | UpsertProviderRequest | ToggleRoutingRequest
+/** A donor network of Smart Arbitrage: a provider with catalog_mode 'linked_only' (it only serves linked storefront services). */
+export interface ArbitrageDonor {
+  id: string
+  name: string
+  isActive: boolean
+  routingEnabled: boolean
+  healthStatus: AdminProvider['healthStatus']
+  balance: number
+  currency: string
+  lastBalanceSync: string | null
+  hasApiKey: boolean
+  /** Active offers linked to storefront services. */
+  activeOffers: number
+  /** Routing on and the panel answered: it can receive orders now (as far as its balance goes). */
+  ready: boolean
+}
+
+export interface ArbitrageStatus {
+  /** At least one donor has routing on. */
+  enabled: boolean
+  /** The primary networks (catalog_mode 'publish'); the switch never touches them. */
+  primary: { id: string; name: string; routingEnabled: boolean; healthStatus: AdminProvider['healthStatus'] }[]
+  donors: ArbitrageDonor[]
+}
+
+export interface SetArbitrageModeRequest {
+  action: 'SET_ARBITRAGE_MODE'
+  enabled: boolean
+}
+
+export interface SetArbitrageModeResponse {
+  success: true
+  enabled: boolean
+  /** Donors left as they were when switching on: inactive, or without an API key. */
+  skipped: { id: string; name: string; reason: 'inactive' | 'no_api_key' }[]
+  donors: ArbitrageDonor[]
+}
+
+export type AdminProvidersRequest = ListProvidersRequest | UpsertProviderRequest | ToggleRoutingRequest | { action: 'ARBITRAGE_STATUS' } | SetArbitrageModeRequest

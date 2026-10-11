@@ -2,7 +2,7 @@
 // admin_set_provider_payout.
 import { checkPayoutDraft } from '@/lib/payment-view'
 import type { ProviderConfigPatch, ProviderConfigView, ProviderPayoutInput } from '@/types/admin'
-import type { AdminProvider, UpsertProviderRequest, UpsertProviderResponse } from '@/types/admin-providers'
+import type { AdminProvider, ArbitrageDonor, ArbitrageStatus, SetArbitrageModeResponse, UpsertProviderRequest, UpsertProviderResponse } from '@/types/admin-providers'
 import { AdminApiError } from './mock-admin'
 
 const DEMO_WALLET = `0:${'a1'.repeat(32)}`
@@ -32,6 +32,11 @@ export function createMockProviders() {
       hasApiKey: x.hasApiKey, createdAt: now, updatedAt: now,
     }
   }
+  const arbitrageDonors = (): ArbitrageDonor[] => providers.filter((p) => extra.get(p.id)!.catalogMode === 'linked_only').map((p) => ({
+    id: p.id, name: p.name, isActive: p.isActive, routingEnabled: p.routingEnabled, healthStatus: p.health, balance: p.balance, currency: p.currency,
+    lastBalanceSync: p.lastBalanceSync, hasApiKey: extra.get(p.id)!.hasApiKey, activeOffers: p.isActive ? 3 : 0,
+    ready: p.routingEnabled && p.health === 'healthy',
+  }))
   const find = (id: string) => {
     const p = providers.find((x) => x.id === id)
     if (!p) throw new AdminApiError('not_found', 'Provider not found.')
@@ -72,6 +77,27 @@ export function createMockProviders() {
       if (enabled && !extra.get(id)!.hasApiKey) throw new AdminApiError('conflict', 'Save the API key of the provider before switching routing on.')
       p.routingEnabled = enabled
       return view(p)
+    },
+    arbitrageStatus(): ArbitrageStatus {
+      const donors = arbitrageDonors()
+      return {
+        enabled: donors.some((d) => d.routingEnabled), donors,
+        primary: providers.filter((p) => extra.get(p.id)!.catalogMode === 'publish').map((p) => ({ id: p.id, name: p.name, routingEnabled: p.routingEnabled, healthStatus: p.health })),
+      }
+    },
+    /** Same rules as admin_set_arbitrage_mode: only donors move; on = active donors with a key (demo balances stay as they are). */
+    setArbitrageMode(enabled: boolean): SetArbitrageModeResponse {
+      const skipped: SetArbitrageModeResponse['skipped'] = []
+      for (const p of providers) {
+        const x = extra.get(p.id)!
+        if (x.catalogMode !== 'linked_only') continue
+        if (!enabled) { p.routingEnabled = false; p.health = 'disabled'; continue }
+        if (!p.isActive || !x.hasApiKey) { skipped.push({ id: p.id, name: p.name, reason: p.isActive ? 'no_api_key' : 'inactive' }); continue }
+        p.routingEnabled = true
+        p.health = 'healthy'
+        p.lastBalanceSync = new Date().toISOString()
+      }
+      return { success: true, enabled, skipped, donors: arbitrageDonors() }
     },
     list: (): ProviderConfigView[] => providers.map((p) => ({ ...p })),
     update(id: string, patch: ProviderConfigPatch): void {

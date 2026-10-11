@@ -10,7 +10,8 @@ import { checkPayoutDraft, payoutChanged, shortId, type PayoutDraft } from '@/li
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { listProviderConfigs, setProviderPayout, updateProviderConfig } from '@/services/api/admin'
-import { listAdminProviders, toggleProviderRouting, upsertProvider } from '@/services/api/admin-providers'
+import { getArbitrageStatus, listAdminProviders, setArbitrageMode, toggleProviderRouting, upsertProvider } from '@/services/api/admin-providers'
+import { ArbitrageCard } from './ArbitrageCard'
 import { OfferBundlePanel } from './OfferBundlePanel'
 import { ProviderModal } from './ProviderModal'
 import type { AdminProvider } from '@/types/admin-providers'
@@ -34,6 +35,8 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
   // admin-providers adds what the config RPC does not carry: API URL, priority, slug and whether a key is stored
   const details = useLoader(() => listAdminProviders(session), [session.token, session.isMock])
   const detailsById = new Map((details.data ?? []).map((d) => [d.id, d]))
+  const arbitrage = useLoader(() => getArbitrageStatus(session), [session.token, session.isMock])
+  const reloadAll = () => Promise.all([reload(), details.reload(), arbitrage.reload()])
   const [editing, setEditing] = useState<ProviderConfigView | null>(null)
   const [editingProvider, setEditingProvider] = useState<AdminProvider | null>(null)
   const [adding, setAdding] = useState(false)
@@ -49,11 +52,11 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
       await toggleProviderRouting(session, p.id, !p.routingEnabled)
       haptic.success()
       setMessage({ kind: 'ok', text: `${p.name}: маршрутизация ${p.routingEnabled ? 'выключена' : 'включена'}.` })
-      await Promise.all([reload(), details.reload()])
+      await reloadAll()
     } catch (e) {
       haptic.error()
       setMessage({ kind: 'error', text: e instanceof Error ? e.message : 'Не удалось сохранить.' })
-      await Promise.all([reload(), details.reload()]) // show what the server really has
+      await reloadAll() // show what the server really has
     } finally {
       setBusyId(null)
     }
@@ -78,6 +81,18 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
 
   return (
     <div className="space-y-3">
+      {arbitrage.data && (
+        <ArbitrageCard
+          status={arbitrage.data}
+          onSwitch={async (enabled) => {
+            try {
+              return await setArbitrageMode(session, enabled)
+            } finally {
+              await reloadAll() // show what the server really has, also after a refusal
+            }
+          }}
+        />
+      )}
       <p className="rounded-2xl bg-brand-light/60 px-3.5 py-2.5 text-[13px] font-medium text-brand-text">
         Состояние и баланс обновляются раз в минуту у провайдеров с включённой маршрутизацией. Когда баланс опускается до порога, приходит одно уведомление в Telegram. Провайдер с выключенной маршрутизацией только загружает каталог: его услуги не попадают в продажу.
       </p>
@@ -179,7 +194,7 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
               haptic.error()
               throw e
             }
-            await Promise.all([reload(), details.reload()])
+            await reloadAll()
             setAdding(false)
             setEditingProvider(null)
           }}

@@ -13,6 +13,17 @@
 //          missing apiKey keeps the stored key. apiUrl must be https and a public host.
 //   { action: "TOGGLE_ROUTING", id, enabled }
 //       -> { success, provider }     enabling needs an active provider with a stored key.
+//   { action: "ARBITRAGE_STATUS" }
+//       -> { success, enabled, primary: [{ id, name, routingEnabled, healthStatus }], donors: [ArbitrageDonor] }
+//   { action: "SET_ARBITRAGE_MODE", enabled }
+//       -> { success, enabled, skipped: [{ id, name, reason }], donors: [{ id, name, isActive, routingEnabled, healthStatus,
+//                                                                         balance, currency, lastBalanceSync, hasApiKey,
+//                                                                         activeOffers, ready }] }
+//          Donors are the providers with catalog_mode = 'linked_only'; the primary ('publish') is never touched.
+//          enabled=false: every donor is switched off (routing off, health 'disabled') in one transaction.
+//          enabled=true: the live balance of every active donor with a key is read from its panel first (in parallel, 8 s each),
+//          then one transaction stores it and switches routing on: 'healthy' if the panel answered, even at a zero balance (the
+//          router only sends what the balance covers and falls back to the primary), 'unavailable' if it did not.
 //
 // Key handling: the raw apiKey is read from the POST body, encrypted here with AES-256-GCM (PROVIDER_KEY_SECRET, _shared/secrets.ts,
 // the exact envelope the workers decrypt with), registered with the logger's redactor and then dropped. SQL receives ciphertext only.
@@ -23,9 +34,12 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
-import { mapProviderError, parseProviderRequest, toProviderDto } from '../_shared/admin-providers.ts'
+import { mapProviderError, parseProviderRequest, readDonorBalances, toArbitrageDonorDto, toProviderDto } from '../_shared/admin-providers.ts'
+import { PING_TIMEOUT_MS } from '../_shared/health-monitor.ts'
 import { registerSecret } from '../_shared/logger.ts'
-import { encryptSecret } from '../_shared/secrets.ts'
+import { mockModeEnabled } from '../_shared/mock-guard.ts'
+import { encryptSecret, resolveProviderApiKey } from '../_shared/secrets.ts'
+import { createSMMv2Adapter } from '../_shared/smm-v2-adapter.ts'
 import { checkResolvedHost, type DnsResolver } from '../_shared/admin-providers.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -80,6 +94,44 @@ Deno.serve(instrument('admin-providers', async (req: Request, { log }): Promise<
       const r = await call('admin_set_provider_routing', { p_actor: userId, p_id: parsed.id, p_enabled: parsed.enabled })
       if ('response' in r) return r.response
       return json({ success: true, provider: toProviderDto(r.data as Record<string, unknown>) })
+    }
+
+    if (parsed.action === 'ARBITRAGE_STATUS') {
+      const r = await call('admin_arbitrage_status', { p_actor: userId })
+      if ('response' in r) return r.response
+      const data = r.data as { primary: Record<string, unknown>[]; donors: Record<string, unknown>[] }
+      const donors = data.donors.map(toArbitrageDonorDto)
+      return json({
+        success: true, enabled: donors.some((d) => d.routingEnabled), donors,
+        primary: data.primary.map((p) => ({ id: p.id, name: p.name, routingEnabled: p.routing_enabled === true, healthStatus: p.health_status })),
+      })
+    }
+
+    if (parsed.action === 'SET_ARBITRAGE_MODE') {
+      let readings: unknown[] = []
+      if (parsed.enabled) {
+        // live balances first (outside the transaction: panels can be slow), then one atomic switch
+        const donors = must(
+          await db.from('providers').select('id, name, api_url, api_key_encrypted').eq('catalog_mode', 'linked_only').eq('is_active', true).not('api_key_encrypted', 'is', null),
+          'load donors',
+        ) as { id: string; name: string; api_url: string; api_key_encrypted: string | null }[]
+        const mock = mockModeEnabled(Deno.env)
+        readings = await readDonorBalances(donors, async (d) => {
+          const p = donors.find((x) => x.id === d.id)!
+          const apiKey = await resolveProviderApiKey(p, Deno.env)
+          if (!apiKey && !mock) throw new Error('no API key')
+          registerSecret(apiKey)
+          const adapter = createSMMv2Adapter({ id: p.id, name: p.name, apiUrl: p.api_url, apiKey, timeoutMs: PING_TIMEOUT_MS, logger: log }, { MOCK_MODE: mock ? 'true' : undefined })
+          return adapter.getBalance()
+        })
+        const failed = (readings as { ok: boolean }[]).filter((x) => !x.ok).length
+        if (failed > 0) log.warn('some donor panels did not answer with a balance', { failed, error_code: 'donor_balance_unread' })
+      }
+      const r = await call('admin_set_arbitrage_mode', { p_actor: userId, p_enabled: parsed.enabled, p_readings: readings })
+      if ('response' in r) return r.response
+      const data = r.data as { enabled: boolean; skipped: unknown[]; donors: Record<string, unknown>[] }
+      log.info('arbitrage mode set', { enabled: parsed.enabled })
+      return json({ success: true, enabled: data.enabled, skipped: data.skipped, donors: data.donors.map(toArbitrageDonorDto) })
     }
 
     // ---- UPSERT_PROVIDER -----------------------------------------------------------------------------
