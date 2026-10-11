@@ -13,8 +13,9 @@ import { ProvidersTab } from './ProvidersTab'
 import { ReconciliationTab } from './ReconciliationTab'
 import { SupportTab } from './SupportTab'
 import { TreasuryTab } from './TreasuryTab'
+import { UsersTab } from './UsersTab'
 
-type AdminTab = 'overview' | 'analytics' | 'support' | 'health' | 'queue' | 'prices' | 'pricing' | 'promos' | 'providers' | 'treasury' | 'controls'
+type AdminTab = 'overview' | 'analytics' | 'support' | 'health' | 'queue' | 'users' | 'prices' | 'pricing' | 'promos' | 'providers' | 'treasury' | 'controls'
 
 export function AdminScreen({ session }: { session: AuthSession }) {
   const [tab, setTab] = useState<AdminTab>('overview')
@@ -28,6 +29,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
     { id: 'support', label: 'Поддержка', badge: waiting },
     { id: 'health', label: 'Состояние системы' },
     { id: 'queue', label: 'Сверка', badge: problems },
+    { id: 'users', label: 'Пользователи' },
     { id: 'pricing', label: 'Цены и наценки' },
     { id: 'promos', label: 'Промокоды' },
     { id: 'prices', label: 'Правила цен' },
@@ -66,6 +68,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
       {tab === 'support' && <SupportTab session={session} onWaitingCount={setWaiting} />}
       {tab === 'health' && <ObservabilityTab session={session} />}
       {tab === 'queue' && <ReconciliationTab session={session} onProblemCount={onProblemCount} onOpenPayments={() => setTab('treasury')} />}
+      {tab === 'users' && <UsersTab session={session} />}
       {tab === 'prices' && <PriceRulesTab session={session} />}
       {tab === 'pricing' && <PricingTab session={session} />}
       {tab === 'promos' && <PromosTab session={session} />}

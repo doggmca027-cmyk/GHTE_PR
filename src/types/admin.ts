@@ -267,6 +267,57 @@ export interface ReconCaseOrder {
   telegramId: number
   /** A held order (processing, no provider id) that still has its routing snapshot can be re-submitted. */
   canRetry: boolean
+  /** The customer, so they can be suspended from the case. */
+  userId?: string | null
+  userBanned?: boolean
+}
+
+/** The deposit behind a `deposit` case (underpaid, overpaid, paid outside the window, ...). */
+export interface ReconCaseDeposit {
+  status: 'pending' | 'completed' | 'expired' | 'failed' | string
+  amountUsd: number
+  /** What the customer was asked to send, in TON. */
+  amountCrypto: number
+  asset: string
+  network: string
+  memo: string | null
+  txHash: string | null
+  /** What actually arrived, in nanoton, once known. */
+  receivedNano: number | null
+  validUntil: string | null
+  createdAt: string
+  username: string | null
+  telegramId: number
+  userId: string | null
+  userBanned: boolean
+}
+
+/** admin_resolve_deposit: credit = complete the deposit with this transaction (pro rata if short), dismiss = close with a note. */
+export type ResolveDepositInput =
+  | { action: 'credit'; txHash: string; /** What arrived, in nanoton (tonToNano). */ receivedNano: number; note?: string }
+  | { action: 'dismiss'; note: string }
+
+export interface ResolveDepositResult {
+  depositId: string
+  status: string
+  credited: number
+  action: 'credit' | 'dismiss'
+  replayed: boolean
+}
+
+/** A customer found by admin_find_users. */
+export interface AdminUserView {
+  id: string
+  telegramId: number
+  username: string | null
+  firstName: string | null
+  isBanned: boolean
+  isAdmin: boolean
+  createdAt: string
+  balance: number
+  orders: number
+  /** The admin themself: cannot be suspended. */
+  isYou: boolean
 }
 
 /** The provider payment behind a `provider_payment` case. */
@@ -292,4 +343,5 @@ export interface ReconCase {
   createdAt: string
   order: ReconCaseOrder | null
   payment: ReconCasePayment | null
+  deposit?: ReconCaseDeposit | null
 }

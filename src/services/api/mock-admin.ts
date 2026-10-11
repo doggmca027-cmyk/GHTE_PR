@@ -5,7 +5,7 @@
 import { computeAdminMetrics, inReconciliationQueue, type AdminMetrics, type MetricOrder } from '../../../supabase/functions/_shared/admin-metrics.ts'
 import type { OrderStatus } from '@/types'
 import { computeProfitAnalytics, type DateRange } from '../../../supabase/functions/_shared/admin-analytics.ts'
-import type { PriceRuleView, ProfitAnalytics, ProviderStatus, ReconCase, ReconciliationOrder } from '@/types/admin'
+import type { AdminUserView, PriceRuleView, ProfitAnalytics, ProviderStatus, ReconCase, ReconciliationOrder, ResolveDepositInput, ResolveDepositResult } from '@/types/admin'
 import { mockBackend, type KeyValueStorage } from './mock-orders'
 
 export class AdminApiError extends Error {
@@ -78,6 +78,27 @@ function seed(now: number): AdminState {
 
 const DEMO_EXTRAS = { totalUsers: 41, userBalances: 312.4, depositsTotal: 1840 }
 
+/** Deposit cases and customers of the demo (kept apart from AdminState so a saved older demo keeps working). */
+interface PeopleState {
+  deposits: { id: string; caseId: string; reason: string; createdAt: string; open: boolean; status: string; amountUsd: number; amountCrypto: number; txHash: string | null; receivedNano: number | null; userId: string }[]
+  users: AdminUserView[]
+}
+const PEOPLE_KEY = 'smm_mock_admin_people_v1'
+const demoUser = (n: number, username: string, now: number, extra: Partial<AdminUserView> = {}): AdminUserView => ({
+  id: `demo-user-${910_000 + n}`, telegramId: 910_000 + n, username, firstName: username.split('_')[0], isBanned: false, isAdmin: false,
+  createdAt: new Date(now - n * 24 * HOUR).toISOString(), balance: 10 * n, orders: n, isYou: false, ...extra,
+})
+const DEMO_HASH = 'kq3Zk9mWvB0d7rM5tq1nqZ1y8hYQe7Q3x9vKpQ2l1cA='
+function seedPeople(now: number): PeopleState {
+  return {
+    deposits: [
+      { id: 'dep-001', caseId: 'case-dep-001', reason: `underpaid: received 4.5 TON of 5 in tx ${DEMO_HASH}`, createdAt: new Date(now - 5 * HOUR).toISOString(), open: true, status: 'pending', amountUsd: 25, amountCrypto: 5, txHash: null, receivedNano: null, userId: 'demo-user-910001' },
+      { id: 'dep-002', caseId: 'case-dep-002', reason: 'overpaid: received 3000000000 nanoton, quoted 2000000000 (credited 10 USD only)', createdAt: new Date(now - 30 * HOUR).toISOString(), open: true, status: 'completed', amountUsd: 10, amountCrypto: 2, txHash: 'Zm9vYmFyYmF6cXV4cXV1eGNvcmdlZ3JhdWx0Z2FycGx5Ym8=', receivedNano: 3_000_000_000, userId: 'demo-user-910002' },
+    ],
+    users: [demoUser(1, 'alice_demo', now), demoUser(2, 'bob_demo', now), demoUser(3, 'carol_demo', now), demoUser(9, 'spammer_demo', now, { isBanned: true })],
+  }
+}
+
 export function createMockAdmin(storage: KeyValueStorage, now: () => number = Date.now) {
   const load = (): AdminState => {
     try {
@@ -88,6 +109,16 @@ export function createMockAdmin(storage: KeyValueStorage, now: () => number = Da
   }
   const save = (s: AdminState) => {
     try { storage.setItem(STORAGE_KEY, JSON.stringify(s)) } catch { /* best effort */ }
+  }
+  const loadPeople = (): PeopleState => {
+    try {
+      const raw = storage.getItem(PEOPLE_KEY)
+      if (raw) return JSON.parse(raw) as PeopleState
+    } catch { /* corrupted: reseed */ }
+    return seedPeople(now())
+  }
+  const savePeople = (s: PeopleState) => {
+    try { storage.setItem(PEOPLE_KEY, JSON.stringify(s)) } catch { /* best effort */ }
   }
   const find = (s: AdminState, id: string) => {
     const o = s.orders.find((x) => x.id === id)
@@ -133,19 +164,73 @@ export function createMockAdmin(storage: KeyValueStorage, now: () => number = Da
     /** Cases are derived from the queue here (the server stores them); the case id is "case-<order id>". */
     getCases(): ReconCase[] {
       const t = now()
-      return load().orders
+      const people = loadPeople()
+      const orderCases: ReconCase[] = load().orders
         .filter((o) => inReconciliationQueue(o, t))
         .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
-        .map((o) => ({
-          id: `case-${o.id}`, entityType: 'order' as const, entityId: o.id,
-          reason: o.error_message ?? 'Stuck in processing without a confirmation from the provider', createdAt: o.created_at,
-          order: {
-            status: o.status, chargeAmount: o.charge_amount, quantity: o.quantity, targetUrl: o.targetUrl, providerOrderId: o.providerOrderId,
-            errorMessage: o.error_message, createdAt: o.created_at, serviceName: o.serviceName, username: o.username, telegramId: o.telegramId,
-            canRetry: o.status === 'processing' && !o.providerOrderId,
+        .map((o) => {
+          const user = people.users.find((u) => u.telegramId === o.telegramId)
+          return {
+            id: `case-${o.id}`, entityType: 'order' as const, entityId: o.id,
+            reason: o.error_message ?? 'Stuck in processing without a confirmation from the provider', createdAt: o.created_at,
+            order: {
+              status: o.status, chargeAmount: o.charge_amount, quantity: o.quantity, targetUrl: o.targetUrl, providerOrderId: o.providerOrderId,
+              errorMessage: o.error_message, createdAt: o.created_at, serviceName: o.serviceName, username: o.username, telegramId: o.telegramId,
+              canRetry: o.status === 'processing' && !o.providerOrderId, userId: user?.id ?? null, userBanned: user?.isBanned ?? false,
+            },
+            payment: null,
+          }
+        })
+      const depositCases: ReconCase[] = people.deposits.filter((d) => d.open).map((d) => {
+        const user = people.users.find((u) => u.id === d.userId)!
+        return {
+          id: d.caseId, entityType: 'deposit' as const, entityId: d.id, reason: d.reason, createdAt: d.createdAt, order: null, payment: null,
+          deposit: {
+            status: d.status, amountUsd: d.amountUsd, amountCrypto: d.amountCrypto, asset: 'TON', network: 'mainnet', memo: `dep_${d.id}`,
+            txHash: d.txHash, receivedNano: d.receivedNano, validUntil: d.createdAt, createdAt: d.createdAt,
+            username: user.username, telegramId: user.telegramId, userId: user.id, userBanned: user.isBanned,
           },
-          payment: null,
-        }))
+        }
+      })
+      return [...orderCases, ...depositCases]
+    },
+
+    /** Same rules as admin_resolve_deposit: a dismiss needs a note; a credit needs the transaction and what arrived (pro rata if short). */
+    resolveDeposit(depositId: string, input: ResolveDepositInput): ResolveDepositResult {
+      const s = loadPeople()
+      const d = s.deposits.find((x) => x.id === depositId)
+      if (!d) throw new AdminApiError('not_found', 'Deposit not found.')
+      if (input.action === 'dismiss') {
+        if (!input.note.trim()) throw new AdminApiError('invalid_input', 'a note is required to dismiss a deposit case')
+        d.open = false
+        savePeople(s)
+        return { depositId, status: d.status, credited: 0, action: 'dismiss', replayed: false }
+      }
+      if (d.status === 'completed') {
+        if (d.txHash === input.txHash) { d.open = false; savePeople(s); return { depositId, status: 'completed', credited: 0, action: 'credit', replayed: true } }
+        throw new AdminApiError('conflict', 'this deposit was credited with another transaction')
+      }
+      if (!(input.receivedNano > 0)) throw new AdminApiError('invalid_input', 'the received amount (nanoton) is required')
+      const credited = Math.round(d.amountUsd * Math.min(input.receivedNano / (d.amountCrypto * 1e9), 1) * 10_000) / 10_000
+      Object.assign(d, { status: 'completed', txHash: input.txHash, receivedNano: input.receivedNano, open: false })
+      savePeople(s)
+      return { depositId, status: 'completed', credited, action: 'credit', replayed: false }
+    },
+
+    findUsers(query: string): AdminUserView[] {
+      const q = query.trim().replace(/^@/, '').toLowerCase()
+      if (q.length < 2) throw new AdminApiError('invalid_input', 'type 2 to 64 characters')
+      return loadPeople().users.filter((u) => String(u.telegramId) === q || u.id === q || (u.username ?? '').toLowerCase().startsWith(q))
+    },
+
+    setUserBan(userId: string, banned: boolean): { userId: string; isBanned: boolean } {
+      const s = loadPeople()
+      const u = s.users.find((x) => x.id === userId)
+      if (!u) throw new AdminApiError('not_found', 'User not found.')
+      if (u.isYou) throw new AdminApiError('invalid_input', 'you cannot ban or unban yourself')
+      u.isBanned = banned
+      savePeople(s)
+      return { userId, isBanned: banned }
     },
 
     resolveCaseRefund(caseId: string): void {

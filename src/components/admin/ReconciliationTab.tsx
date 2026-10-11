@@ -14,6 +14,8 @@ import type { AuthSession } from '@/services/api/auth'
 import { getReconCases, resolveCaseManual, resolveCaseRefund, retryCase } from '@/services/api/admin'
 import { caseSeverity, type Severity } from '../../../supabase/functions/_shared/recon-severity.ts'
 import type { ReconCase } from '@/types/admin'
+import { DepositCaseCard } from './DepositCaseCard'
+import { BanControl, userLabel } from './UsersTab'
 
 interface Props {
   session: AuthSession
@@ -58,7 +60,7 @@ export function ReconciliationTab({ session, onProblemCount, onOpenPayments }: P
 
   const now = Date.now()
   const sorted = [...data]
-    .map((c) => ({ c, severity: caseSeverity({ reason: c.reason, createdAt: c.createdAt, amount: c.order?.chargeAmount ?? c.payment?.amount ?? null }, now) }))
+    .map((c) => ({ c, severity: caseSeverity({ reason: c.reason, createdAt: c.createdAt, amount: c.order?.chargeAmount ?? c.payment?.amount ?? c.deposit?.amountUsd ?? null }, now) }))
     .sort((a, b) => RANK[a.severity] - RANK[b.severity] || Date.parse(a.c.createdAt) - Date.parse(b.c.createdAt))
 
   return (
@@ -78,7 +80,16 @@ export function ReconciliationTab({ session, onProblemCount, onOpenPayments }: P
           </p>
         </Card>
       ) : (
-        sorted.map(({ c, severity }) => (
+        sorted.map(({ c, severity }) => c.deposit ? (
+          <DepositCaseCard
+            key={c.id}
+            kase={c}
+            session={session}
+            severityBorder={SEVERITY[severity].border}
+            severityBadge={{ label: SEVERITY[severity].label, className: SEVERITY[severity].badge }}
+            onDone={(message) => { setFlash(message); void reload() }}
+          />
+        ) : (
           <CaseCard
             key={c.id}
             kase={c}
@@ -105,6 +116,7 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [banned, setBanned] = useState(order?.userBanned ?? false)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
 
@@ -302,6 +314,11 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
         <p className="mt-2 text-[12px] font-medium text-content-secondary">
           Решите судьбу платежа в разделе «Финансы» → «Платежи провайдерам»: продвиньте его, когда сеть и панель провайдера сходятся, или отметьте неудачным, если перевод так и не пришёл. Кейс закроется сам.
         </p>
+      )}
+      {order?.userId && !resolving && (
+        <div className="mt-3">
+          <BanControl session={session} userId={order.userId} banned={banned} label={userLabel(order)} onChanged={setBanned} />
+        </div>
       )}
     </article>
   )

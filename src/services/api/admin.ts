@@ -1,5 +1,6 @@
 import type { AuthSession } from '@/services/api/auth'
 import { NO_UNFUNDED, type UnfundedSummary } from '@/types/admin'
+import type { AdminUserView, ResolveDepositInput, ResolveDepositResult } from '@/types/admin'
 import type { AdminMetrics, MarginRuleInput, PriceRuleView, PricingPage, PricingQuery, PromoInput, PromoView, ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayment, ProviderPaymentAction, ProviderPayoutInput, ProviderStatus, ReconciliationOrder, PlatformSettingsPatch, SystemHealth, PlatformSettingsView, ReconCase, ProfitAnalytics, TopupProposal, TreasuryAdjustment, TreasuryPage, TreasuryTx } from '@/types/admin'
 import { createMockPricing } from './mock-pricing'
 import { createMockObservability } from './mock-observability'
@@ -493,6 +494,46 @@ export async function resolveCaseManual(session: AuthSession, caseId: string, in
     return mockAdmin().resolveCaseManual(caseId, input)
   }
   await callRecon(session, { action: 'MARK_RESOLVED', caseId, note: input.note ?? null, providerOrderId: input.providerOrderId ?? null })
+}
+
+// ---- Deposit cases and customers (client admin RPCs, re-checked by require_admin()) ---------------
+
+/**
+ * admin_resolve_deposit: "credit" completes the deposit with this transaction (pro rata to what arrived when it is short) and
+ * closes its case; "dismiss" closes the case with a note. Idempotent: crediting again with the same transaction changes nothing.
+ */
+export async function resolveDeposit(session: AuthSession, depositId: string, input: ResolveDepositInput): Promise<ResolveDepositResult> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockAdmin().resolveDeposit(depositId, input)
+  }
+  const raw = await rpc<Record<string, unknown>>(session, 'admin_resolve_deposit', input.action === 'credit'
+    ? { p_deposit_id: depositId, p_action: 'credit', p_tx_hash: input.txHash.trim(), p_received_nano: input.receivedNano, p_note: input.note?.trim() || null }
+    : { p_deposit_id: depositId, p_action: 'dismiss', p_tx_hash: null, p_received_nano: null, p_note: input.note.trim() })
+  return { depositId: String(raw.deposit_id), status: String(raw.status), credited: num(raw.credited), action: raw.action === 'credit' ? 'credit' : 'dismiss', replayed: raw.replayed === true }
+}
+
+/** admin_find_users: by Telegram id, user id or the start of a @username (at most 20). */
+export async function findUsers(session: AuthSession, query: string): Promise<AdminUserView[]> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockAdmin().findUsers(query)
+  }
+  const rows = await rpc<Record<string, unknown>[] | null>(session, 'admin_find_users', { p_query: query.trim() })
+  return (rows ?? []).map((u) => ({
+    id: String(u.id), telegramId: num(u.telegram_id), username: (u.username as string | null) ?? null, firstName: (u.first_name as string | null) ?? null,
+    isBanned: u.is_banned === true, isAdmin: u.is_admin === true, createdAt: String(u.created_at), balance: num(u.balance), orders: num(u.orders), isYou: u.is_you === true,
+  }))
+}
+
+/** admin_set_user_ban: a suspended customer cannot sign in to buy, deposit or open tickets. The reason goes to the audit log. */
+export async function setUserBan(session: AuthSession, userId: string, banned: boolean, reason?: string): Promise<{ userId: string; isBanned: boolean }> {
+  if (session.isMock) {
+    guardMock(session)
+    return mockAdmin().setUserBan(userId, banned)
+  }
+  const raw = await rpc<Record<string, unknown>>(session, 'admin_set_user_ban', { p_user_id: userId, p_is_banned: banned, p_reason: reason?.trim() || null })
+  return { userId: String(raw.user_id), isBanned: raw.is_banned === true }
 }
 
 // ---- System Health (admin-observability Edge Function) ---------------------------------------------

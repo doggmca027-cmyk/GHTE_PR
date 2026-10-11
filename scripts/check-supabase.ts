@@ -110,7 +110,7 @@ if (applied === migrations.length) {
     }
   }
 
-  const ADMIN_RPCS = ['get_admin_metrics', 'admin_provider_status', 'admin_reconciliation_queue', 'admin_force_refund', 'admin_mark_resolved', 'admin_list_price_rules', 'admin_update_price_rule', 'get_admin_pricing_view', 'get_profit_analytics', 'update_platform_settings', 'admin_set_provider_payout', 'admin_set_treasury_reserve', 'admin_list_providers', 'admin_update_provider_config', 'admin_upsert_platform', 'admin_resolve_deposit', 'admin_set_user_ban']
+  const ADMIN_RPCS = ['get_admin_metrics', 'admin_provider_status', 'admin_reconciliation_queue', 'admin_force_refund', 'admin_mark_resolved', 'admin_list_price_rules', 'admin_update_price_rule', 'get_admin_pricing_view', 'get_profit_analytics', 'update_platform_settings', 'admin_set_provider_payout', 'admin_set_treasury_reserve', 'admin_list_providers', 'admin_update_provider_config', 'admin_upsert_platform', 'admin_resolve_deposit', 'admin_set_user_ban', 'admin_find_users']
   const fns = await rows<{ proname: string; anon: boolean; authed: boolean }>(`select p.proname, has_function_privilege('anon', p.oid, 'execute') as anon, has_function_privilege('authenticated', p.oid, 'execute') as authed from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prokind = 'f' and p.prorettype <> 'trigger'::regtype`)
   for (const f of fns) {
     if (f.anon) bad(`anon can EXECUTE public.${f.proname}()`)
