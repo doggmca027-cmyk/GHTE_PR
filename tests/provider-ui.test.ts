@@ -7,7 +7,7 @@ const KEY = 'sk_live_super_secret_key_123'
 
 const provider = (over: Partial<AdminProvider> = {}): AdminProvider => ({
   id: '00000000-0000-4000-8000-000000000001', name: 'Secsers', slug: 'secsers', apiUrl: 'https://secsers.example.com/api/v2', apiVersion: 'v2', isActive: true,
-  routingEnabled: false, priority: 5, healthStatus: 'disabled', lastHealthCheck: null, balance: 0, currency: 'USD', lastBalanceSync: null, lowBalanceThreshold: 0,
+  routingEnabled: false, priority: 5, catalogMode: 'linked_only', healthStatus: 'disabled', lastHealthCheck: null, balance: 0, currency: 'USD', lastBalanceSync: null, lowBalanceThreshold: 0,
   targetTopupBalance: 0, reliabilityPenalty: 1, hasApiKey: true, createdAt: 't', updatedAt: 't', ...over,
 })
 
@@ -64,7 +64,7 @@ describe('checkProviderDraft: editing (the API key is optional)', () => {
   const p = provider()
 
   it('prefills everything but the key', () => {
-    expect(draftOf(p)).toEqual({ name: 'Secsers', apiUrl: p.apiUrl, apiKey: '', priority: '5', isActive: true })
+    expect(draftOf(p)).toEqual({ name: 'Secsers', apiUrl: p.apiUrl, apiKey: '', priority: '5', isActive: true, catalogMode: 'linked_only' })
   })
 
   it('an untouched form has nothing to send', () => {

@@ -108,3 +108,58 @@ export interface CatalogMappingError {
   error: CatalogMappingErrorCode
   message: string
 }
+
+// ---------------------------------------------------------------------------
+// Bundles: one storefront service sold through several providers
+// ---------------------------------------------------------------------------
+
+/** Why an offer cannot take a new order right now. */
+export type OfferBlock = 'anomaly' | 'offer_off' | 'panel_removed' | 'provider_off' | 'routing_off' | 'unhealthy' | 'above_price'
+
+export interface BundleOffer {
+  offerId: string
+  providerId: string
+  providerName: string
+  externalServiceId: string
+  panelName: string
+  costPer1000: number
+  minQuantity: number
+  maxQuantity: number
+  routingScore: number
+  effectiveCost: number
+  providerBalance: number
+  blockedBy: OfferBlock | null
+  /** 1 = a new order goes here first; null = cannot be routed now. */
+  rank: number | null
+}
+
+export interface BundlePrice {
+  /** The most expensive usable offer: what the storefront price is built on. */
+  basisCost: number | null
+  currentRate: number
+  newRate: number
+  changed: boolean
+}
+
+export interface BundleView {
+  service: { id: string; name: string; platform: string; customerRatePer1000: number }
+  price: BundlePrice
+  offers: BundleOffer[]
+}
+
+export interface BundleSearchItem {
+  id: string
+  name: string
+  platform: string
+  customerRatePer1000: number
+  offers: number
+}
+
+export interface LinkByExternalIdResult extends BundleView {
+  link: {
+    offerId: string
+    providerServiceId: string
+    panel: { externalServiceId: string; name: string; costPer1000: number; minQuantity: number; maxQuantity: number }
+    price: BundlePrice
+  }
+}

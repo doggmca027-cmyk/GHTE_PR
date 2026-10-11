@@ -12,6 +12,8 @@ export interface AdminProvider {
   /** Whether the provider receives orders. A new provider starts with this off. */
   routingEnabled: boolean
   priority: number
+  /** 'publish': the whole catalogue is put on the storefront; 'linked_only': only the panel services linked to storefront services. */
+  catalogMode: 'publish' | 'linked_only'
   healthStatus: 'healthy' | 'degraded' | 'unavailable' | 'disabled'
   lastHealthCheck: string | null
   balance: number
@@ -50,6 +52,7 @@ export interface UpsertProviderRequest {
   /** Switching a provider off also switches its routing off. */
   isActive?: boolean
   currency?: string
+  catalogMode?: 'publish' | 'linked_only'
 }
 
 export interface UpsertProviderResponse {

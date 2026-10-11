@@ -340,6 +340,22 @@ export interface ServicePlan {
   deactivated: boolean
 }
 
+/**
+ * The storefront price for a cost basis: a price rule that applies prices from the cost; with no rule that applies, the price the service
+ * has is kept (set by hand or by the publisher's default markup) and only lifted when it has fallen below cost + the minimum margin, so an
+ * empty rule table never reprices a storefront to cost.
+ */
+export function priceForBasis(
+  existingRate: number,
+  cost: number,
+  rules: PriceRule[],
+  context: { serviceId?: string; categoryId?: string; platform?: Platform; serviceName?: string },
+  minMargin?: number,
+): number {
+  const floor = calculateCustomerRate(cost, [], context, { minMargin })
+  return selectPriceRule(cost, rules, context) === null ? Math.max(existingRate, floor) : calculateCustomerRate(cost, rules, context, { minMargin })
+}
+
 export interface PlanServiceInput {
   existing: LinkedService
   /** Cost and limits derived from the service's offers (service-cost.ts); null = no offer can receive an order. */
@@ -368,12 +384,7 @@ export function planService(input: PlanServiceInput): ServicePlan {
   }
 
   const context = { serviceId: existing.id, categoryId: existing.category_id, platform: existing.platform, serviceName: existing.name }
-  const floor = calculateCustomerRate(basis.cost, [], context, { minMargin: input.minMargin })
-  // A price comes from a rule. With no rule that applies, the price the service has is kept (it was set by hand or by the publisher's default
-  // markup) and only lifted when it has fallen below cost + the minimum margin: an empty rule table must never reprice a storefront to cost.
-  const rate = selectPriceRule(basis.cost, input.rules, context) === null
-    ? Math.max(existing.customer_rate_per_1000, floor)
-    : calculateCustomerRate(basis.cost, input.rules, context, { minMargin: input.minMargin })
+  const rate = priceForBasis(existing.customer_rate_per_1000, basis.cost, input.rules, context, input.minMargin)
 
   // Keep admin-narrowed limits, but never exceed what the offers can actually deliver.
   let min = Math.max(existing.min_quantity, basis.minQuantity)

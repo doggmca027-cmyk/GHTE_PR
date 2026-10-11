@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { listProviderConfigs, setProviderPayout, updateProviderConfig } from '@/services/api/admin'
 import { listAdminProviders, toggleProviderRouting, upsertProvider } from '@/services/api/admin-providers'
+import { OfferBundlePanel } from './OfferBundlePanel'
 import { ProviderModal } from './ProviderModal'
 import type { AdminProvider } from '@/types/admin-providers'
 import type { ProviderConfigPatch, ProviderConfigView, ProviderHealth, ProviderPayoutInput } from '@/types/admin'
@@ -95,6 +96,11 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
                 <h3 className="text-[15px] font-bold leading-snug text-content-primary">{p.name}</h3>
                 <span className={cn('mt-1 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold', HEALTH_BADGE[p.health].className)}>{HEALTH_BADGE[p.health].label}</span>
                 {!p.isActive && <span className="ml-1.5 inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">Не активен</span>}
+                {d && (
+                  <span className="ml-1.5 inline-block rounded-full bg-brand-light px-2.5 py-0.5 text-[11px] font-bold text-brand-text">
+                    {d.catalogMode === 'publish' ? 'Весь каталог' : 'Только связки'}
+                  </span>
+                )}
               </div>
               <button
                 type="button"
@@ -157,6 +163,8 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
           </article>
         )
       })}
+
+      {details.data && details.data.length > 0 && <OfferBundlePanel session={session} providers={details.data} />}
 
       {(adding || editingProvider) && (
         <ProviderModal

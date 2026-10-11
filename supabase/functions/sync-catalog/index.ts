@@ -33,6 +33,7 @@ interface ProviderRow {
   api_url: string
   api_key_encrypted: string | null
   routing_enabled: boolean
+  catalog_mode: 'publish' | 'linked_only'
 }
 
 const json = (body: unknown, status = 200) =>
@@ -95,7 +96,7 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
   async function runCatalog(): Promise<Response> {
   const reports: ProviderSyncReport[] = []
   try {
-    let q = db.from('providers').select('id, name, api_url, api_key_encrypted, routing_enabled').eq('is_active', true).order('priority', { ascending: false })
+    let q = db.from('providers').select('id, name, api_url, api_key_encrypted, routing_enabled, catalog_mode').eq('is_active', true).order('priority', { ascending: false })
     // The hourly run keeps the providers that sell current. One with routing switched off (imported, not enabled yet) is only synced when it is
     // asked for by id: a catalogue of tens of thousands of services is not worth the hourly time budget until it is actually used.
     q = onlyProvider ? q.eq('id', onlyProvider) : q.eq('routing_enabled', true)

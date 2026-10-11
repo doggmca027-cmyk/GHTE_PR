@@ -81,7 +81,7 @@ export interface CatalogStore {
 
 export interface SyncProviderInput {
   /** routing_enabled false: the catalogue is imported and kept current, but nothing of this provider is put on the storefront. */
-  provider: { id: string; name: string; routing_enabled?: boolean }
+  provider: { id: string; name: string; routing_enabled?: boolean; catalog_mode?: 'publish' | 'linked_only' }
   adapter: CatalogAdapter
   store: CatalogStore
   rules: PriceRule[]
@@ -162,7 +162,8 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
 
   // 5b. Publish: every service of this provider that can be sold as it is gets a storefront service (new ones appear, renamed ones are
   //     refreshed). A failure here is reported but never stops the pricing of what is already on the storefront.
-  if (provider.routing_enabled !== false && store.publishServices && store.loadPlatformSlugs) {
+  // linked_only: the catalogue is imported (searchable, guarded) but only what an admin links is sold; nothing is published.
+  if (provider.routing_enabled !== false && provider.catalog_mode !== 'linked_only' && store.publishServices && store.loadPlatformSlugs) {
     try {
       const idByExternal = new Map([...existingPS.map((e) => [e.external_service_id, e.id] as const), ...saved.map((s) => [s.external_service_id, s.id] as const)])
       const candidates = valid.flatMap((s): PublishCandidate[] => {

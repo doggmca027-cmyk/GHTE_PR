@@ -105,14 +105,14 @@ describe('Balanced routing: effective_cost = cost x penalty x (1 - min(score, 10
   })
 })
 
-describe('service cost basis (the cheapest offer that can receive an order)', () => {
+describe('service cost basis (the most expensive offer that can receive an order: the price covers every failover)', () => {
   const po = (id: string, over: Partial<PricingOffer> = {}): PricingOffer => ({
     id, service_id: 's1', provider_id: 'p', provider_service_id: `ps-${id}`, cost_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: true,
     is_active: true, provider_service_active: true, provider_active: true, routing_enabled: true, ...over,
   })
 
-  it('is the minimum cost over the priceable offers, not the first or the primary', () => {
-    expect(serviceCostBasis([po('a', { cost_per_1000: 2 }), po('b', { cost_per_1000: 0.7 }), po('c', { cost_per_1000: 1.1 })])?.cost).toBe(0.7)
+  it('is the maximum cost over the priceable offers, not the first or the primary', () => {
+    expect(serviceCostBasis([po('a', { cost_per_1000: 2 }), po('b', { cost_per_1000: 0.7 }), po('c', { cost_per_1000: 1.1 })])?.cost).toBe(2)
   })
 
   it('limits are the smallest min and the largest max', () => {
@@ -127,7 +127,7 @@ describe('service cost basis (the cheapest offer that can receive an order)', ()
     ['provider not routing-enabled', { routing_enabled: false }],
   ] as [string, Partial<PricingOffer>][])('ignores an offer that cannot receive orders: %s', (_name, over) => {
     expect(isPriceableOffer(po('x', over))).toBe(false)
-    expect(serviceCostBasis([po('dead', { ...over, cost_per_1000: 0.01 }), po('ok', { cost_per_1000: 2 })])?.cost).toBe(2)
+    expect(serviceCostBasis([po('dead', { ...over, cost_per_1000: 99 }), po('ok', { cost_per_1000: 2 })])?.cost).toBe(2)
   })
 
   it('has no basis when nothing can receive an order', () => {
@@ -153,7 +153,7 @@ describe('service cost basis (the cheapest offer that can receive an order)', ()
     expect(serviceCostBasis(g.get('s2')!)).toBeNull()
   })
 
-  it('REQUIRED: linking a cheaper offer lowers the customer price (markup applied to the minimum)', () => {
+  it('REQUIRED: a cheaper linked offer keeps the price (it is margin); a dearer usable one lifts it to cover the failover', () => {
     const rules: PriceRule[] = [{ id: 'g', type: 'percentage', value: 150, priority: 0, is_active: true }]
     const price = (offers: PricingOffer[]): number => {
       const basis = serviceCostBasis(offers)!
@@ -162,9 +162,9 @@ describe('service cost basis (the cheapest offer that can receive an order)', ()
     }
     const first = po('a', { cost_per_1000: 1 })
     expect(price([first])).toBe(2.5)
-    expect(price([first, po('b', { cost_per_1000: 0.6 })])).toBe(1.5) // a cheaper offer was linked
-    expect(price([first, po('b', { cost_per_1000: 0.6, is_active: false })])).toBe(2.5) // ...and a suspended one does not count
-    expect(price([first, po('b', { cost_per_1000: 3 })])).toBe(2.5) // a dearer one does not raise it
+    expect(price([first, po('b', { cost_per_1000: 0.6 })])).toBe(2.5) // a cheaper offer was linked: same price, more margin
+    expect(price([first, po('b', { cost_per_1000: 3, is_active: false })])).toBe(2.5) // a suspended one does not count
+    expect(price([first, po('b', { cost_per_1000: 3 })])).toBe(7.5) // a dearer usable one: the price covers it
   })
 })
 

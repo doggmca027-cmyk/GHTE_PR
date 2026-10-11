@@ -105,6 +105,7 @@ Deno.serve(instrument('admin-providers', async (req: Request, { log }): Promise<
     const r = await call('admin_upsert_provider', {
       p_actor: userId, p_id: parsed.id, p_name: parsed.name, p_api_url: parsed.apiUrl, p_api_key_encrypted: apiKeyEncrypted,
       p_api_version: parsed.apiVersion, p_priority: parsed.priority, p_is_active: parsed.isActive, p_currency: parsed.currency,
+      p_catalog_mode: parsed.catalogMode,
     })
     if ('response' in r) return r.response
     const row = r.data as Record<string, unknown>

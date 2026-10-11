@@ -51,7 +51,7 @@ describe('parseProviderRequest', () => {
     expect(parseProviderRequest({ action: 'UPSERT_PROVIDER', name: 'Panel' })).toHaveProperty('error')
     expect(parseProviderRequest({ action: 'UPSERT_PROVIDER', apiUrl: 'https://p.example.com' })).toHaveProperty('error')
     expect(parseProviderRequest({ action: 'UPSERT_PROVIDER', name: ' Panel ', apiUrl: 'https://p.example.com/', apiKey: ` ${RAW_KEY} `, currency: 'usd', priority: 5 })).toEqual({
-      action: 'UPSERT_PROVIDER', id: null, name: 'Panel', apiUrl: 'https://p.example.com', apiKey: RAW_KEY, apiVersion: null, priority: 5, isActive: null, currency: 'USD',
+      action: 'UPSERT_PROVIDER', id: null, name: 'Panel', apiUrl: 'https://p.example.com', apiKey: RAW_KEY, apiVersion: null, priority: 5, isActive: null, currency: 'USD', catalogMode: null,
     })
   })
 
@@ -146,7 +146,7 @@ describe('provider SQL functions', () => {
   }, 180_000)
 
   it('only the service role can execute them', async () => {
-    for (const fn of ['admin_providers_list(uuid)', 'admin_upsert_provider(uuid, uuid, text, text, text, text, integer, boolean, text)', 'admin_set_provider_routing(uuid, uuid, boolean)']) {
+    for (const fn of ['admin_providers_list(uuid)', 'admin_upsert_provider(uuid, uuid, text, text, text, text, integer, boolean, text, text)', 'admin_set_provider_routing(uuid, uuid, boolean)']) {
       const g = (await rowsOf(`select has_function_privilege('anon', '${fn}', 'execute') a, has_function_privilege('authenticated', '${fn}', 'execute') u, has_function_privilege('service_role', '${fn}', 'execute') s`))[0]
       expect([g.a, g.u, g.s]).toEqual([false, false, true])
     }

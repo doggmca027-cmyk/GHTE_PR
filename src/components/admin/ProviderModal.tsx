@@ -91,6 +91,18 @@ export function ProviderModal({ provider, onClose, onSave }: {
           <input value={draft.priority} onChange={(e) => set({ priority: e.target.value.replace(/[^\d-]/g, '') })} inputMode="numeric" aria-invalid={Boolean(show('priority'))} className={input(show('priority'))} />
         </Field>
 
+        <Field
+          label="Каталог провайдера"
+          hint={draft.catalogMode === 'publish'
+            ? 'Все услуги провайдера сами появляются на витрине (как у основного провайдера).'
+            : 'На витрину попадают только услуги, которые вы привяжете к своим услугам в «Связках провайдеров». Каталог загружается для поиска.'}
+        >
+          <select value={draft.catalogMode} onChange={(e) => set({ catalogMode: e.target.value === 'publish' ? 'publish' : 'linked_only' })} className={input()}>
+            <option value="linked_only">Только привязанные услуги</option>
+            <option value="publish">Весь каталог на витрину</option>
+          </select>
+        </Field>
+
         <label className="flex items-center justify-between gap-3 rounded-2xl bg-surface-sub px-3.5 py-3 text-sm font-semibold text-content-primary">
           Включён
           <input type="checkbox" checked={draft.isActive} onChange={(e) => set({ isActive: e.target.checked })} className="h-5 w-5 accent-[var(--color-brand,#2563eb)]" />

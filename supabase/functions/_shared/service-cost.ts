@@ -1,8 +1,9 @@
 // What a storefront service costs us and what it can deliver, derived from its provider offers. Pure, no I/O.
 //
-// This is the single basis for pricing (sync-catalog and admin-pricing both call it): the base cost of a service is the CHEAPEST
-// offer that can actually receive an order, not the cost of the legacy services.primary_provider_service_id. Linking a cheaper
-// offer therefore lowers the base cost without touching primary / fallback.
+// This is the single basis for pricing (sync-catalog, admin-pricing and the bundle editor all call it): the base cost of a service is the
+// MOST EXPENSIVE offer that can actually receive an order. The storefront price then covers every provider of the bundle, so when the
+// router fails over to a pricier provider (the cheap one is out of balance) the order is still sold above its cost; and the router itself
+// always sends to the cheapest eligible provider, so a cheaper offer linked to a service raises our margin instead of lowering the price.
 
 /** One offer of a service together with the three facts that decide whether it can receive an order. */
 export interface PricingOffer {
@@ -32,7 +33,7 @@ export const isPriceableOffer = (o: Pick<PricingOffer, 'is_active' | 'provider_s
   o.is_active && o.provider_service_active && o.provider_active && o.routing_enabled
 
 export interface CostBasis {
-  /** The lowest cost_per_1000 among the priceable offers: the number the markup is applied to. */
+  /** The HIGHEST cost_per_1000 among the priceable offers: the number the markup is applied to (covers any failover target). */
   cost: number
   /** The smallest min and the largest max among the priceable offers: the widest range any of them can take. */
   minQuantity: number
@@ -50,7 +51,7 @@ export function serviceCostBasis(offers: PricingOffer[]): CostBasis | null {
   const usable = offers.filter(isPriceableOffer)
   if (usable.length === 0) return null
   return {
-    cost: Math.min(...usable.map((o) => Number(o.cost_per_1000))),
+    cost: Math.max(...usable.map((o) => Number(o.cost_per_1000))),
     minQuantity: Math.min(...usable.map((o) => o.min_quantity)),
     maxQuantity: Math.max(...usable.map((o) => o.max_quantity)),
     refillSupported: usable.every((o) => o.refill_supported),

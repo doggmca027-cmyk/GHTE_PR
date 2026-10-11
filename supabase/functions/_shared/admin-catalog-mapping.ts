@@ -40,6 +40,10 @@ export type ParsedMappingRequest =
   | ({ action: 'LIST_UNLINKED' } & ListUnlinkedInput)
   | ({ action: 'LINK' } & LinkInput)
   | ({ action: 'CREATE_AND_LINK' } & CreateAndLinkInput)
+  | { action: 'SEARCH_SERVICES'; search: string; limit: number }
+  | { action: 'LIST_SERVICE_OFFERS'; serviceId: string }
+  | { action: 'LINK_BY_EXTERNAL_ID'; serviceId: string; providerId: string; externalServiceId: string; routingScore: number | null }
+  | { action: 'UNLINK_OFFER'; offerId: string }
 
 type Obj = Record<string, unknown>
 
@@ -67,6 +71,33 @@ export function parseMappingRequest(body: unknown): ParsedMappingRequest | { err
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { error: 'Body must be a JSON object.' }
   const b = body as Obj
   const action = typeof b.action === 'string' ? b.action.toUpperCase() : ''
+
+  // ---- bundles (one storefront service sold through several providers) -----------------------------------------------------
+  if (action === 'SEARCH_SERVICES') {
+    const search = typeof b.search === 'string' ? b.search.trim() : ''
+    if (search.length < 1 || search.length > 100) return { error: 'search must be 1 to 100 characters.' }
+    const limit = optInt(b, 'limit', 1, 50)
+    if (failed(limit)) return limit
+    return { action, search, limit: limit ?? 20 }
+  }
+  if (action === 'LIST_SERVICE_OFFERS') {
+    if (!isUuid(b.serviceId)) return { error: 'serviceId must be a UUID.' }
+    return { action, serviceId: b.serviceId.toLowerCase() }
+  }
+  if (action === 'LINK_BY_EXTERNAL_ID') {
+    if (!isUuid(b.serviceId)) return { error: 'serviceId must be a UUID.' }
+    if (!isUuid(b.providerId)) return { error: 'providerId must be a UUID.' }
+    const ext = typeof b.externalServiceId === 'number' && Number.isInteger(b.externalServiceId) ? String(b.externalServiceId)
+      : typeof b.externalServiceId === 'string' ? b.externalServiceId.trim() : ''
+    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(ext)) return { error: 'externalServiceId must be the provider\'s service id (1 to 64 letters, digits, _ . -).' }
+    const routingScore = optInt(b, 'routingScore', 0, 1000)
+    if (failed(routingScore)) return routingScore
+    return { action, serviceId: b.serviceId.toLowerCase(), providerId: b.providerId.toLowerCase(), externalServiceId: ext, routingScore }
+  }
+  if (action === 'UNLINK_OFFER') {
+    if (!isUuid(b.offerId)) return { error: 'offerId must be a UUID.' }
+    return { action, offerId: b.offerId.toLowerCase() }
+  }
 
   if (action === 'LIST_UNLINKED') {
     if (!absent(b.providerId) && !isUuid(b.providerId)) return { error: 'providerId must be a UUID.' }

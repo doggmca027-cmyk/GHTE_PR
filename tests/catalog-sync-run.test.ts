@@ -191,38 +191,38 @@ describe('syncProviderCatalog (through the IProviderAdapter contract)', () => {
     expect(report).toMatchObject({ services: { updated: 1, repriced: 1 } })
   })
 
-  describe('dynamic pricing from the cheapest offer', () => {
-    it('a cheaper offer from another provider lowers the price although the primary offer did not change', async () => {
+  describe('dynamic pricing from the most expensive usable offer (cheaper offers are margin, failover never sells at a loss)', () => {
+    it('a cheaper offer from another provider keeps the price: the difference is margin', async () => {
       const store = new MemoryStore()
       store.addPS('1', { rate_per_1000: 1 }); store.addPS('b1', { provider_id: OTHER, rate_per_1000: 0.5 })
       store.addService('s1', 'ps-1', { customer_rate_per_1000: 2.5 }) // priced from the primary: 1 x 2.5
       store.addOffer('o1', 's1', 'ps-1'); store.addOffer('ob', 's1', 'ps-b1')
       const report = await run(store, [svc('1', { ratePer1000: 1 })])
-      expect(store.services.get('s1')!.customer_rate_per_1000).toBe(1.25) // 0.5 x 2.5
+      expect(store.services.get('s1')!.customer_rate_per_1000).toBe(2.5) // still 1 x 2.5: the router sends to 0.5, we keep the difference
       expect(store.services.get('s1')!.primary_provider_service_id).toBe('ps-1') // legacy column untouched
-      expect(report.services.repriced).toBe(1)
+      expect(report.services.repriced).toBe(0)
     })
 
-    it('the price follows when the dearer offer\'s panel cuts its price and becomes the cheapest', async () => {
+    it('the price follows the dearest usable offer: up to cover it, down when it gets cheaper', async () => {
       const store = new MemoryStore()
       store.addPS('1', { rate_per_1000: 1 }); store.addPS('b1', { provider_id: OTHER, rate_per_1000: 0.5 })
-      store.addService('s1', 'ps-1', { customer_rate_per_1000: 1.25 })
+      store.addService('s1', 'ps-1', { customer_rate_per_1000: 1.25 }) // priced from 0.5 under the old rule: too low for offer 1
       store.addOffer('o1', 's1', 'ps-1'); store.addOffer('ob', 's1', 'ps-b1')
       await run(store, [svc('1', { ratePer1000: 1 })])
-      expect(store.services.get('s1')!.customer_rate_per_1000).toBe(1.25)
-      await run(store, [svc('1', { ratePer1000: 0.7 })]) // -30%: accepted, 0.5 is still the cheapest
-      expect(store.services.get('s1')!.customer_rate_per_1000).toBe(1.25)
+      expect(store.services.get('s1')!.customer_rate_per_1000).toBe(2.5) // lifted: a failover to offer 1 must not sell at a loss
+      await run(store, [svc('1', { ratePer1000: 0.7 })]) // -30%: accepted, offer 1 is still the dearest
+      expect(store.services.get('s1')!.customer_rate_per_1000).toBe(1.75)
       store.ps.get('ps-b1')!.rate_per_1000 = 0.9
       store.offers.get('ob')!.cost_per_1000 = 0.9
-      await run(store, [svc('1', { ratePer1000: 0.7 })]) // now offer 1 (0.7) is the cheapest
-      expect(store.services.get('s1')!.customer_rate_per_1000).toBe(1.75)
+      await run(store, [svc('1', { ratePer1000: 0.7 })]) // now the other offer (0.9) is the dearest
+      expect(store.services.get('s1')!.customer_rate_per_1000).toBe(2.25)
     })
 
     it('offers that cannot receive orders are not a base: suspended, inactive provider service, provider routing off, provider off', async () => {
       const store = new MemoryStore()
       store.addPS('1', { rate_per_1000: 1 })
-      store.addPS('x1', { provider_id: OTHER, rate_per_1000: 0.1 })
-      store.addPS('x2', { provider_id: OTHER, rate_per_1000: 0.1, is_active: false })
+      store.addPS('x1', { provider_id: OTHER, rate_per_1000: 3 })
+      store.addPS('x2', { provider_id: OTHER, rate_per_1000: 3, is_active: false })
       store.addService('s1', 'ps-1', { customer_rate_per_1000: 99 })
       store.addOffer('o1', 's1', 'ps-1')
       store.addOffer('suspended', 's1', 'ps-x1', { is_active: false })
@@ -240,7 +240,7 @@ describe('syncProviderCatalog (through the IProviderAdapter contract)', () => {
       store.providers.get(OTHER)!.is_active = false
       expect(await priced()).toBe(2.5) // provider off
       store.providers.get(OTHER)!.is_active = true
-      expect(await priced()).toBe(0.25) // the 0.1 offer now counts
+      expect(await priced()).toBe(7.5) // the 3.00 offer now counts (and lifts the price to cover it)
     })
 
     it('limits never exceed what the usable offers can deliver (their union), keeping a narrower admin choice', async () => {

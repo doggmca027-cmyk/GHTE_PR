@@ -16,6 +16,8 @@ export interface UpsertProviderInput {
   priority: number | null
   isActive: boolean | null
   currency: string | null
+  /** 'publish': the whole catalogue goes on the storefront; 'linked_only': only panel services an admin links. null = keep. */
+  catalogMode: 'publish' | 'linked_only' | null
 }
 
 export type ParsedProviderRequest =
@@ -176,9 +178,15 @@ export function parseProviderRequest(body: unknown): ParsedProviderRequest | { e
       currency = b.currency.trim().toUpperCase()
     }
 
+    let catalogMode: 'publish' | 'linked_only' | null = null
+    if (!absent(b.catalogMode)) {
+      if (b.catalogMode !== 'publish' && b.catalogMode !== 'linked_only') return { error: 'catalogMode must be publish or linked_only.' }
+      catalogMode = b.catalogMode
+    }
+
     if (id === null && (name === null || apiUrl === null)) return { error: 'name and apiUrl are required for a new provider.' }
-    if (id !== null && [name, apiUrl, apiKey, apiVersion, priority, isActive, currency].every((v) => v === null)) return { error: 'Nothing to update.' }
-    return { action, id, name, apiUrl, apiKey, apiVersion, priority, isActive, currency }
+    if (id !== null && [name, apiUrl, apiKey, apiVersion, priority, isActive, currency, catalogMode].every((v) => v === null)) return { error: 'Nothing to update.' }
+    return { action, id, name, apiUrl, apiKey, apiVersion, priority, isActive, currency, catalogMode }
   }
 
   return { error: 'Unknown action.' }
@@ -200,6 +208,7 @@ export function toProviderDto(r: Record<string, unknown>) {
   return {
     id: r.id, name: r.name, slug: r.slug, apiUrl: r.api_url, apiVersion: r.api_version,
     isActive: r.is_active === true, routingEnabled: r.routing_enabled === true, priority: Number(r.priority),
+    catalogMode: r.catalog_mode === 'publish' ? 'publish' : 'linked_only',
     healthStatus: r.health_status, lastHealthCheck: r.last_health_check ?? null,
     balance: Number(r.provider_balance), currency: r.currency, lastBalanceSync: r.last_balance_sync ?? null,
     lowBalanceThreshold: Number(r.low_balance_threshold), targetTopupBalance: Number(r.target_topup_balance),

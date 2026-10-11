@@ -317,7 +317,7 @@ describe('the catalog sync publishes what it just stored', () => {
   it('the hourly run only syncs providers that sell; one with routing off is synced when it is asked for by id (source check)', () => {
     const src = fs.readFileSync(path.join(ROOT, 'supabase/functions/sync-catalog/index.ts'), 'utf8')
     expect(src).toContain("q = onlyProvider ? q.eq('id', onlyProvider) : q.eq('routing_enabled', true)")
-    expect(src).toContain("select('id, name, api_url, api_key_encrypted, routing_enabled')")
+    expect(src).toContain("select('id, name, api_url, api_key_encrypted, routing_enabled, catalog_mode')")
   })
 
   it('a store that cannot publish simply publishes nothing', async () => {

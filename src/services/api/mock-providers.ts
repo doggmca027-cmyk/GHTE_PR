@@ -7,6 +7,8 @@ import { AdminApiError } from './mock-admin'
 
 const DEMO_WALLET = `0:${'a1'.repeat(32)}`
 
+type CatalogMode = 'publish' | 'linked_only'
+
 export function createMockProviders() {
   const now = new Date().toISOString()
   const payout = { payoutNetwork: 'mainnet' as const, payoutAsset: 'TON' as const }
@@ -16,15 +18,15 @@ export function createMockProviders() {
     { id: 'demo-prov-3', name: 'New panel (demo)', isActive: true, routingEnabled: false, health: 'disabled', lastHealthCheck: null, balance: 0, currency: 'USD', lastBalanceSync: null, lowBalanceThreshold: 10, targetTopupBalance: 100, lowBalanceAlerted: false, reliabilityPenalty: 1, ...payout, payoutWallet: null, maxTopupPerTx: null, maxDailyTopup: null, topupUsedToday: 0 },
   ]
   // what admin-providers adds on top of the config view; keyed by provider id
-  const extra = new Map<string, { apiUrl: string; priority: number; hasApiKey: boolean; slug: string }>([
-    ['demo-prov-1', { apiUrl: 'https://secsers.example.com/api/v2', priority: 10, hasApiKey: true, slug: 'secsers-demo' }],
-    ['demo-prov-2', { apiUrl: 'https://backup.example.com/api/v2', priority: 5, hasApiKey: true, slug: 'backup-panel-demo' }],
-    ['demo-prov-3', { apiUrl: 'https://new-panel.example.com/api/v2', priority: 0, hasApiKey: false, slug: 'new-panel-demo' }],
+  const extra = new Map<string, { apiUrl: string; priority: number; hasApiKey: boolean; slug: string; catalogMode: CatalogMode }>([
+    ['demo-prov-1', { apiUrl: 'https://secsers.example.com/api/v2', priority: 10, hasApiKey: true, slug: 'secsers-demo', catalogMode: 'publish' as CatalogMode }],
+    ['demo-prov-2', { apiUrl: 'https://backup.example.com/api/v2', priority: 5, hasApiKey: true, slug: 'backup-panel-demo', catalogMode: 'linked_only' as CatalogMode }],
+    ['demo-prov-3', { apiUrl: 'https://new-panel.example.com/api/v2', priority: 0, hasApiKey: false, slug: 'new-panel-demo', catalogMode: 'linked_only' as CatalogMode }],
   ])
   const view = (p: ProviderConfigView): AdminProvider => {
     const x = extra.get(p.id)!
     return {
-      id: p.id, name: p.name, slug: x.slug, apiUrl: x.apiUrl, apiVersion: 'v2', isActive: p.isActive, routingEnabled: p.routingEnabled, priority: x.priority,
+      id: p.id, name: p.name, slug: x.slug, apiUrl: x.apiUrl, apiVersion: 'v2', isActive: p.isActive, routingEnabled: p.routingEnabled, priority: x.priority, catalogMode: x.catalogMode,
       healthStatus: p.health, lastHealthCheck: p.lastHealthCheck, balance: p.balance, currency: p.currency, lastBalanceSync: p.lastBalanceSync,
       lowBalanceThreshold: p.lowBalanceThreshold, targetTopupBalance: p.targetTopupBalance, reliabilityPenalty: p.reliabilityPenalty,
       hasApiKey: x.hasApiKey, createdAt: now, updatedAt: now,
@@ -45,7 +47,7 @@ export function createMockProviders() {
         if (taken(req.name)) throw new AdminApiError('conflict', 'A provider with this name already exists.')
         const id = `demo-prov-${providers.length + 1}`
         providers.push({ id, name: req.name, isActive: req.isActive ?? true, routingEnabled: false, health: 'disabled', lastHealthCheck: null, balance: 0, currency: req.currency ?? 'USD', lastBalanceSync: null, lowBalanceThreshold: 0, targetTopupBalance: 0, lowBalanceAlerted: false, reliabilityPenalty: 1, ...payout, payoutWallet: null, maxTopupPerTx: null, maxDailyTopup: null, topupUsedToday: 0 })
-        extra.set(id, { apiUrl: req.apiUrl, priority: req.priority ?? 0, hasApiKey: Boolean(req.apiKey), slug: req.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') })
+        extra.set(id, { apiUrl: req.apiUrl, priority: req.priority ?? 0, hasApiKey: Boolean(req.apiKey), slug: req.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), catalogMode: req.catalogMode ?? 'linked_only' })
         return { success: true, created: true, provider: view(providers[providers.length - 1]) }
       }
       const p = find(req.id)
@@ -56,6 +58,7 @@ export function createMockProviders() {
       }
       if (req.apiUrl !== undefined) x.apiUrl = req.apiUrl
       if (req.priority !== undefined) x.priority = req.priority
+      if (req.catalogMode !== undefined) x.catalogMode = req.catalogMode
       if (req.apiKey) x.hasApiKey = true // an absent key keeps the stored one
       if (req.isActive !== undefined) {
         p.isActive = req.isActive

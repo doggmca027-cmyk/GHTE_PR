@@ -13,6 +13,8 @@ export interface ProviderDraft {
   apiKey: string
   priority: string
   isActive: boolean
+  /** 'publish': the whole catalogue goes on the storefront; 'linked_only': only what is linked to storefront services. */
+  catalogMode: 'publish' | 'linked_only'
 }
 
 export interface ProviderDraftCheck {
@@ -21,9 +23,9 @@ export interface ProviderDraftCheck {
   request: UpsertProviderRequest | null
 }
 
-export const emptyDraft = (): ProviderDraft => ({ name: '', apiUrl: '', apiKey: '', priority: '0', isActive: true })
+export const emptyDraft = (): ProviderDraft => ({ name: '', apiUrl: '', apiKey: '', priority: '0', isActive: true, catalogMode: 'linked_only' })
 
-export const draftOf = (p: AdminProvider): ProviderDraft => ({ name: p.name, apiUrl: p.apiUrl, apiKey: '', priority: String(p.priority), isActive: p.isActive })
+export const draftOf = (p: AdminProvider): ProviderDraft => ({ name: p.name, apiUrl: p.apiUrl, apiKey: '', priority: String(p.priority), isActive: p.isActive, catalogMode: p.catalogMode })
 
 /** The frontend half of the URL rule (the server also refuses private hosts): https:// and a parsable URL. */
 export function checkProviderUrl(raw: string): string | null {
@@ -60,7 +62,8 @@ export function checkProviderDraft(draft: ProviderDraft, editing: AdminProvider 
   if (!editing) {
     return {
       errors,
-      request: { action: 'UPSERT_PROVIDER', name, apiUrl: draft.apiUrl.trim(), priority, isActive: draft.isActive, ...(key ? { apiKey: key } : {}) },
+      // linked_only is the server's default for a new provider: only a "publish" choice needs to travel
+      request: { action: 'UPSERT_PROVIDER', name, apiUrl: draft.apiUrl.trim(), priority, isActive: draft.isActive, ...(key ? { apiKey: key } : {}), ...(draft.catalogMode === 'publish' ? { catalogMode: 'publish' as const } : {}) },
     }
   }
 
@@ -70,6 +73,7 @@ export function checkProviderDraft(draft: ProviderDraft, editing: AdminProvider 
   if (draft.apiUrl.trim() !== editing.apiUrl) patch.apiUrl = draft.apiUrl.trim()
   if (priority !== editing.priority) patch.priority = priority
   if (draft.isActive !== editing.isActive) patch.isActive = draft.isActive
+  if (draft.catalogMode !== editing.catalogMode) patch.catalogMode = draft.catalogMode
   if (key) patch.apiKey = key
   return { errors, request: Object.keys(patch).length > 2 ? patch : null }
 }
