@@ -257,7 +257,7 @@ export type MatchResult =
   | { found: true; transfer: ChainTransfer }
   | { found: false; reason: 'not_found' | 'underpaid' | 'outside_window'; transfer?: ChainTransfer }
 
-const CLOCK_SKEW_SECONDS = 120
+export const CLOCK_SKEW_SECONDS = 120
 
 /**
  * Finds the transfer that pays `deposit`. ALL of these must hold:
@@ -284,25 +284,73 @@ export function findMatchingTransfer(transfers: ChainTransfer[], deposit: Deposi
   return { found: false, reason: 'underpaid', transfer: inWindow[0] }
 }
 
+/** Transactions per Toncenter page, and how many pages one lookup may walk (10 pages = 1,000 transactions inside the deposit's window). */
+export const TRANSFER_PAGE_SIZE = 100
+export const MAX_TRANSFER_PAGES = 10
+
+/**
+ * Incoming transfers of `account` between `sinceUtime` and `untilUtime`, newest first, walking pages until a short page says the window
+ * is covered (or `maxPages` is reached). The upper bound matters: only transfers inside a deposit's validity window can pay it, so
+ * dust sent to our public address AFTER that window cannot push the real payment off the page.
+ */
 export async function fetchRecentTransfers(opts: {
   baseUrl: string
   account: string
   sinceUtime: number
+  untilUtime?: number
   apiKey?: string
   fetchImpl?: typeof fetch
   timeoutMs?: number
+  maxPages?: number
 }): Promise<ChainTransfer[]> {
-  const url = new URL('/api/v3/transactions', opts.baseUrl)
-  url.searchParams.set('account', toRawAddress(opts.account))
-  url.searchParams.set('start_utime', String(Math.max(0, opts.sinceUtime)))
-  url.searchParams.set('limit', '100')
-  url.searchParams.set('sort', 'desc')
-  const res = await (opts.fetchImpl ?? fetch)(url, {
-    headers: { Accept: 'application/json', ...(opts.apiKey ? { 'X-API-Key': opts.apiKey } : {}) },
-    signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000),
-  })
-  if (!res.ok) throw new Error(`Toncenter responded with HTTP ${res.status}`)
-  return normalizeToncenterTransactions(await res.json())
+  const account = toRawAddress(opts.account)
+  const pages = Math.max(1, opts.maxPages ?? MAX_TRANSFER_PAGES)
+  const out: ChainTransfer[] = []
+  for (let page = 0; page < pages; page++) {
+    const url = new URL('/api/v3/transactions', opts.baseUrl)
+    url.searchParams.set('account', account)
+    url.searchParams.set('start_utime', String(Math.max(0, opts.sinceUtime)))
+    if (opts.untilUtime !== undefined) url.searchParams.set('end_utime', String(Math.max(0, opts.untilUtime)))
+    url.searchParams.set('limit', String(TRANSFER_PAGE_SIZE))
+    url.searchParams.set('offset', String(page * TRANSFER_PAGE_SIZE))
+    url.searchParams.set('sort', 'desc')
+    const res = await (opts.fetchImpl ?? fetch)(url, {
+      headers: { Accept: 'application/json', ...(opts.apiKey ? { 'X-API-Key': opts.apiKey } : {}) },
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000),
+    })
+    if (!res.ok) throw new Error(`Toncenter responded with HTTP ${res.status}`)
+    const json = await res.json()
+    const raw = (json as { transactions?: unknown })?.transactions
+    if (!Array.isArray(raw)) throw new Error('unexpected Toncenter response')
+    out.push(...normalizeToncenterTransactions(json))
+    if (raw.length < TRANSFER_PAGE_SIZE) break // a short page is the end of the window (counted BEFORE non-incoming rows are dropped)
+  }
+  return out
+}
+
+/**
+ * A few seconds of memory in front of a transfer lookup. Every customer polls for the same recipient address, so ten people
+ * waiting for their payment need one Toncenter request, not ten. A failure is never remembered.
+ */
+export function memoizeTransferLoader(
+  load: (sinceUtime: number, untilUtime?: number) => Promise<ChainTransfer[]>,
+  ttlMs = 3_000,
+  now: () => number = Date.now,
+  maxEntries = 50,
+): (sinceUtime: number, untilUtime?: number) => Promise<ChainTransfer[]> {
+  const cache = new Map<string, { at: number; value: Promise<ChainTransfer[]> }>()
+  return (sinceUtime, untilUtime) => {
+    const key = `${sinceUtime}:${untilUtime ?? ''}`
+    const hit = cache.get(key)
+    if (hit && now() - hit.at < ttlMs) return hit.value
+    const value = load(sinceUtime, untilUtime)
+    cache.set(key, { at: now(), value })
+    value.catch(() => {
+      if (cache.get(key)?.value === value) cache.delete(key)
+    })
+    while (cache.size > maxEntries) cache.delete(cache.keys().next().value as string)
+    return value
+  }
 }
 
 /**

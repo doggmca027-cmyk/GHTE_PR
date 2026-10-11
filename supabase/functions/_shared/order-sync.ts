@@ -127,6 +127,13 @@ export function groupOrdersByProvider<T extends OrderProviderRef>(orders: T[]): 
   return out
 }
 
+/** A provider's `remains` is believed only as a whole number between 0 and the ordered quantity. */
+export const saneRemains = (v: number | undefined, quantity: number): number | undefined =>
+  v !== undefined && Number.isInteger(v) && v >= 0 && v <= quantity ? v : undefined
+
+/** A provider's `start_count` is believed only as a non-negative whole number. */
+export const saneStartCount = (v: number | undefined): number | undefined => (v !== undefined && Number.isInteger(v) && v >= 0 ? v : undefined)
+
 // ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
@@ -348,7 +355,7 @@ export async function syncProviderOrders(
         case 'completed': {
           const path = stepsTo(order.status, 'completed')
           if (path === null) { stats.unchanged++; await ports.touch(order.id); return }
-          const fields: OrderFieldsPatch = { remains: 0, start_count: s.startCount ?? order.start_count, error_message: null }
+          const fields: OrderFieldsPatch = { remains: 0, start_count: saneStartCount(s.startCount) ?? order.start_count, error_message: null }
           let expect: OrderStatus[] = [order.status]
           for (let i = 0; i < path.length; i++) {
             const last = i === path.length - 1
@@ -370,7 +377,7 @@ export async function syncProviderOrders(
             // Without a trustworthy `remains` the refund cannot be computed: do nothing, flag it.
             throw new Error(`provider reported Partial with unusable remains (${String(remains)}) for quantity ${order.quantity}`)
           }
-          const refund = await ports.applyPartialRefund(order.id, remains, s.startCount ?? order.start_count)
+          const refund = await ports.applyPartialRefund(order.id, remains, saneStartCount(s.startCount) ?? order.start_count)
           stats.partial++
           stats.partialRefundedUnits += Math.round(refund * 10_000)
           await emit({ type: 'partial', order: { ...order, remains }, refundAmount: refund })
@@ -391,8 +398,14 @@ export async function syncProviderOrders(
           const path = stepsTo(order.status, s.status)
           const next: OrderFieldsPatch = {}
           if (path && path.length > 0) next.status = path[path.length - 1]
-          if (s.remains !== undefined && s.remains !== order.remains) next.remains = s.remains
-          if (s.startCount !== undefined && s.startCount !== order.start_count) next.start_count = s.startCount
+          // numbers from the panel are written only when they make sense (a hostile or buggy panel must not put -5 or 10^9 on an order)
+          const remains = saneRemains(s.remains, order.quantity)
+          const startCount = saneStartCount(s.startCount)
+          if ((s.remains !== undefined && remains === undefined) || (s.startCount !== undefined && startCount === undefined)) {
+            log.warn(`order-sync: order ${order.id}: the provider sent unusable progress (remains=${String(s.remains)}, start_count=${String(s.startCount)}); ignored`)
+          }
+          if (remains !== undefined && remains !== order.remains) next.remains = remains
+          if (startCount !== undefined && startCount !== order.start_count) next.start_count = startCount
           if (Object.keys(next).length === 0) {
             stats.unchanged++
             await ports.touch(order.id)

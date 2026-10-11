@@ -37,6 +37,8 @@ export interface SMMv2AdapterConfig {
   mockMode?: boolean
   /** Per-request timeout. Default 10 000 ms. */
   timeoutMs?: number
+  /** Largest response read for an ordinary call (default 2 MB). The catalogue call has its own, larger limit. */
+  maxResponseBytes?: number
   fetchImpl?: typeof fetch
   /** Clock for mock order progression (tests). */
   now?: () => number
@@ -59,6 +61,10 @@ export function createSMMv2Adapter(
 const DEFAULT_TIMEOUT_MS = 10_000
 /** A catalogue can be tens of thousands of services (RootPanel: 35,000, about 11 MB, ~20 s): the `services` call gets a longer leash than an order or a status. */
 const CATALOG_TIMEOUT_MS = 60_000
+
+/** An ordinary answer (balance, order, status of a few hundred orders) is a few KB; the catalogue of the biggest panel is ~11 MB. */
+const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+const CATALOG_MAX_RESPONSE_BYTES = 32 * 1024 * 1024
 
 /** Panel status word -> ours, through the shared table (providers/contract.ts). Unknown words are an error, never a status. */
 export function mapProviderStatus(raw: string): NormalizedOrderStatus {
@@ -163,6 +169,7 @@ export class SMMv2Adapter implements IProviderAdapter {
   private readonly apiUrl: string
   private readonly apiKey: string
   private readonly timeoutMs: number
+  private readonly maxResponseBytes: number
   private readonly fetchImpl: typeof fetch
   private readonly now: () => number
   private readonly capabilities: ProviderCapabilities
@@ -177,6 +184,7 @@ export class SMMv2Adapter implements IProviderAdapter {
     this.apiUrl = config.apiUrl
     this.apiKey = config.apiKey ?? ''
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    this.maxResponseBytes = config.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES
     this.fetchImpl = config.fetchImpl ?? ((...args) => fetch(...args))
     this.now = config.now ?? Date.now
     this.capabilities = { ...DEFAULT_SMM_V2_CAPABILITIES, ...config.capabilities }
@@ -361,10 +369,13 @@ export class SMMv2Adapter implements IProviderAdapter {
         },
         body,
         signal: controller.signal,
+        // a redirect would re-send the API key (in the body of a 307/308) to a host the admin never configured
+        redirect: 'error',
       })
       status = res.status
-      text = await res.text()
+      text = await this.readBounded(res, action, stateChanging, action === 'services' ? Math.max(this.maxResponseBytes, CATALOG_MAX_RESPONSE_BYTES) : this.maxResponseBytes)
     } catch (e) {
+      if (e instanceof SMMProviderError) throw e
       if (controller.signal.aborted || (e instanceof Error && e.name === 'AbortError')) {
         throw new SMMProviderError('timeout', `${action}: no response within ${timeoutMs}ms`, {
           retryable: !stateChanging,
@@ -396,6 +407,41 @@ export class SMMv2Adapter implements IProviderAdapter {
     }
     if (status >= 400) throw this.httpError(action, status, stateChanging)
     return data
+  }
+
+  /** The body as text, refusing to hold more than `limit` bytes: by its declared length first, then while it streams in. */
+  private async readBounded(res: Response, action: string, stateChanging: boolean, limit: number): Promise<string> {
+    const tooLarge = () => new SMMProviderError('invalid_response', `${action}: response is too large (over ${limit} bytes)`, { httpStatus: res.status, ambiguous: stateChanging })
+    const declared = Number(res.headers?.get?.('content-length'))
+    if (Number.isFinite(declared) && declared > limit) {
+      await res.body?.cancel().catch(() => {})
+      throw tooLarge()
+    }
+    if (!res.body) {
+      const whole = await res.text()
+      if (whole.length > limit) throw tooLarge()
+      return whole
+    }
+    const reader = res.body.getReader()
+    const chunks: Uint8Array[] = []
+    let total = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > limit) {
+        await reader.cancel().catch(() => {})
+        throw tooLarge()
+      }
+      chunks.push(value)
+    }
+    const all = new Uint8Array(total)
+    let at = 0
+    for (const c of chunks) {
+      all.set(c, at)
+      at += c.byteLength
+    }
+    return new TextDecoder().decode(all)
   }
 
   private httpError(action: string, status: number, stateChanging: boolean): SMMProviderError {

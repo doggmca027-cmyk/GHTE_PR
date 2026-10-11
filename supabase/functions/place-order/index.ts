@@ -12,6 +12,7 @@
 // Secrets: JWT_SECRET, PROVIDER_KEY_SECRET / PROVIDER_<NAME>_API_KEY, MOCK_MODE (dev only), ALLOWED_ORIGIN.
 // Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
+import { mockModeEnabled } from '../_shared/mock-guard.ts'
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { verifyJwt } from '../_shared/jwt.ts'
 import { deriveIdempotencyKey, parsePlaceOrderBody, validateQuantity } from '../_shared/order-validation.ts'
@@ -37,7 +38,7 @@ import {
 } from '../_shared/routing.ts'
 import { assertSwitchOn, loadPlatformSettings } from '../_shared/platform-settings.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
-import { corsHeaders, instrument } from '../_shared/http.ts'
+import { corsHeaders, instrument, readBoundedText } from '../_shared/http.ts'
 import { registerSecret } from '../_shared/logger.ts'
 import { createSMMv2Adapter } from '../_shared/smm-v2-adapter.ts'
 import type { IProviderServiceOffer } from '../_shared/types.ts'
@@ -89,8 +90,8 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   log.bind({ userId })
 
   // 2. Validate input.
-  const raw = await req.text()
-  if (raw.length > MAX_BODY_BYTES) return fail(413, 'invalid_input', 'Request too large.')
+  const raw = await readBoundedText(req, MAX_BODY_BYTES)
+  if (raw === null) return fail(413, 'invalid_input', 'Request too large.')
   let parsedJson: unknown
   try {
     parsedJson = JSON.parse(raw)
@@ -152,7 +153,7 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
     log.warn('no offer can take the order', { error_code: 'no_routable_offer', serviceId: input.serviceId })
     return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
   }
-  const mockMode = Deno.env.get('MOCK_MODE') === 'true'
+  const mockMode = mockModeEnabled(Deno.env)
 
   // 4. Execute. Failover to the next offer happens ONLY on a refusal before anything was sent or charged (no API key,
   //    provider balance cannot cover the cost). Once a request reached a provider, its outcome is final for this call:
@@ -170,7 +171,7 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
       registerSecret(apiKey)
       const adapter = createSMMv2Adapter(
         { id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey, correlationId, logger: log },
-        { MOCK_MODE: Deno.env.get('MOCK_MODE') },
+        { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined },
       )
       return executePlaceOrder(
         {

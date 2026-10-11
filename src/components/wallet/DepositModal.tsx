@@ -38,7 +38,7 @@ type Phase =
 const POLL_INTERVAL_MS = 3_000
 const POLL_TIMEOUT_MS = 150_000
 /** Errors that mean "the answer will not change by asking again". */
-const FINAL_ERRORS = new Set(['underpaid', 'payment_expired', 'tx_already_used', 'unauthorized', 'invalid_input'])
+const FINAL_ERRORS = new Set(['underpaid', 'payment_expired', 'tx_already_used', 'unauthorized', 'invalid_input', 'banned'])
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 

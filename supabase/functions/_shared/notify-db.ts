@@ -1,6 +1,7 @@
 // Binds telegram-notify to Supabase (users + notification_log). Used by Edge Functions.
 // Everything here is best effort: createNotifier()'s function NEVER throws or rejects.
 
+import { mockModeEnabled } from './mock-guard.ts'
 import { notifyUser, resolveLang, sendTelegramMessage, type NotifyEvent, type NotifyOutcome } from './telegram-notify.ts'
 
 /** The slice of the supabase-js client we use (kept structural so this file has no npm imports). */
@@ -27,7 +28,7 @@ export function createNotifier(
       const outcome = await notifyUser(
         {
           botToken: env.get('TELEGRAM_BOT_TOKEN'),
-          mock: env.get('MOCK_MODE') === 'true',
+          mock: mockModeEnabled(env),
           async claim(key) {
             const { error } = await db.from('notification_log').insert({ dedupe_key: key, user_id: userId, kind: event.type })
             // 23505 = already claimed. Any other DB error: do not send (a duplicate is worse than a miss).

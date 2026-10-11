@@ -22,6 +22,7 @@
 // ledger function are service-role only; clients can never reach them directly.
 // Secrets: JWT_SECRET. Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
+import { mockModeEnabled } from '../_shared/mock-guard.ts'
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
 import { mapTreasuryError, parseTreasuryRequest, paymentView } from '../_shared/admin-treasury.ts'
@@ -115,7 +116,7 @@ Deno.serve(instrument('admin-treasury', async (req: Request, { log }): Promise<R
       if (parsed.action === 'REJECT_PROPOSAL') return json({ success: true, result: data })
 
       const paymentId = String(data.payment_id)
-      if (Deno.env.get('MOCK_MODE') === 'true') {
+      if (mockModeEnabled(Deno.env)) {
         // Simulated end to end (no blockchain): broadcast, confirm, verify, complete.
         const sent = await executeProviderPayment(paymentId, ports, mockBroadcastToBlockchain())
         const done = sent.kind === 'broadcasted'

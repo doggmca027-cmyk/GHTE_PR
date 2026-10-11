@@ -14,6 +14,7 @@
 // Auth: header `x-cron-secret: $CRON_SECRET` or `Authorization: Bearer <service role key>`. Never callable by clients.
 // Secrets: CRON_SECRET, TELEGRAM_BOT_TOKEN, MOCK_MODE (dev only). Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
+import { mockModeEnabled } from '../_shared/mock-guard.ts'
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { isAuthorized } from '../_shared/catalog-sync.ts'
 import { recordHeartbeat } from '../_shared/heartbeat.ts'
@@ -48,7 +49,7 @@ Deno.serve(instrument('telegram-notifier', async (req: Request, { log }): Promis
   try {
     const stats = await runOutbox({
       botToken,
-      mock: Deno.env.get('MOCK_MODE') === 'true',
+      mock: mockModeEnabled(Deno.env),
       log: { info: (...a) => log.info(String(a[0])), warn: (...a) => log.warn(String(a[0])) },
       async claimBatch(limit) {
         const { data, error } = await db.rpc('claim_notification_batch', { p_limit: limit })

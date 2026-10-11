@@ -19,6 +19,7 @@
 //          SYNC_BATCH_SIZE (default 50). (RECONCILE_AFTER_MINUTES is no longer used: held orders are never auto-refunded.)
 // Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
+import { mockModeEnabled } from '../_shared/mock-guard.ts'
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { isAuthorized } from '../_shared/catalog-sync.ts'
 import {
@@ -140,7 +141,7 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
 
   const started = Date.now()
   const batchSize = Math.min(200, Math.max(1, Number(Deno.env.get('SYNC_BATCH_SIZE')) || DEFAULT_BATCH))
-  const mockMode = Deno.env.get('MOCK_MODE') === 'true'
+  const mockMode = mockModeEnabled(Deno.env)
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
   // Only one run at a time. A second copy (the scheduler fires every minute, a run can take longer) would poll the same orders and,
@@ -186,7 +187,7 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
             registerSecret(apiKey)
             map.set(provider.id, createSMMv2Adapter(
               { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log },
-              { MOCK_MODE: Deno.env.get('MOCK_MODE') },
+              { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined },
             ))
           }
           return map
@@ -201,6 +202,16 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
 
   async function runSync(): Promise<Response> {
   const funded = await runFundedStage()
+  // Orders that were charged but never handed to a provider (the function died between the payment and the claim): nothing was sent, so
+  // after an hour they are refunded. Younger ones are shown to the admin from 10 minutes (order_needs_reconciliation). Never throws.
+  try {
+    const { data: stale, error: staleError } = await db.rpc('expire_stale_paid_orders')
+    if (staleError) throw new Error(staleError.message)
+    const r = stale as { refunded?: number; failed?: number } | null
+    if (r && (Number(r.refunded) > 0 || Number(r.failed) > 0)) log.warn('stale paid orders handled', { refunded: Number(r.refunded), failed: Number(r.failed), error_code: 'stale_paid_orders' })
+  } catch (e) {
+    log.error('stale paid orders stage failed', { err: e, error_code: 'stale_paid_stage_failed' })
+  }
   // The work list comes from SQL (get_order_sync_batch): oldest-checked first; in-flight orders, recoverable held orders and owed
   // refunds; NOT providers in backoff, NOT orders waiting for a human.
   const { data: rows, error } = await db.rpc('get_order_sync_batch', { p_limit: batchSize })
@@ -259,7 +270,7 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
       registerSecret(apiKey)
       const adapter: IProviderAdapter = createSMMv2Adapter(
         { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log },
-        { MOCK_MODE: Deno.env.get('MOCK_MODE') },
+        { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined },
       )
       const result = await syncProviderOrders(batch, adapter, ports)
       mergeSyncStats(stats, result)

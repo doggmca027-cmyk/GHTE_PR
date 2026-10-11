@@ -18,6 +18,7 @@
 // Secrets: JWT_SECRET, PROVIDER_KEY_SECRET / PROVIDER_<NAME>_API_KEY, MOCK_MODE (dev only).
 // Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
+import { mockModeEnabled } from '../_shared/mock-guard.ts'
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, instrument, json } from '../_shared/http.ts'
 import { registerSecret } from '../_shared/logger.ts'
@@ -139,12 +140,12 @@ Deno.serve(instrument('admin-reconciliation', async (req: Request, { log, correl
     } catch (e) {
       log.error('provider key could not be decrypted', { err: e, error_code: 'key_decrypt_failed', providerId: provider.id })
     }
-    if (!apiKey && Deno.env.get('MOCK_MODE') !== 'true') {
+    if (!apiKey && !mockModeEnabled(Deno.env)) {
       await release('retry could not start: no provider API key configured')
       return fail(503, 'provider_unavailable', 'The provider is not configured, so the order cannot be retried right now.')
     }
     registerSecret(apiKey)
-    const adapter = createSMMv2Adapter({ id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey, correlationId, logger: log }, { MOCK_MODE: Deno.env.get('MOCK_MODE') })
+    const adapter = createSMMv2Adapter({ id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey, correlationId, logger: log }, { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined })
 
     const outcome = await executeRetry(
       { externalServiceId: details.externalServiceId, link: job.target_url, quantity: job.quantity },

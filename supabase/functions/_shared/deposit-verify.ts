@@ -14,7 +14,7 @@
 // Payments that reached our wallet but cannot be credited (underpaid, late, already used) are flagged as a
 // reconciliation case, so the money is never silently stuck.
 
-import { addressesEqual, findMatchingTransfer, formatBaseUnits, toRawAddress, type ChainTransfer } from './ton.ts'
+import { CLOCK_SKEW_SECONDS, addressesEqual, findMatchingTransfer, formatBaseUnits, toRawAddress, type ChainTransfer } from './ton.ts'
 
 export interface DepositRow {
   id: string
@@ -38,8 +38,10 @@ export interface VerifyPorts {
   completeDeposit(args: { depositId: string; txHash: string; senderRaw: string | null; receivedNano: bigint }): Promise<void>
   /** Opens (or refreshes) a reconciliation case for this deposit. Best effort. */
   flagIssue(depositId: string, reason: string): Promise<void>
-  /** Incoming transfers to our recipient since the deposit was created. Throws when the chain API is unreachable. */
-  loadTransfers(sinceUtime: number): Promise<ChainTransfer[]>
+  /** Incoming transfers to our recipient between the deposit's creation and the end of its window. Throws when the chain API is unreachable. */
+  loadTransfers(sinceUtime: number, untilUtime?: number): Promise<ChainTransfer[]>
+  /** Optional: is the customer banned? A banned customer's payment is not credited (it stays on chain for the admin to resolve). */
+  isBanned?(): Promise<boolean>
 }
 
 export type VerifyOutcome =
@@ -61,6 +63,7 @@ const reject = (httpStatus: number, error: string, message: string, flagged = fa
 export async function verifyDeposit(deposit: DepositRow, config: VerifyConfig, ports: VerifyPorts): Promise<VerifyOutcome> {
   if (deposit.status === 'completed') return { kind: 'completed', already: true }
   if (deposit.status === 'failed') return reject(409, 'deposit_failed', 'This deposit has failed.')
+  if (ports.isBanned && (await ports.isBanned())) return reject(403, 'banned', 'Your account is suspended.')
   if (deposit.asset !== 'TON') return reject(400, 'asset_unavailable', 'Only TON deposits can be verified right now.')
   if (deposit.network !== config.network) {
     return reject(409, 'network_mismatch', `This deposit was created for TON ${deposit.network} and cannot be paid on ${config.network}.`)
@@ -74,7 +77,7 @@ export async function verifyDeposit(deposit: DepositRow, config: VerifyConfig, p
   const amountBase = amountToNano(deposit.amount_crypto)
   let transfers: ChainTransfer[]
   try {
-    transfers = await ports.loadTransfers(createdAtSec - 300)
+    transfers = await ports.loadTransfers(createdAtSec - 300, validUntilSec + CLOCK_SKEW_SECONDS)
   } catch {
     return reject(502, 'chain_unavailable', 'Could not reach the TON network. Please try again shortly.')
   }

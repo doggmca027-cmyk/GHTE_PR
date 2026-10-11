@@ -102,6 +102,7 @@ export function parseAdminRequest(body: unknown): AdminRequest | { error: string
 export function mapTicketError(message: string): { status: number; error: string; message: string } {
   if (/^forbidden:|actor is not an admin/.test(message)) return { status: 403, error: 'forbidden', message: 'Admin access required.' }
   if (/feature_paused/.test(message)) return { status: 503, error: 'feature_paused', message: 'New tickets are temporarily unavailable. Please try again later.' }
+  if (/user_banned/.test(message)) return { status: 403, error: 'banned', message: 'Your account is suspended.' }
   if (/ticket_not_found/.test(message)) return { status: 404, error: 'ticket_not_found', message: 'Ticket not found.' }
   if (/order_not_found/.test(message)) return { status: 404, error: 'order_not_found', message: 'That order was not found.' }
   if (/ticket_closed/.test(message)) return { status: 409, error: 'ticket_closed', message: 'This ticket is closed.' }

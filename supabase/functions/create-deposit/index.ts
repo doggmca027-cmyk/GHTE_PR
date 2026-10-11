@@ -9,6 +9,7 @@
 // Secrets: JWT_SECRET, TON_RECIPIENT_ADDRESS, TON_NETWORK ('mainnet'|'testnet', default mainnet),
 //          MOCK_MODE (dev only: allows a fixed fallback rate), TON_USD_FALLBACK_RATE (dev only).
 
+import { mockModeEnabled } from '../_shared/mock-guard.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import type { Logger } from '../_shared/logger.ts'
 import { ServiceUnavailableError } from '../_shared/routing.ts'
@@ -44,7 +45,7 @@ async function getTonUsdRate(log: Logger): Promise<number | null> {
   } catch (e) {
     log.error('TON rate fetch failed', { err: e, error_code: 'rate_fetch_failed' })
   }
-  if (Deno.env.get('MOCK_MODE') === 'true') return Number(Deno.env.get('TON_USD_FALLBACK_RATE') ?? '5')
+  if (mockModeEnabled(Deno.env)) return Number(Deno.env.get('TON_USD_FALLBACK_RATE') ?? '5')
   // A recent (< 10 min) cached value is acceptable if the feed hiccups; anything older is not.
   return cachedRate && Date.now() - cachedRate.at < 10 * 60_000 ? cachedRate.rate : null
 }

@@ -12,7 +12,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { checkPostback } from '../_shared/ad-postback.ts'
-import { fail, instrument, json } from '../_shared/http.ts'
+import { fail, instrument, json, readBoundedText } from '../_shared/http.ts'
 import { registerSecret } from '../_shared/logger.ts'
 import { AD_PROTOCOLS, secretEnvName } from '../_shared/ad-postback.ts'
 
@@ -22,8 +22,8 @@ const MAX_BODY_BYTES = 4096
 async function collectParams(req: Request, url: URL): Promise<URLSearchParams | null> {
   const params = new URLSearchParams(url.searchParams)
   if (req.method !== 'POST') return params
-  const raw = await req.text()
-  if (raw.length > MAX_BODY_BYTES) return null
+  const raw = await readBoundedText(req, MAX_BODY_BYTES)
+  if (raw === null) return null
   if (!raw) return params
   const type = req.headers.get('content-type') ?? ''
   try {

@@ -13,8 +13,11 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
 import { fireAndForget } from '../_shared/telegram-notify.ts'
 import { createNotifier } from '../_shared/notify-db.ts'
-import { fetchRecentTransfers } from '../_shared/ton.ts'
+import { fetchRecentTransfers, memoizeTransferLoader, type ChainTransfer } from '../_shared/ton.ts'
 import { verifyDeposit } from '../_shared/deposit-verify.ts'
+
+// One lookup per recipient address and window is shared by every customer who is waiting (3 s), per function instance.
+const sharedLoaders = new Map<string, (since: number, until?: number) => Promise<ChainTransfer[]>>()
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -89,8 +92,19 @@ Deno.serve(instrument('verify-deposit', async (req: Request, { log }): Promise<R
   const baseUrl = Deno.env.get('TONCENTER_URL') ?? (network === 'testnet' ? 'https://testnet.toncenter.com' : 'https://toncenter.com')
   let outcome
   try {
+    const apiKey = Deno.env.get('TONCENTER_API_KEY')
+    const loaderKey = `${baseUrl}|${recipient}`
+    let loadShared = sharedLoaders.get(loaderKey)
+    if (!loadShared) {
+      loadShared = memoizeTransferLoader((sinceUtime, untilUtime) => fetchRecentTransfers({ baseUrl, account: recipient, sinceUtime, untilUtime, apiKey }))
+      sharedLoaders.set(loaderKey, loadShared)
+    }
     outcome = await verifyDeposit(deposit, { network, recipient }, {
-      loadTransfers: (sinceUtime) => fetchRecentTransfers({ baseUrl, account: recipient, sinceUtime, apiKey: Deno.env.get('TONCENTER_API_KEY') }),
+      async isBanned() {
+        const { data } = await db.from('users').select('is_banned').eq('id', userId).maybeSingle()
+        return data?.is_banned === true
+      },
+      loadTransfers: loadShared,
       async completeDeposit({ depositId, txHash, senderRaw, receivedNano }) {
         const { error: rpcError } = await db.rpc('complete_deposit', {
           p_deposit_id: depositId, p_tx_hash: txHash, p_sender_address: senderRaw, p_received_nano: receivedNano.toString(),

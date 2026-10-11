@@ -40,7 +40,7 @@ export interface PricingViewRow {
 
 /** Filters the pricing view by search text (every word must appear in the name or the category), platform and category, then cuts one page. */
 export function pagePricingRows<T extends PricingViewRow>(rows: T[], q: PricingQuery): { rows: T[]; total: number } {
-  const words = q.search.toLowerCase().split(/s+/).filter(Boolean)
+  const words = q.search.toLowerCase().split(/\s+/).filter(Boolean)
   const hits = rows.filter((r) => {
     if (q.platform && r.platform !== q.platform) return false
     if (q.categoryId && r.category_id !== q.categoryId) return false

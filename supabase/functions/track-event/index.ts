@@ -14,7 +14,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { cleanBatch, createRateLimiter, MAX_BODY_BYTES } from '../_shared/analytics.ts'
-import { authenticate, corsHeaders, fail, instrument, json } from '../_shared/http.ts'
+import { authenticate, corsHeaders, fail, instrument, json, readBoundedText } from '../_shared/http.ts'
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined
 
@@ -37,8 +37,8 @@ Deno.serve(instrument('track-event', async (req: Request, { log }): Promise<Resp
   if (!allow(userId)) return fail(429, 'rate_limited', 'Too many events.')
 
   // Cheap checks first; a malformed body is a 400, never an exception.
-  const raw = await req.text().catch(() => '')
-  if (raw.length > MAX_BODY_BYTES) return fail(413, 'too_large', 'Request too large.')
+  const raw = await readBoundedText(req, MAX_BODY_BYTES)
+  if (raw === null) return fail(413, 'too_large', 'Request too large.')
   let body: unknown
   try {
     body = JSON.parse(raw)

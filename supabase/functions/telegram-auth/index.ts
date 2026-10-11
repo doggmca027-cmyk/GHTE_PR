@@ -11,11 +11,12 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { TelegramAuthError, verifyInitData } from '../_shared/telegram.ts'
 import { signJwt } from '../_shared/jwt.ts'
 import { parseAdminIds } from '../_shared/admin.ts'
-import { corsHeaders, instrument } from '../_shared/http.ts'
+import { corsHeaders, instrument, readBoundedText } from '../_shared/http.ts'
 import { signupGate } from '../_shared/signup-gate.ts'
 
 const TOKEN_TTL_SECONDS = 60 * 60
 const MAX_INIT_DATA_LENGTH = 4096
+const MAX_BODY_BYTES = 8192
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -39,7 +40,10 @@ Deno.serve(instrument('telegram-auth', async (req: Request, { log }): Promise<Re
 
   let initData: unknown
   try {
-    ;({ initData } = await req.json())
+    // bounded while it is read: this entry point has no authentication in front of it
+    const raw = await readBoundedText(req, MAX_BODY_BYTES)
+    if (raw === null) return json({ error: 'invalid_body' }, 400)
+    ;({ initData } = JSON.parse(raw))
   } catch {
     return json({ error: 'invalid_body' }, 400)
   }

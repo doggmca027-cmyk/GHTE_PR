@@ -11,6 +11,8 @@
 // Secrets: CRON_SECRET, TELEGRAM_BOT_TOKEN (alerts), PROVIDER_KEY_SECRET / PROVIDER_<NAME>_API_KEY, MOCK_MODE (dev only).
 // Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
+import { mockModeEnabled } from '../_shared/mock-guard.ts'
+import { withWorkerLock } from '../_shared/worker-lock.ts'
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { isAuthorized } from '../_shared/catalog-sync.ts'
 import { recordHeartbeat } from '../_shared/heartbeat.ts'
@@ -50,8 +52,17 @@ Deno.serve(instrument('provider-health-monitor', async (req: Request, { log, cor
   // service_role: bypasses RLS for the provider updates and the log.
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
   const notify = createNotifier(db, Deno.env)
-  const mockMode = Deno.env.get('MOCK_MODE') === 'true'
+  const mockMode = mockModeEnabled(Deno.env)
 
+  // One health run at a time: a second copy would double the probes sent to providers that are already struggling, and race on alerts.
+  const locked = await withWorkerLock(db, 'provider-health-monitor', () => runChecks())
+  if (!locked.acquired) {
+    log.info('another health run holds the lease; skipping this one', { error_code: 'monitor_busy' })
+    return json({ success: true, skipped: 'another_run_in_progress' })
+  }
+  return locked.value
+
+  async function runChecks(): Promise<Response> {
   try {
     const report = await runHealthChecks<ProviderRow>({
       async listProviders() {
@@ -75,7 +86,7 @@ Deno.serve(instrument('provider-health-monitor', async (req: Request, { log, cor
         registerSecret(apiKey)
         const adapter = createSMMv2Adapter(
           { id: p.id, name: p.name, apiUrl: p.apiUrl, apiKey, timeoutMs: PING_TIMEOUT_MS, correlationId, logger: log },
-          { MOCK_MODE: Deno.env.get('MOCK_MODE') },
+          { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined },
         )
         try {
           return await adapter.getBalance()
@@ -183,5 +194,6 @@ Deno.serve(instrument('provider-health-monitor', async (req: Request, { log, cor
     log.error('run failed', { err: e, error_code: 'run_failed' })
     await recordHeartbeat(db, 'provider-health-monitor', { ok: false, startedAt: started, error: e }, log)
     return json({ error: 'server_error' }, 500)
+  }
   }
 }))

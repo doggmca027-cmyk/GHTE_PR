@@ -13,6 +13,8 @@
 //          PROVIDER_<NAME>_API_KEY (fallback plaintext key), MOCK_MODE (dev only).
 // Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
+import { mockModeEnabled } from '../_shared/mock-guard.ts'
+import { withWorkerLock } from '../_shared/worker-lock.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createSupabaseCatalogStore, must, type Db } from './store.ts'
 import { syncProviderCatalog } from '../_shared/catalog-sync-run.ts'
@@ -37,7 +39,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
 
 async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[], log: Logger, correlationId: string, republish?: { offset: number; limit: number }): Promise<ProviderSyncReport> {
-  const mockMode = Deno.env.get('MOCK_MODE') === 'true'
+  const mockMode = mockModeEnabled(Deno.env)
   const apiKey = await resolveProviderApiKey(provider, Deno.env)
   if (!apiKey && !mockMode) {
     const skipped = emptyProviderReport(provider.name)
@@ -50,7 +52,7 @@ async function syncProvider(db: Db, provider: ProviderRow, rules: PriceRule[], l
   // The only place that knows which concrete adapter talks to this panel; everything after it sees IProviderAdapter.
   const adapter: IProviderAdapter = createSMMv2Adapter(
     { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log },
-    { MOCK_MODE: Deno.env.get('MOCK_MODE') },
+    { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined },
   )
   return await syncProviderCatalog({ provider, adapter, store: createSupabaseCatalogStore(db), rules, log, republish })
 }
@@ -80,6 +82,17 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
 
   const started = Date.now()
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
+
+  // Only one catalogue run at a time: two copies would pull the same tens of thousands of services from the same panel and race on the
+  // same rows. A run that is killed frees the lease by itself (10 minutes), well before the next hourly run.
+  const locked = await withWorkerLock(db, 'sync-catalog', () => runCatalog(), 600)
+  if (!locked.acquired) {
+    log.info('another catalogue run holds the lease; skipping this one', { error_code: 'sync_busy' })
+    return json({ success: true, skipped: 'another_run_in_progress' })
+  }
+  return locked.value
+
+  async function runCatalog(): Promise<Response> {
   const reports: ProviderSyncReport[] = []
   try {
     let q = db.from('providers').select('id, name, api_url, api_key_encrypted, routing_enabled').eq('is_active', true).order('priority', { ascending: false })
@@ -119,4 +132,5 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
   log.info('catalog sync complete', { providers: reports.length, failed: reports.filter((r) => r.status === 'failed').length })
   await recordHeartbeat(db, 'sync-catalog', { ok: true, startedAt: started }, log)
   return json(summarize(reports))
+  }
 }))

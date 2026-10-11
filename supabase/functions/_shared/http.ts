@@ -73,10 +73,44 @@ export async function authenticate(req: Request, jwtSecret: string): Promise<str
   return claims?.sub ?? null
 }
 
-/** Reads and parses a small JSON body. Returns null on any problem. */
+/**
+ * Reads a request body as text, but never more than `maxBytes`: a declared length that is already too big is refused unread, and
+ * a stream that grows past the limit is cancelled at the limit instead of being buffered whole. Null means "too big or unreadable".
+ */
+export async function readBoundedText(req: Request, maxBytes: number): Promise<string | null> {
+  const declared = Number(req.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared > maxBytes) return null
+  if (!req.body) return ''
+  const reader = req.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {})
+        return null
+      }
+      chunks.push(value)
+    }
+  } catch {
+    return null
+  }
+  const all = new Uint8Array(total)
+  let at = 0
+  for (const c of chunks) {
+    all.set(c, at)
+    at += c.byteLength
+  }
+  return new TextDecoder().decode(all)
+}
+
+/** Reads and parses a small JSON body (bounded while it is read). Returns null on any problem. */
 export async function readJson(req: Request, maxBytes = 4096): Promise<unknown | null> {
-  const raw = await req.text()
-  if (raw.length > maxBytes) return null
+  const raw = await readBoundedText(req, maxBytes)
+  if (raw === null) return null
   try {
     return JSON.parse(raw)
   } catch {
