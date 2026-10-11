@@ -43,7 +43,7 @@ export function AnalyticsTab({ session }: { session: AuthSession }) {
 export function RangePicker({ value, onChange, onRefresh, refreshing }: { value: BiRange; onChange: (d: BiRange) => void; onRefresh: () => void; refreshing: boolean }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <div role="radiogroup" aria-label="Период" className="flex gap-1 rounded-2xl bg-white/70 p-1">
+      <div role="radiogroup" aria-label="Период" className="flex gap-1 rounded-2xl bg-surface/70 p-1">
         {BI_RANGES.map((d) => (
           <button key={d} type="button" role="radio" aria-checked={value === d} onClick={() => onChange(d)}
             className={cn('h-8 rounded-xl px-3 text-[13px] font-semibold', value === d ? 'bg-brand text-white shadow-sm' : 'text-content-secondary')}>
@@ -51,7 +51,7 @@ export function RangePicker({ value, onChange, onRefresh, refreshing }: { value:
           </button>
         ))}
       </div>
-      <button type="button" onClick={onRefresh} aria-label="Обновить" disabled={refreshing} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/70 text-content-secondary active:scale-90 disabled:opacity-50">
+      <button type="button" onClick={onRefresh} aria-label="Обновить" disabled={refreshing} className="flex h-9 w-9 items-center justify-center rounded-full bg-surface/70 text-content-secondary active:scale-90 disabled:opacity-50">
         <RefreshCw size={16} strokeWidth={1.75} className={cn(refreshing && 'animate-spin')} />
       </button>
     </div>

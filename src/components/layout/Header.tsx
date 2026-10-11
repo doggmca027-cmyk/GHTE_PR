@@ -1,5 +1,7 @@
-import { LifeBuoy, Plus, Settings, ShieldCheck } from 'lucide-react'
+import { LifeBuoy, Moon, Plus, Settings, ShieldCheck, Sun } from 'lucide-react'
 import { useT } from '@/i18n'
+import { haptic } from '@/lib/haptics'
+import { setThemePreference, useScheme } from '@/lib/theme'
 import { cn, formatMoney } from '@/lib/utils'
 import { Logo } from './Logo'
 
@@ -21,6 +23,8 @@ const iconButton =
 
 export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSupport, isAdmin = false, onOpenAdmin, active = null }: Props) {
   const t = useT()
+  const scheme = useScheme()
+  const dark = scheme === 'dark'
   return (
     <header className="flex shrink-0 items-center justify-between gap-2 px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
       <Logo />
@@ -29,7 +33,7 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSuppo
           type="button"
           onClick={onTopUp}
           aria-label={t('Top up balance')}
-          className="flex min-w-0 items-center gap-1.5 rounded-full border border-blue-100/70 bg-white py-1 pl-3 pr-1 shadow-sm"
+          className="flex min-w-0 items-center gap-1.5 rounded-full border border-blue-100/70 bg-surface py-1 pl-3 pr-1 shadow-sm"
         >
           <span className="truncate text-[13px] font-bold text-content-primary">{formatMoney(balance, currency)}</span>
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-white">
@@ -38,10 +42,18 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSuppo
         </button>
         <button
           type="button"
+          onClick={() => { haptic.select(); setThemePreference(dark ? 'light' : 'dark') }}
+          aria-label={dark ? t('Switch to light theme') : t('Switch to dark theme')}
+          className={cn(iconButton, 'bg-surface text-content-secondary')}
+        >
+          {dark ? <Sun size={18} strokeWidth={1.75} /> : <Moon size={18} strokeWidth={1.75} />}
+        </button>
+        <button
+          type="button"
           onClick={onOpenSupport}
           aria-label={t('Support')}
           aria-pressed={active === 'support'}
-          className={cn(iconButton, active === 'support' ? 'bg-brand text-white' : 'bg-white text-content-secondary')}
+          className={cn(iconButton, active === 'support' ? 'bg-brand text-white' : 'bg-surface text-content-secondary')}
         >
           <LifeBuoy size={18} strokeWidth={1.75} />
         </button>
@@ -50,7 +62,7 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSuppo
           onClick={onOpenSettings}
           aria-label={t('Settings')}
           aria-pressed={active === 'settings'}
-          className={cn(iconButton, active === 'settings' ? 'bg-brand text-white' : 'bg-white text-content-secondary')}
+          className={cn(iconButton, active === 'settings' ? 'bg-brand text-white' : 'bg-surface text-content-secondary')}
         >
           <Settings size={18} strokeWidth={1.75} />
         </button>
@@ -60,7 +72,7 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSuppo
             onClick={onOpenAdmin}
             aria-label={t('Admin')}
             aria-pressed={active === 'admin'}
-            className={cn(iconButton, active === 'admin' ? 'bg-brand text-white' : 'bg-white text-brand')}
+            className={cn(iconButton, active === 'admin' ? 'bg-brand text-white' : 'bg-surface text-brand')}
           >
             <ShieldCheck size={18} strokeWidth={1.75} />
           </button>

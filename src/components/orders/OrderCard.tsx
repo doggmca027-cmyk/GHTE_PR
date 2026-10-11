@@ -26,7 +26,7 @@ export function OrderCard({ order, onReportIssue }: { order: IOrderView; onRepor
   }
 
   return (
-    <article className="rounded-3xl border border-blue-100/70 bg-white p-4 shadow-card">
+    <article className="rounded-3xl border border-blue-100/70 bg-surface p-4 shadow-card">
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-light text-brand">
           <PlatformIcon platform={order.platform} size={20} />
@@ -48,7 +48,7 @@ export function OrderCard({ order, onReportIssue }: { order: IOrderView; onRepor
           type="button"
           onClick={handleCopy}
           aria-label={copied ? t('Link copied') : t('Copy link')}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-content-secondary shadow-sm active:scale-90"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface text-content-secondary shadow-sm active:scale-90"
         >
           {copied ? <Check size={14} strokeWidth={2} className="text-emerald-500" /> : <Copy size={14} strokeWidth={1.75} />}
         </button>

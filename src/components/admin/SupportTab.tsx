@@ -97,14 +97,14 @@ export function SupportTab({ session, onWaitingCount }: { session: AuthSession; 
       <div role="tablist" aria-label="Статус обращений" className="no-scrollbar -mx-5 flex gap-1.5 overflow-x-auto px-5 py-1">
         {filters.map(({ id, label, count }) => (
           <button key={id} role="tab" type="button" aria-selected={filter === id} onClick={() => { if (filter !== id) haptic.select(); setFilter(id) }}
-            className={cn('flex shrink-0 items-center gap-1.5 rounded-2xl px-3.5 py-2 text-[13px] font-semibold active:scale-95', filter === id ? 'bg-brand-light text-brand-text' : 'bg-white/70 text-content-secondary hover:bg-white')}>
+            className={cn('flex shrink-0 items-center gap-1.5 rounded-2xl px-3.5 py-2 text-[13px] font-semibold active:scale-95', filter === id ? 'bg-brand-light text-brand-text' : 'bg-surface/70 text-content-secondary hover:bg-surface')}>
             {label}
             {count ? <span className={cn('rounded-full px-1.5 text-[11px] font-bold', id === 'open' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600')}>{count}</span> : null}
           </button>
         ))}
       </div>
 
-      {!data && loading && <div className="space-y-3" role="status" aria-label="Загрузка обращений">{[0, 1, 2].map((i) => <div key={i} className="h-[84px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />)}</div>}
+      {!data && loading && <div className="space-y-3" role="status" aria-label="Загрузка обращений">{[0, 1, 2].map((i) => <div key={i} className="h-[84px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />)}</div>}
 
       {!data && error && (
         <Card className="space-y-3 text-center" role="alert">
@@ -132,7 +132,7 @@ export function TicketQueue({ tickets, onOpen }: { tickets: Ticket[]; onOpen: (t
     <ul className="space-y-2.5" aria-label="Обращения">
       {tickets.map((t) => (
         <li key={t.id}>
-          <button type="button" onClick={() => onOpen(t)} className={cn('w-full rounded-3xl border bg-white p-4 text-left shadow-card active:scale-[0.99]', t.status === 'open' ? 'border-rose-200' : 'border-blue-100/70')}>
+          <button type="button" onClick={() => onOpen(t)} className={cn('w-full rounded-3xl border bg-surface p-4 text-left shadow-card active:scale-[0.99]', t.status === 'open' ? 'border-rose-200' : 'border-blue-100/70')}>
             <div className="flex items-start justify-between gap-2">
               <p className="line-clamp-2 break-words text-[15px] font-bold leading-snug text-content-primary">{t.subject}</p>
               <StatusPill status={t.status} viewer="admin" />

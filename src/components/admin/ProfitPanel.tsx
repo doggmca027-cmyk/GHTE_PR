@@ -28,7 +28,7 @@ export function ProfitPanel({ session, refreshKey }: { session: AuthSession; ref
             onClick={() => { if (range !== key) { haptic.select(); setRange(key) } }}
             className={cn(
               'shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors active:scale-95',
-              range === key ? 'bg-brand text-white' : 'bg-white/70 text-content-secondary',
+              range === key ? 'bg-brand text-white' : 'bg-surface/70 text-content-secondary',
             )}
           >
             {label}
@@ -38,7 +38,7 @@ export function ProfitPanel({ session, refreshKey }: { session: AuthSession; ref
 
       {!data && loading && (
         <div className="grid grid-cols-2 gap-3">
-          {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-[92px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />)}
+          {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-[92px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />)}
         </div>
       )}
 

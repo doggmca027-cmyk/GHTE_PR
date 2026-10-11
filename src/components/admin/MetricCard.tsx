@@ -24,7 +24,7 @@ export function MetricCard({ label, value, hint, tone = 'default', onClick }: Pr
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={cn(
-        'rounded-3xl border border-blue-100/70 bg-white p-4 text-left shadow-card',
+        'rounded-3xl border border-blue-100/70 bg-surface p-4 text-left shadow-card',
         onClick && 'transition-transform active:scale-[0.98]',
         tone === 'warning' && 'border-amber-200 bg-amber-50/40',
       )}

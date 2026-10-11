@@ -63,7 +63,7 @@ export function TicketThread({ ticket, viewer, onSend, onBack, actions }: Props)
     <section aria-label={t('Ticket: {subject}', { subject: ticket.subject })} className="flex flex-col gap-3">
       <div className="flex items-start gap-2">
         {onBack && (
-          <button type="button" onClick={onBack} aria-label={t('Back to tickets')} className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-100/70 bg-white text-content-secondary shadow-sm active:scale-90">
+          <button type="button" onClick={onBack} aria-label={t('Back to tickets')} className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-100/70 bg-surface text-content-secondary shadow-sm active:scale-90">
             <ArrowLeft size={18} strokeWidth={1.75} />
           </button>
         )}
@@ -93,7 +93,7 @@ export function TicketThread({ ticket, viewer, onSend, onBack, actions }: Props)
           const mine = viewer === 'admin' ? m.isAdmin : !m.isAdmin
           return (
             <li key={m.id} className={cn('flex flex-col', mine ? 'items-end' : 'items-start')}>
-              <div className={cn('max-w-[85%] whitespace-pre-wrap break-words rounded-3xl px-4 py-2.5 text-sm', mine ? 'rounded-br-lg bg-brand text-white' : 'rounded-bl-lg border border-blue-100/70 bg-white text-content-primary')}>
+              <div className={cn('max-w-[85%] whitespace-pre-wrap break-words rounded-3xl px-4 py-2.5 text-sm', mine ? 'rounded-br-lg bg-brand text-white' : 'rounded-bl-lg border border-blue-100/70 bg-surface text-content-primary')}>
                 {m.text}
               </div>
               <span className="mt-0.5 px-2 text-[11px] text-content-muted">{m.isAdmin ? t('Support') : viewer === 'admin' ? t('Customer') : t('You')} · {timeAgo(m.createdAt)}</span>
@@ -115,7 +115,7 @@ export function TicketThread({ ticket, viewer, onSend, onBack, actions }: Props)
             placeholder={viewer === 'admin' ? t('Reply to the customer…') : t('Write a message…')}
             onChange={(e) => { setText(e.target.value); if (error) setError(null) }}
             aria-invalid={Boolean(error)}
-            className={cn('w-full resize-none rounded-2xl border bg-white px-4 py-3 text-[15px] outline-none transition-colors placeholder:text-content-muted focus:border-brand disabled:opacity-60', error ? 'border-rose-300' : 'border-blue-100/70')}
+            className={cn('w-full resize-none rounded-2xl border bg-surface px-4 py-3 text-[15px] outline-none transition-colors placeholder:text-content-muted focus:border-brand disabled:opacity-60', error ? 'border-rose-300' : 'border-blue-100/70')}
           />
           {error && (
             <p role="alert" className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-rose-600"><TriangleAlert size={14} strokeWidth={1.75} /> {error}</p>

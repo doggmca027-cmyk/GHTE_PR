@@ -166,9 +166,9 @@ export function DepositModal({ session, wallet, initialAmount, onClose, onCredit
 
   return (
     <div className="absolute inset-0 z-50 flex items-end animate-fade-in" role="dialog" aria-modal="true" aria-label={t('Top up balance')}>
-      <button type="button" aria-label={t('Close')} onClick={() => !busy && onClose()} className="absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]" />
+      <button type="button" aria-label={t('Close')} onClick={() => !busy && onClose()} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
 
-      <div className="relative z-10 max-h-[94%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-white px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]">
+      <div className="relative z-10 max-h-[94%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]">
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-blue-100" />
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-extrabold text-content-primary">{t('Top up balance')}</h2>
@@ -234,7 +234,7 @@ export function DepositModal({ session, wallet, initialAmount, onClose, onCredit
                 disabled={busy}
                 onChange={(e) => { setAmountText(e.target.value.replace(/[^\d.]/g, '').slice(0, 9)); if (phase.kind === 'error') setPhase({ kind: 'form' }) }}
                 aria-invalid={amountError !== null}
-                className={cn('w-full rounded-2xl border bg-surface-sub px-4 py-3.5 text-[15px] font-medium outline-none transition-colors placeholder:text-content-muted focus:bg-white', amountError ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')}
+                className={cn('w-full rounded-2xl border bg-surface-sub px-4 py-3.5 text-[15px] font-medium outline-none transition-colors placeholder:text-content-muted focus:bg-surface', amountError ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')}
               />
               {amountError && <p className="mt-1.5 text-xs font-medium text-rose-500">{tm(amountError)}</p>}
             </label>
@@ -294,7 +294,7 @@ function AssetOption({ label, selected, disabled, badge, onSelect }: { label: st
       onClick={() => { haptic.select(); onSelect() }}
       className={cn(
         'flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold transition-all active:scale-95',
-        selected ? 'border-brand bg-brand-light text-brand-text' : 'border-blue-100/70 bg-white text-content-secondary',
+        selected ? 'border-brand bg-brand-light text-brand-text' : 'border-blue-100/70 bg-surface text-content-secondary',
         disabled && 'cursor-not-allowed opacity-50',
       )}
     >

@@ -57,7 +57,7 @@ describe('the sticky search bar', () => {
     expect(bar.className).toContain('sticky')
     expect(bar.className).toContain('top-0')
     expect(bar.className).toContain('z-10')
-    expect(bar.className).toMatch(/bg-\[#EDF4FD\]/)
+    expect(bar.className).toMatch(/\bbg-screen\b/)
     expect(bar.contains(input())).toBe(true)
     expect(bar.compareDocumentPosition(host.querySelector('ul')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // touch friendly: a 16 px font (iOS does not zoom the page on focus) and a tall field

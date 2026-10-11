@@ -41,7 +41,7 @@ export function ReconciliationTab({ session, onProblemCount, onOpenPayments }: P
     return (
       <div className="space-y-3">
         {[0, 1].map((i) => (
-          <div key={i} className="h-[190px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />
+          <div key={i} className="h-[190px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />
         ))}
       </div>
     )
@@ -134,7 +134,7 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
   const style = SEVERITY[severity]
   const needsProviderId = isProcessing === true
   return (
-    <article className={cn('rounded-3xl border bg-white p-4 shadow-card', style.border)}>
+    <article className={cn('rounded-3xl border bg-surface p-4 shadow-card', style.border)}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-1.5">
@@ -210,7 +210,7 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
                 value={providerId}
                 onChange={(e) => setProviderId(e.target.value)}
                 placeholder="например 90210"
-                className="mt-1 w-full rounded-xl border border-blue-100/70 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-brand"
+                className="mt-1 w-full rounded-xl border border-blue-100/70 bg-surface px-3 py-2.5 text-sm font-medium outline-none focus:border-brand"
               />
             </label>
           )}
@@ -220,7 +220,7 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder={needsProviderId ? 'Проверено в панели провайдера' : 'Решено вне приложения'}
-              className="mt-1 w-full rounded-xl border border-blue-100/70 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-brand"
+              className="mt-1 w-full rounded-xl border border-blue-100/70 bg-surface px-3 py-2.5 text-sm font-medium outline-none focus:border-brand"
             />
           </label>
           <div className="flex gap-2">
@@ -236,7 +236,7 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
             >
               Подтвердить
             </Button>
-            <button type="button" onClick={() => setResolving(false)} className="h-11 flex-1 rounded-2xl bg-white text-sm font-semibold text-content-secondary active:scale-95">
+            <button type="button" onClick={() => setResolving(false)} className="h-11 flex-1 rounded-2xl bg-surface text-sm font-semibold text-content-secondary active:scale-95">
               Отмена
             </button>
           </div>
@@ -250,7 +250,7 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
               onClick={confirm === 'refund' ? () => void run(() => resolveCaseRefund(session, kase.id, text || undefined), 'Деньги за заказ возвращены клиенту.') : () => ask('refund')}
               className={cn(
                 'min-h-11 rounded-2xl px-1 text-[13px] font-bold leading-tight transition-all active:scale-95 disabled:opacity-50',
-                confirm === 'refund' ? 'bg-rose-600 text-white' : 'border border-rose-200 bg-white text-rose-600',
+                confirm === 'refund' ? 'bg-rose-600 text-white' : 'border border-rose-200 bg-surface text-rose-600',
               )}
             >
               {confirm === 'refund' ? `Подтвердить ${usd(order.chargeAmount)}` : 'Вернуть деньги'}
@@ -263,7 +263,7 @@ export function CaseCard({ kase, severity, session, onDone, onFailed, onOpenPaym
               onClick={confirm === 'retry' ? () => void run(() => retryCase(session, kase.id), 'Заказ отправлен провайдеру повторно.') : () => ask('retry')}
               className={cn(
                 'flex min-h-11 items-center justify-center gap-1 rounded-2xl px-1 text-[13px] font-bold leading-tight transition-all active:scale-95 disabled:opacity-50',
-                confirm === 'retry' ? 'bg-amber-500 text-white' : 'border border-amber-300 bg-white text-amber-700',
+                confirm === 'retry' ? 'bg-amber-500 text-white' : 'border border-amber-300 bg-surface text-amber-700',
               )}
             >
               <RotateCw size={14} strokeWidth={2} className={cn(busy && 'animate-spin')} /> {confirm === 'retry' ? 'Подтвердить' : 'Повторить'}

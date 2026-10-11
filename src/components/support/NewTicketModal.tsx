@@ -19,7 +19,7 @@ interface Props {
 }
 
 const field = (invalid: boolean) =>
-  cn('mt-1.5 w-full rounded-2xl border bg-surface-sub px-4 py-3 text-[15px] font-medium text-content-primary outline-none transition-colors placeholder:text-content-muted focus:bg-white disabled:opacity-60', invalid ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')
+  cn('mt-1.5 w-full rounded-2xl border bg-surface-sub px-4 py-3 text-[15px] font-medium text-content-primary outline-none transition-colors placeholder:text-content-muted focus:bg-surface disabled:opacity-60', invalid ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')
 
 /** New ticket form: subject, message and (optionally) the order it is about. */
 export function NewTicketModal({ session, orderId = null, onClose, onCreate }: Props) {
@@ -63,10 +63,10 @@ export function NewTicketModal({ session, orderId = null, onClose, onCreate }: P
 
   return (
     <div role="dialog" aria-modal="true" aria-label={t('New support ticket')} className="absolute inset-0 z-50 flex items-end animate-fade-in">
-      <button type="button" aria-label={t('Close')} onClick={() => !busy && onClose()} className="absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]" />
+      <button type="button" aria-label={t('Close')} onClick={() => !busy && onClose()} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
       <form
         onSubmit={(e) => { e.preventDefault(); void submit() }}
-        className="relative z-10 max-h-[92%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-white px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]"
+        className="relative z-10 max-h-[92%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]"
       >
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-blue-100" />
         <div className="mb-3 flex items-center justify-between">

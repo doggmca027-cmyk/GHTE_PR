@@ -1,5 +1,6 @@
 import { MOCK_CATALOG, MOCK_PLATFORMS } from '@/constants/dev'
 import type { PlatformInfo } from '@/constants/platforms'
+import { serviceMatches, serviceSearchFilter, type SearchTerm } from '@/lib/service-search'
 import type { PlatformCategory } from '@/types/platform'
 import type { AuthSession } from '@/services/api/auth'
 import type { ICatalogService, ICategory, Platform, ServiceAttributes } from '@/types/catalog'
@@ -94,6 +95,32 @@ export async function fetchCategories(session: AuthSession): Promise<ICategory[]
     session.token,
   )
   return rows.map(categoryFromRow)
+}
+
+/**
+ * One page of the active services of these categories whose name, description or country match the terms (all of them). The
+ * database does the filtering, so the whole catalogue is searched, not only the pages that were opened.
+ */
+export async function searchServices(
+  session: AuthSession, categoryIds: readonly string[], terms: readonly SearchTerm[], offset = 0, limit = SERVICES_PAGE,
+): Promise<ICatalogService[]> {
+  if (categoryIds.length === 0 || terms.length === 0) return []
+  if (session.isMock) {
+    const scope = new Set(categoryIds)
+    return MOCK_CATALOG.services
+      .filter((s) => scope.has(s.categoryId) && serviceMatches(s, terms))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.ratePer1000 - b.ratePer1000 || a.name.localeCompare(b.name))
+      .slice(offset, offset + limit)
+  }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
+  const filter = serviceSearchFilter(terms)
+  if (!filter) return []
+  const ids = categoryIds.map((id) => encodeURIComponent(id)).join(',')
+  const rows = await rest<ServiceRow[]>(
+    `services?select=${SERVICE_COLUMNS.join(',')}&category_id=in.(${ids})&is_active=eq.true&and=${encodeURIComponent(filter)}&order=sort_order,customer_rate_per_1000,id&limit=${limit}&offset=${offset}`,
+    session.token,
+  )
+  return rows.map(serviceFromRow)
 }
 
 /** One page of a category's active services cheapest first (a stable order, so pages never overlap). */

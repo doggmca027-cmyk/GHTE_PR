@@ -46,7 +46,7 @@ export function ProviderModal({ provider, onClose, onSave }: {
       <form
         onSubmit={(e) => { e.preventDefault(); void save() }}
         autoComplete="off"
-        className="max-h-[92vh] w-full max-w-md space-y-3 overflow-y-auto rounded-3xl bg-white p-4 shadow-card"
+        className="max-h-[92vh] w-full max-w-md space-y-3 overflow-y-auto rounded-3xl bg-surface p-4 shadow-card"
       >
         <h3 className="text-[15px] font-bold text-content-primary">{editing ? `Изменить: ${provider.name}` : 'Добавить провайдера'}</h3>
 
@@ -114,7 +114,7 @@ export function ProviderModal({ provider, onClose, onSave }: {
 }
 
 const input = (error?: string) =>
-  cn('mt-1 w-full rounded-xl border bg-white px-3 py-2.5 text-sm font-medium outline-none', error ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')
+  cn('mt-1 w-full rounded-xl border bg-surface px-3 py-2.5 text-sm font-medium outline-none', error ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')
 
 function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactNode }) {
   return (

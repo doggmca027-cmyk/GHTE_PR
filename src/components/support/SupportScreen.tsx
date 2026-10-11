@@ -94,7 +94,7 @@ export function SupportScreen({ session, request, onRequestHandled }: Props) {
         </button>
       </div>
 
-      {list.status === 'loading' && <div className="space-y-3" role="status" aria-label={t('Loading tickets')}>{[0, 1].map((i) => <div key={i} className="h-[88px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />)}</div>}
+      {list.status === 'loading' && <div className="space-y-3" role="status" aria-label={t('Loading tickets')}>{[0, 1].map((i) => <div key={i} className="h-[88px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />)}</div>}
 
       {list.status === 'error' && (
         <Card className="space-y-3 text-center">
@@ -143,7 +143,7 @@ export function TicketGroup({ title, tickets, onOpen }: { title: string; tickets
       <ul className="space-y-2.5">
         {tickets.map((tk) => (
           <li key={tk.id}>
-            <button type="button" onClick={() => onOpen(tk)} className="w-full rounded-3xl border border-blue-100/70 bg-white p-4 text-left shadow-card active:scale-[0.99]">
+            <button type="button" onClick={() => onOpen(tk)} className="w-full rounded-3xl border border-blue-100/70 bg-surface p-4 text-left shadow-card active:scale-[0.99]">
               <div className="flex items-start justify-between gap-2">
                 <p className="line-clamp-2 break-words text-[15px] font-bold leading-snug text-content-primary">{tk.subject}</p>
                 <StatusPill status={tk.status} />

@@ -21,7 +21,7 @@ const AdminScreen = lazy(() => import('@/components/admin/AdminScreen').then((m)
 
 function FullScreen({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-[100dvh] items-center justify-center bg-gradient-to-b from-[#EBF3FE] to-[#F8FAFC] px-5">
+    <div className="flex h-[100dvh] items-center justify-center bg-gradient-to-b from-screen to-screen-end px-5">
       {children}
     </div>
   )

@@ -11,7 +11,7 @@ import { createPromo, listPromos, setPromoActive } from '@/services/api/admin'
 import type { PromoView } from '@/types/admin'
 
 const EMPTY: PromoForm = { code: '', type: 'percentage', value: '', maxUses: '', expires: '' }
-const fieldCls = 'mt-1 w-full rounded-xl border border-blue-100/70 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-brand'
+const fieldCls = 'mt-1 w-full rounded-xl border border-blue-100/70 bg-surface px-3 py-2.5 text-sm font-medium outline-none focus:border-brand'
 
 export function PromosTab({ session }: { session: AuthSession }) {
   const { data, error, loading, reload } = useLoader(() => listPromos(session), [session.token, session.isMock])
@@ -98,7 +98,7 @@ export function PromosTab({ session }: { session: AuthSession }) {
         </Button>
       </Card>
 
-      {!data && loading && [0, 1].map((i) => <div key={i} className="h-[90px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />)}
+      {!data && loading && [0, 1].map((i) => <div key={i} className="h-[90px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />)}
       {!data && !loading && (
         <Card className="space-y-3 text-center">
           <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
@@ -110,7 +110,7 @@ export function PromosTab({ session }: { session: AuthSession }) {
       {data?.map((p) => {
         const info = describePromo(p)
         return (
-          <article key={p.id} className={cn('rounded-3xl border bg-white p-4 shadow-card', info.live ? 'border-blue-100/70' : 'border-slate-200 opacity-80')}>
+          <article key={p.id} className={cn('rounded-3xl border bg-surface p-4 shadow-card', info.live ? 'border-blue-100/70' : 'border-slate-200 opacity-80')}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="font-mono text-[15px] font-bold tracking-wide text-content-primary">{p.code}</h3>
@@ -120,7 +120,7 @@ export function PromosTab({ session }: { session: AuthSession }) {
               <button type="button" role="switch" aria-checked={p.isActive} aria-label={`${p.isActive ? 'Выключить' : 'Включить'} ${p.code}`} disabled={busy}
                 onClick={() => { haptic.select(); void toggle(p) }}
                 className={cn('relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50', p.isActive ? 'bg-brand' : 'bg-slate-300')}>
-                <span className={cn('absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform', p.isActive && 'translate-x-5')} />
+                <span className={cn('absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-surface shadow transition-transform', p.isActive && 'translate-x-5')} />
               </button>
             </div>
           </article>

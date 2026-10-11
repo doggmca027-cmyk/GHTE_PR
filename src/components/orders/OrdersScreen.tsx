@@ -75,7 +75,7 @@ export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
           onClick={() => { haptic.tap(); void load() }}
           disabled={refreshing}
           aria-label={t('Refresh orders')}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-100/70 bg-white text-content-secondary shadow-sm active:scale-90"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-100/70 bg-surface text-content-secondary shadow-sm active:scale-90"
         >
           <RefreshCw size={18} strokeWidth={1.75} className={cn(refreshing && 'animate-spin')} />
         </button>
@@ -91,7 +91,7 @@ export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
             onClick={() => { if (filter !== id) haptic.select(); setFilter(id) }}
             className={cn(
               'shrink-0 rounded-2xl px-3.5 py-2 text-[13px] font-semibold transition-colors duration-200 active:scale-95',
-              filter === id ? 'bg-brand-light text-brand-text' : 'bg-white/70 text-content-secondary hover:bg-white',
+              filter === id ? 'bg-brand-light text-brand-text' : 'bg-surface/70 text-content-secondary hover:bg-surface',
             )}
           >
             {t(label)}
@@ -100,7 +100,7 @@ export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
       </div>
 
       <div className="mt-4 space-y-3">
-        {orders === null && !error && [0, 1].map((i) => <div key={i} className="h-[170px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />)}
+        {orders === null && !error && [0, 1].map((i) => <div key={i} className="h-[170px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />)}
 
         {error && (
           <Card className="space-y-3 text-center">

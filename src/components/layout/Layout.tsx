@@ -16,8 +16,8 @@ interface Props {
 
 export function Layout({ activeTab, onTabChange, balance, currency, onTopUp, isAdmin = false, children }: Props) {
   return (
-    <div className="flex min-h-full items-center justify-center bg-slate-100 sm:p-6">
-      <div className="relative mx-auto flex h-[100dvh] w-full max-w-[430px] flex-col overflow-hidden bg-gradient-to-b from-[#EBF3FE] to-[#F8FAFC] sm:h-[860px] sm:max-h-[calc(100dvh-3rem)] sm:rounded-[40px] sm:shadow-2xl">
+    <div className="flex min-h-full items-center justify-center bg-backdrop sm:p-6">
+      <div className="relative mx-auto flex h-[100dvh] w-full max-w-[430px] flex-col overflow-hidden bg-gradient-to-b from-screen to-screen-end sm:h-[860px] sm:max-h-[calc(100dvh-3rem)] sm:rounded-[40px] sm:shadow-2xl">
         <Header
           balance={balance}
           currency={currency}

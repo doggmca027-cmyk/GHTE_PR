@@ -61,7 +61,7 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
   if (!data && loading) {
     return (
       <div className="space-y-3">
-        {[0, 1].map((i) => <div key={i} className="h-[140px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />)}
+        {[0, 1].map((i) => <div key={i} className="h-[140px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />)}
       </div>
     )
   }
@@ -89,7 +89,7 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
         const state = balanceState(p.balance, p.lowBalanceThreshold, p.lastBalanceSync)
         const d = detailsById.get(p.id)
         return (
-          <article key={p.id} className={cn('rounded-3xl border bg-white p-4 shadow-card', state === 'low' ? 'border-amber-300' : 'border-blue-100/70')}>
+          <article key={p.id} className={cn('rounded-3xl border bg-surface p-4 shadow-card', state === 'low' ? 'border-amber-300' : 'border-blue-100/70')}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-[15px] font-bold leading-snug text-content-primary">{p.name}</h3>
@@ -105,7 +105,7 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
                 onClick={() => void toggleRouting(p)}
                 className={cn('relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50', p.routingEnabled ? 'bg-brand' : 'bg-slate-300')}
               >
-                <span className={cn('absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform', p.routingEnabled && 'translate-x-5')} />
+                <span className={cn('absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-surface shadow transition-transform', p.routingEnabled && 'translate-x-5')} />
               </button>
             </div>
 
@@ -283,7 +283,7 @@ export function ConfigModal({ provider, onClose, onSave }: { provider: ProviderC
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Настройки провайдера ${provider.name}`} className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
-      <div className="max-h-[92vh] w-full max-w-md space-y-3 overflow-y-auto rounded-3xl bg-white p-4 shadow-card">
+      <div className="max-h-[92vh] w-full max-w-md space-y-3 overflow-y-auto rounded-3xl bg-surface p-4 shadow-card">
         <h3 className="text-[15px] font-bold text-content-primary">{provider.name}</h3>
         <AmountField label="Порог низкого баланса (уведомление при этой сумме и ниже)" value={low} onChange={setLow} invalid={lowN === null} />
         <AmountField label="До какой суммы пополнять" value={target} onChange={setTarget} invalid={targetN === null} />
@@ -300,7 +300,7 @@ export function ConfigModal({ provider, onClose, onSave }: { provider: ProviderC
           <label className="block text-xs font-bold text-content-primary">
             Разрешённый кошелёк получателя (TON)
             <input value={draft.wallet} spellCheck={false} autoComplete="off" onChange={(e) => set({ wallet: e.target.value })} placeholder="UQ… or 0:…" aria-invalid={Boolean(payout.errors.wallet)}
-              className={cn('mt-1 w-full rounded-xl border bg-white px-3 py-2.5 font-mono text-[13px] outline-none', payout.errors.wallet ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')} />
+              className={cn('mt-1 w-full rounded-xl border bg-surface px-3 py-2.5 font-mono text-[13px] outline-none', payout.errors.wallet ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')} />
           </label>
           {payout.errors.wallet && <p role="alert" className="text-xs font-semibold text-rose-600">{payout.errors.wallet}</p>}
           <div className="grid grid-cols-2 gap-2">
@@ -345,7 +345,7 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
       <div role="radiogroup" aria-label={label} className="mt-1 flex gap-1 rounded-xl bg-surface-sub p-1">
         {options.map((o) => (
           <button key={o} type="button" role="radio" aria-checked={value === o} onClick={() => onChange(o)}
-            className={cn('h-8 flex-1 rounded-lg text-[12px] font-semibold', value === o ? 'bg-white text-content-primary shadow-sm' : 'text-content-secondary')}>
+            className={cn('h-8 flex-1 rounded-lg text-[12px] font-semibold', value === o ? 'bg-surface text-content-primary shadow-sm' : 'text-content-secondary')}>
             {o}
           </button>
         ))}
@@ -359,7 +359,7 @@ function AmountField({ label, value, onChange, invalid }: { label: string; value
     <label className="block text-xs font-bold text-content-primary">
       {label}
       <input value={value} inputMode="decimal" onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ''))} aria-invalid={invalid}
-        className={cn('mt-1 w-full rounded-xl border bg-white px-3 py-2.5 text-sm font-medium outline-none', invalid ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')} />
+        className={cn('mt-1 w-full rounded-xl border bg-surface px-3 py-2.5 text-sm font-medium outline-none', invalid ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')} />
     </label>
   )
 }

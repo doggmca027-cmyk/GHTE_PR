@@ -3,10 +3,9 @@
 @tailwind utilities;
 
 @layer base {
-  :root { color-scheme: light; }
   html, body, #root { height: 100%; }
   body {
-    @apply bg-white font-sans text-content-primary antialiased;
+    @apply bg-screen font-sans text-content-primary antialiased;
     margin: 0;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior: none;

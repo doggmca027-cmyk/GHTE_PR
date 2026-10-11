@@ -24,7 +24,7 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
   const [busyProposal, setBusyProposal] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
 
-  if (!data && loading) return <div className="h-[180px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />
+  if (!data && loading) return <div className="h-[180px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />
   if (!data) {
     return (
       <Card className="space-y-3 text-center">
@@ -84,7 +84,7 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
             <p className="mt-0.5 text-content-secondary">{usd(Math.max(0, data.balance - data.minimumReserve))} доступно для пополнения провайдеров</p>
           </div>
           <button type="button" onClick={() => { haptic.tap(); setMessage(null); setEditingReserve(true) }}
-            className="h-9 shrink-0 rounded-full bg-white px-3.5 text-[13px] font-bold text-brand-text shadow-sm active:scale-95">
+            className="h-9 shrink-0 rounded-full bg-surface px-3.5 text-[13px] font-bold text-brand-text shadow-sm active:scale-95">
             Изменить резерв
           </button>
         </div>
@@ -103,7 +103,7 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
             const belowReserve = !short && data.balance - p.amount < data.minimumReserve
             const busy = busyProposal === p.id
             return (
-              <article key={p.id} className="rounded-2xl border border-amber-300 bg-white px-3.5 py-3 shadow-card">
+              <article key={p.id} className="rounded-2xl border border-amber-300 bg-surface px-3.5 py-3 shadow-card">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[13px] font-bold text-content-primary">{p.providerName}</p>
@@ -143,7 +143,7 @@ export function TreasuryTab({ session }: { session: AuthSession }) {
       {rows.length === 0 && <Card className="p-4 text-sm text-content-secondary">Операций казны пока нет.</Card>}
       <ul className="space-y-2">
         {rows.map((t) => (
-          <li key={t.id} className="rounded-2xl border border-blue-100/70 bg-white px-3.5 py-3 shadow-card">
+          <li key={t.id} className="rounded-2xl border border-blue-100/70 bg-surface px-3.5 py-3 shadow-card">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[13px] font-bold text-content-primary">{treasuryTypeLabel(t.type)}</p>
@@ -215,7 +215,7 @@ export function ReserveModal({ current, balance, onClose, onSubmit }: { current:
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Минимальный резерв казны" className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
-      <div className="w-full max-w-md space-y-3 rounded-3xl bg-white p-4 shadow-card">
+      <div className="w-full max-w-md space-y-3 rounded-3xl bg-surface p-4 shadow-card">
         <h3 className="text-[15px] font-bold text-content-primary">Минимальный резерв казны</h3>
         <p className="text-xs text-content-secondary">
           Пополнения провайдеров, после которых в казне останется меньше этой суммы, сервер отклонит (проверка под блокировкой,
@@ -224,7 +224,7 @@ export function ReserveModal({ current, balance, onClose, onSubmit }: { current:
         <label className="block text-xs font-bold text-content-primary">
           Резерв (USD)
           <input value={amount} inputMode="decimal" autoFocus onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} aria-invalid={!valid}
-            className={cn('mt-1 w-full rounded-xl border bg-white px-3 py-2.5 text-sm font-medium outline-none', valid ? 'border-blue-100/70 focus:border-brand' : 'border-rose-300')} />
+            className={cn('mt-1 w-full rounded-xl border bg-surface px-3 py-2.5 text-sm font-medium outline-none', valid ? 'border-blue-100/70 focus:border-brand' : 'border-rose-300')} />
         </label>
         {valid && value > balance && <p role="status" className="text-xs font-semibold text-amber-600">Больше текущего баланса ({usd(balance)}): все пополнения будут отклоняться, пока казна не пополнена.</p>}
         {err && <p role="alert" className="text-xs font-semibold text-rose-600">{err}</p>}
@@ -263,7 +263,7 @@ function AdjustModal({ balance, onClose, onSubmit }: { balance: number; onClose:
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Ручная корректировка казны" className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
-      <div className="w-full max-w-md space-y-3 rounded-3xl bg-white p-4 shadow-card">
+      <div className="w-full max-w-md space-y-3 rounded-3xl bg-surface p-4 shadow-card">
         <h3 className="text-[15px] font-bold text-content-primary">Ручная корректировка</h3>
         <div role="radiogroup" aria-label="Направление" className="flex gap-2">
           {([['add', 'Добавить', Plus], ['remove', 'Списать', Minus]] as const).map(([d, label, Icon]) => (
@@ -276,13 +276,13 @@ function AdjustModal({ balance, onClose, onSubmit }: { balance: number; onClose:
         <label className="block text-xs font-bold text-content-primary">
           Сумма (USD)
           <input value={amount} inputMode="decimal" autoFocus onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} aria-invalid={amount !== '' && signed === null}
-            className={cn('mt-1 w-full rounded-xl border bg-white px-3 py-2.5 text-sm font-medium outline-none', amount === '' || signed !== null ? 'border-blue-100/70 focus:border-brand' : 'border-rose-300')} />
+            className={cn('mt-1 w-full rounded-xl border bg-surface px-3 py-2.5 text-sm font-medium outline-none', amount === '' || signed !== null ? 'border-blue-100/70 focus:border-brand' : 'border-rose-300')} />
         </label>
         {tooMuch && <p role="alert" className="text-xs font-semibold text-rose-600">Доступно только {usd(balance)}.</p>}
         <label className="block text-xs font-bold text-content-primary">
           Причина (сохранится в журнале)
           <input value={description} maxLength={200} onChange={(e) => setDescription(e.target.value)} placeholder="например: первое пополнение казны"
-            className="mt-1 w-full rounded-xl border border-blue-100/70 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-brand" />
+            className="mt-1 w-full rounded-xl border border-blue-100/70 bg-surface px-3 py-2.5 text-sm font-medium outline-none focus:border-brand" />
         </label>
         {err && <p role="alert" className="text-xs font-semibold text-rose-600">{err}</p>}
         <div className="flex gap-2">

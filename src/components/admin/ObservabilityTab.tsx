@@ -50,7 +50,7 @@ export function ObservabilityTab({ session }: { session: AuthSession }) {
   if (!data && loading) {
     return (
       <div className="space-y-3">
-        {[0, 1, 2].map((i) => <div key={i} className="h-[120px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />)}
+        {[0, 1, 2].map((i) => <div key={i} className="h-[120px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />)}
       </div>
     )
   }
@@ -99,30 +99,30 @@ export function HealthView({ health: h, hours, loading = false, error = null, on
           </div>
         </div>
         <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-2xl bg-white/70 px-3 py-2">
+          <div className="rounded-2xl bg-surface/70 px-3 py-2">
             <dt className="flex items-center gap-1 font-semibold text-content-secondary"><Activity size={13} strokeWidth={1.75} /> Фоновые задачи</dt>
             <dd className={cn('mt-0.5 text-sm font-bold', cronTone)}>{h.cron.state === 'ok' ? 'Все вовремя' : h.cron.state === 'unknown' ? 'Не удаётся прочитать' : h.cron.state === 'critical' ? 'Задачи падают или опаздывают' : 'Требует внимания'}</dd>
           </div>
-          <div className="rounded-2xl bg-white/70 px-3 py-2">
+          <div className="rounded-2xl bg-surface/70 px-3 py-2">
             <dt className="flex items-center gap-1 font-semibold text-content-secondary"><Database size={13} strokeWidth={1.75} /> База данных</dt>
             <dd className={cn('mt-0.5 text-sm font-bold', h.db.ok ? 'text-emerald-700' : 'text-rose-700')}>{h.db.ok ? 'Доступна' : 'Недоступна'}{h.db.latencyMs !== null && h.db.ok ? ` · ${h.db.latencyMs} мс` : ''}</dd>
           </div>
         </dl>
         <div className="mt-3 flex items-center justify-between gap-2">
-          <div role="radiogroup" aria-label="Период" className="flex gap-1 rounded-2xl bg-white/70 p-1">
+          <div role="radiogroup" aria-label="Период" className="flex gap-1 rounded-2xl bg-surface/70 p-1">
             {WINDOWS.map((w) => (
               <button key={w} type="button" role="radio" aria-checked={hours === w} onClick={() => onHours(w)}
-                className={cn('h-8 rounded-xl px-3 text-[12px] font-bold', hours === w ? 'bg-white text-content-primary shadow-sm' : 'text-content-secondary')}>
+                className={cn('h-8 rounded-xl px-3 text-[12px] font-bold', hours === w ? 'bg-surface text-content-primary shadow-sm' : 'text-content-secondary')}>
                 {w} ч
               </button>
             ))}
           </div>
           <button type="button" aria-label="Обновить" disabled={loading} onClick={onRefresh}
-            className="flex h-9 items-center gap-1.5 rounded-full bg-white/80 px-3 text-[12px] font-bold text-content-primary active:scale-95 disabled:opacity-60">
+            className="flex h-9 items-center gap-1.5 rounded-full bg-surface/80 px-3 text-[12px] font-bold text-content-primary active:scale-95 disabled:opacity-60">
             <RefreshCw size={14} strokeWidth={2} className={cn(loading && 'animate-spin')} /> {timeAgoRu(h.generatedAt)}
           </button>
         </div>
-        {error && <p role="alert" className="mt-2 rounded-xl bg-white/70 px-3 py-1.5 text-xs font-semibold text-rose-700">Не удалось обновить: {error}. Показано последнее состояние.</p>}
+        {error && <p role="alert" className="mt-2 rounded-xl bg-surface/70 px-3 py-1.5 text-xs font-semibold text-rose-700">Не удалось обновить: {error}. Показано последнее состояние.</p>}
       </section>
 
       <section aria-label="Активные тревоги" className="space-y-2">
@@ -171,7 +171,7 @@ export function HealthView({ health: h, hours, loading = false, error = null, on
         {h.providers.length === 0 && <Card className="p-4 text-sm text-content-secondary">Провайдеров пока нет.</Card>}
         {h.providers.map((p) => <ProviderRow key={p.id} provider={p} />)}
         {h.recentProviderErrors.length > 0 && (
-          <div className="rounded-2xl border border-blue-100/70 bg-white p-3 shadow-card">
+          <div className="rounded-2xl border border-blue-100/70 bg-surface p-3 shadow-card">
             <h3 className="text-xs font-bold text-content-primary">Последние ошибки API провайдеров</h3>
             <ul className="mt-1.5 space-y-1">
               {h.recentProviderErrors.map((e, i) => (
@@ -191,7 +191,7 @@ export function HealthView({ health: h, hours, loading = false, error = null, on
 function JobRow({ job: j }: { job: CronPulse }) {
   const badge = CRON_BADGE[j.state]
   return (
-    <article className={cn('rounded-2xl border bg-white px-3.5 py-3 shadow-card', j.state === 'ok' ? 'border-blue-100/70' : 'border-amber-300')} aria-label={`${j.label}: ${badge.label}`}>
+    <article className={cn('rounded-2xl border bg-surface px-3.5 py-3 shadow-card', j.state === 'ok' ? 'border-blue-100/70' : 'border-amber-300')} aria-label={`${j.label}: ${badge.label}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[13px] font-bold text-content-primary">{j.label}</p>
@@ -211,7 +211,7 @@ function ProviderRow({ provider: p }: { provider: ProviderPulse }) {
   const rate = p.errorRate === null ? '—' : `${Math.round(p.errorRate * 100)}%`
   const bad = p.errorRate !== null && p.errorRate >= 0.5 && p.checks >= 5
   return (
-    <article className={cn('rounded-3xl border bg-white p-4 shadow-card', p.health === 'unavailable' || bad ? 'border-rose-300' : p.lowBalance ? 'border-amber-300' : 'border-blue-100/70')} aria-label={`Провайдер ${p.name}`}>
+    <article className={cn('rounded-3xl border bg-surface p-4 shadow-card', p.health === 'unavailable' || bad ? 'border-rose-300' : p.lowBalance ? 'border-amber-300' : 'border-blue-100/70')} aria-label={`Провайдер ${p.name}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-[15px] font-bold leading-snug text-content-primary">{p.name}</h3>

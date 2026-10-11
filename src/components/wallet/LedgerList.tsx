@@ -21,7 +21,7 @@ export function LedgerRow({ entry }: { entry: LedgerEntry }) {
   const credit = entry.amount > 0
   const Icon = pending ? Clock : ICONS[entry.type]
   return (
-    <li className="flex items-center gap-3 rounded-3xl border border-blue-100/70 bg-white p-3.5 shadow-sm">
+    <li className="flex items-center gap-3 rounded-3xl border border-blue-100/70 bg-surface p-3.5 shadow-sm">
       <span
         className={cn(
           'flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl',

@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, Clock, Link2, Loader2, ShieldCheck, TriangleAlert, X, Zap } from 'lucide-react'
+import { CheckCircle2, Clock, Gem, Globe, Hourglass, Link2, Loader2, RefreshCw, ShieldCheck, TriangleAlert, X, Zap, type LucideIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Toast, type ToastMessage } from '@/components/ui/Toast'
 import { currentLocale, tr, useLanguage, useT } from '@/i18n'
-import { describeService, localizedName } from '@/lib/service-view'
+import { describeServiceDetails, localizedName, type DetailKind } from '@/lib/service-view'
 import { tm } from '@/i18n/messages'
 import { useAuth } from '@/context/AuthContext'
 import { track } from '@/lib/analytics-client'
@@ -51,7 +51,7 @@ type Phase =
 
 const inputClass = (invalid: boolean) =>
   cn(
-    'w-full rounded-2xl border bg-surface-sub px-4 py-3.5 text-[15px] font-medium text-content-primary outline-none transition-colors placeholder:text-content-muted focus:bg-white disabled:opacity-60',
+    'w-full rounded-2xl border bg-surface-sub px-4 py-3.5 text-[15px] font-medium text-content-primary outline-none transition-colors placeholder:text-content-muted focus:bg-surface disabled:opacity-60',
     invalid ? 'border-rose-300 focus:border-rose-400' : 'border-blue-100/70 focus:border-brand',
   )
 
@@ -185,9 +185,9 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
 
   return (
     <div className="absolute inset-0 z-50 flex items-end animate-fade-in" role="dialog" aria-modal="true" aria-label={t('Configure order')}>
-      <button type="button" aria-label={t('Close')} onClick={() => !busy && onClose()} className="absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]" />
+      <button type="button" aria-label={t('Close')} onClick={() => !busy && onClose()} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
 
-      <div className="relative z-10 max-h-[92%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-white px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]">
+      <div className="relative z-10 max-h-[92%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]">
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-blue-100" />
 
         <div className="mb-4 flex items-center justify-between">
@@ -218,18 +218,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
               </div>
             </div>
 
-            {/* What the panel promises, from the service's facts, in the customer's language */}
-            {describeService(service.attributes, currentLocale()).length > 0 && (
-              <ul className="mt-3 space-y-1 rounded-2xl bg-surface-sub px-4 py-3 text-[13px] font-medium text-content-secondary" aria-label={t('Details')}>
-                {describeService(service.attributes, currentLocale()).map((line) => (
-                  <li key={line} className="flex gap-2"><span aria-hidden="true" className="text-brand">•</span> {line}</li>
-                ))}
-              </ul>
-            )}
-
-            {service.description && (
-              <p className="mt-2 whitespace-pre-line rounded-2xl bg-surface-sub px-4 py-3 text-[13px] font-medium text-content-secondary">{service.description}</p>
-            )}
+            <ServiceDescription service={service} />
 
             {/* Link */}
             <label className="mt-5 block">
@@ -319,6 +308,42 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
       </div>
       <Toast message={toast} onDismiss={() => setToast(null)} />
     </div>
+  )
+}
+
+const FACT_ICONS: Record<DetailKind, LucideIcon> = { refill: RefreshCw, guarantee: ShieldCheck, start: Hourglass, speed: Zap, quality: Gem, geo: Globe }
+
+/**
+ * The full description of a service: what it promises as one row per fact (refill, start, speed, quality, countries), built from the
+ * service's facts so it reads in the customer's own language, then the text the panel sent, when it sent one.
+ */
+export function ServiceDescription({ service }: { service: ICatalogService }) {
+  const t = useT()
+  const facts = describeServiceDetails(service.attributes, currentLocale())
+  const text = service.description?.trim() ?? ''
+  if (facts.length === 0 && text === '') return null
+  return (
+    <section className="mt-3 rounded-2xl bg-surface-sub px-4 py-3.5" aria-label={t('Description')} data-testid="service-description">
+      <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-content-muted">{t('Description')}</h3>
+      {facts.length > 0 && (
+        <ul className="space-y-3 text-[13px] font-medium leading-snug text-content-secondary">
+          {facts.map((fact) => {
+            const Icon = FACT_ICONS[fact.kind]
+            return (
+              <li key={fact.kind} className="flex items-start gap-2.5">
+                <Icon size={16} strokeWidth={1.75} className="mt-px shrink-0 text-brand" aria-hidden="true" />
+                <span>{fact.text}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {text !== '' && (
+        <div className={cn('space-y-2 text-[13px] font-medium leading-snug text-content-secondary', facts.length > 0 && 'mt-3 border-t border-blue-100/70 pt-3')}>
+          {text.split(/\n+/).map((line, i) => <p key={i}>{line}</p>)}
+        </div>
+      )}
+    </section>
   )
 }
 

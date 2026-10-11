@@ -103,7 +103,7 @@ export function WalletScreen({ session, depositRequest, onRequestHandled }: Prop
           onClick={() => { haptic.tap(); void load() }}
           disabled={refreshing}
           aria-label={t('Refresh transactions')}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100/70 bg-white text-content-secondary shadow-sm active:scale-90"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100/70 bg-surface text-content-secondary shadow-sm active:scale-90"
         >
           <RefreshCw size={16} strokeWidth={1.75} className={cn(refreshing && 'animate-spin')} />
         </button>
@@ -117,7 +117,7 @@ export function WalletScreen({ session, depositRequest, onRequestHandled }: Prop
             type="button"
             aria-selected={filter === id}
             onClick={() => { if (filter !== id) haptic.select(); setFilter(id) }}
-            className={cn('shrink-0 rounded-2xl px-3.5 py-2 text-[13px] font-semibold transition-colors active:scale-95', filter === id ? 'bg-brand-light text-brand-text' : 'bg-white/70 text-content-secondary hover:bg-white')}
+            className={cn('shrink-0 rounded-2xl px-3.5 py-2 text-[13px] font-semibold transition-colors active:scale-95', filter === id ? 'bg-brand-light text-brand-text' : 'bg-surface/70 text-content-secondary hover:bg-surface')}
           >
             {t(label)}
           </button>
@@ -125,7 +125,7 @@ export function WalletScreen({ session, depositRequest, onRequestHandled }: Prop
       </div>
 
       <ul className="mt-3 space-y-2.5 pb-2">
-        {entries === null && !error && [0, 1, 2].map((i) => <li key={i} className="h-[74px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />)}
+        {entries === null && !error && [0, 1, 2].map((i) => <li key={i} className="h-[74px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />)}
 
         {error && (
           <li>

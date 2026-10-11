@@ -1,7 +1,7 @@
-import { ShieldCheck, Zap } from 'lucide-react'
+import { Globe, ShieldCheck, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
-import { useLanguage, useT } from '@/i18n'
-import { localizedName } from '@/lib/service-view'
+import { currentLocale, useLanguage, useT } from '@/i18n'
+import { localizedName, serviceCountries } from '@/lib/service-view'
 import { deriveSpeed, formatCompact, formatMoneyAmount } from '@/lib/order-calc'
 import type { ICatalogService, Platform } from '@/types/catalog'
 import { PlatformIcon } from './PlatformIcon'
@@ -17,12 +17,13 @@ export function ServiceCard({ service, platform, platformName, onSelect }: Props
   const t = useT()
   const { lang } = useLanguage()
   const speed = deriveSpeed(service.name) // from the English name: the speed words are English
+  const country = serviceCountries(service.attributes, currentLocale())
 
   return (
     <button
       type="button"
       onClick={() => onSelect(service)}
-      className="w-full rounded-3xl border border-blue-100/70 bg-white p-4 text-start shadow-card transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
+      className="w-full rounded-3xl border border-blue-100/70 bg-surface p-4 text-start shadow-card transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
     >
       <div className="flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-light text-brand">
@@ -34,6 +35,11 @@ export function ServiceCard({ service, platform, platformName, onSelect }: Props
             <Badge>
               <Zap size={12} strokeWidth={2} /> {t(speed)}
             </Badge>
+            {country !== '' && (
+              <Badge>
+                <Globe size={12} strokeWidth={2} /> {country}
+              </Badge>
+            )}
             {service.refillSupported && (
               <Badge>
                 <ShieldCheck size={12} strokeWidth={2} /> {t('Refill')}

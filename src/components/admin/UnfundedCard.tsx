@@ -25,7 +25,7 @@ export function UnfundedCard({ unfunded, ttlHours }: { unfunded: UnfundedSummary
       </div>
       <ul className="space-y-1.5">
         {unfunded.providers.map((p) => (
-          <li key={p.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/80 px-3 py-2 text-[13px]">
+          <li key={p.id} className="flex items-center justify-between gap-3 rounded-xl bg-surface/80 px-3 py-2 text-[13px]">
             <span className="min-w-0 truncate font-semibold text-content-primary">{p.name}</span>
             <span className="shrink-0 text-right text-content-secondary">
               перевести <b className="text-content-primary">{usd(p.cost)}</b> · {p.count} шт. · на панели {usd(p.balance)}

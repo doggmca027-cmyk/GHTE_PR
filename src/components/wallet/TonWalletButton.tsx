@@ -12,7 +12,7 @@ export function TonWalletButton({ wallet }: { wallet: TonWallet }) {
       <button
         type="button"
         onClick={() => { haptic.tap(); wallet.connect() }}
-        className="flex h-11 items-center gap-2 rounded-full border border-brand/30 bg-white px-4 text-sm font-bold text-brand shadow-sm transition-all hover:bg-brand-light active:scale-95"
+        className="flex h-11 items-center gap-2 rounded-full border border-brand/30 bg-surface px-4 text-sm font-bold text-brand shadow-sm transition-all hover:bg-brand-light active:scale-95"
       >
         <Wallet size={18} strokeWidth={1.75} /> {t('Connect Tonkeeper')}
       </button>
@@ -28,7 +28,7 @@ export function TonWalletButton({ wallet }: { wallet: TonWallet }) {
     >
       <span className="h-2 w-2 rounded-full bg-emerald-500" />
       <span className="font-mono text-[13px]">{shortAddress(wallet.address)}</span>
-      {wallet.isMock && <span className="rounded-full bg-white/80 px-1.5 text-[10px] font-semibold uppercase">dev</span>}
+      {wallet.isMock && <span className="rounded-full bg-surface/80 px-1.5 text-[10px] font-semibold uppercase">dev</span>}
       <Link2Off size={14} strokeWidth={1.75} className="opacity-50 group-hover:opacity-100" />
     </button>
   )

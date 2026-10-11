@@ -16,7 +16,7 @@ const PAGE = 30
 type Message = { kind: 'ok' | 'error'; text: string }
 
 const parseMarkup = (draft: string): number | null => (/^\d+(\.\d{1,2})?$/.test(draft.trim()) && Number(draft) <= 100_000 ? Number(draft) : null)
-const fieldCls = 'mt-1 w-full rounded-xl border border-blue-100/70 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-brand'
+const fieldCls = 'mt-1 w-full rounded-xl border border-blue-100/70 bg-surface px-3 py-2.5 text-sm font-medium outline-none focus:border-brand'
 
 export function PricingTab({ session }: { session: AuthSession }) {
   const [message, setMessage] = useState<Message | null>(null)
@@ -171,9 +171,9 @@ function ServiceGrid({ session, version, onMessage }: { session: AuthSession; ve
         <label className="relative block flex-1">
           <Search size={16} strokeWidth={1.75} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-secondary" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по названию или категории" aria-label="Поиск услуги"
-            className="w-full rounded-xl border border-blue-100/70 bg-white py-2.5 pl-9 pr-3 text-sm font-medium outline-none focus:border-brand" />
+            className="w-full rounded-xl border border-blue-100/70 bg-surface py-2.5 pl-9 pr-3 text-sm font-medium outline-none focus:border-brand" />
         </label>
-        <select value={platform} onChange={(e) => setPlatform(e.target.value)} aria-label="Платформа" className="w-36 rounded-xl border border-blue-100/70 bg-white px-2 py-2.5 text-sm font-medium outline-none focus:border-brand">
+        <select value={platform} onChange={(e) => setPlatform(e.target.value)} aria-label="Платформа" className="w-36 rounded-xl border border-blue-100/70 bg-surface px-2 py-2.5 text-sm font-medium outline-none focus:border-brand">
           <option value="">Все</option>
           {(platforms.data ?? []).map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
         </select>
@@ -188,7 +188,7 @@ function ServiceGrid({ session, version, onMessage }: { session: AuthSession; ve
       )}
       {!error && !loading && rows.length === 0 && <Card className="p-4 text-sm text-content-secondary">Услуг не найдено.</Card>}
       {rows.map((row) => <PricingCard key={row.serviceId} row={row} onEdit={() => { haptic.tap(); onMessage({ kind: 'ok', text: '' }); setEditing(row) }} />)}
-      {loading && rows.length === 0 && [0, 1, 2].map((i) => <div key={i} className="h-[130px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />)}
+      {loading && rows.length === 0 && [0, 1, 2].map((i) => <div key={i} className="h-[130px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />)}
       {rows.length > 0 && rows.length < total && (
         <Button className="w-full" disabled={loading} onClick={() => void load(rows.length)}>
           {loading ? 'Загружаем…' : `Показать ещё (${total - rows.length})`}
@@ -221,7 +221,7 @@ function PricingCard({ row, onEdit }: { row: PricingRow; onEdit: () => void }) {
   const health = pricingHealth(row)
   const bad = health === 'loss' || health === 'low'
   return (
-    <article className={cn('rounded-3xl border bg-white p-4 shadow-card', health === 'loss' ? 'border-rose-300' : health === 'low' ? 'border-amber-300' : 'border-blue-100/70')}>
+    <article className={cn('rounded-3xl border bg-surface p-4 shadow-card', health === 'loss' ? 'border-rose-300' : health === 'low' ? 'border-amber-300' : 'border-blue-100/70')}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-[15px] font-bold leading-snug text-content-primary">{row.name}</h3>
@@ -260,7 +260,7 @@ function MarginModal({ row, onClose, onSave }: { row: PricingRow; onClose: () =>
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Наценка для ${row.name}`} className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
-      <div className="w-full max-w-md space-y-3 rounded-3xl bg-white p-4 shadow-card">
+      <div className="w-full max-w-md space-y-3 rounded-3xl bg-surface p-4 shadow-card">
         <h3 className="text-[15px] font-bold text-content-primary">{row.name}</h3>
         <div role="radiogroup" aria-label="Тип наценки" className="flex gap-2">
           {(['percentage', 'fixed'] as const).map((t) => (

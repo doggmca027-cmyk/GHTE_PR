@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { FALLBACK_PLATFORMS, type PlatformInfo } from '@/constants/platforms'
 import { useAuth } from '@/context/AuthContext'
+import { useServiceSearch } from '@/hooks/useServiceSearch'
 import { useLanguage, useT } from '@/i18n'
 import { track } from '@/lib/analytics-client'
 import { haptic } from '@/lib/haptics'
@@ -15,6 +16,7 @@ import { CategoryRows } from './CategoryRows'
 import { OrderModal } from './OrderModal'
 import { PlatformList, type PlatformEntry } from './PlatformList'
 import { ServiceCard } from './ServiceCard'
+import { ServiceSearchBox } from './ServiceSearchBox'
 
 type Overview = { status: 'loading' } | { status: 'error' } | { status: 'ready'; categories: ICategory[]; platforms: PlatformInfo[] }
 
@@ -28,7 +30,7 @@ interface Props {
 }
 
 function SkeletonCard() {
-  return <div className="h-[132px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />
+  return <div className="h-[132px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />
 }
 
 const titleCase = (slug: string) => slug.replace(/-/g, ' ').replace(/\b\p{L}/gu, (c) => c.toUpperCase())
@@ -64,6 +66,7 @@ export function ServicesScreen({ session, onTopUp, onViewOrders }: Props) {
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [page, setPage] = useState<Page | null>(null)
   const [selected, setSelected] = useState<ICatalogService | null>(null)
+  const [serviceQuery, setServiceQuery] = useState('')
   const request = useRef(0)
 
   const load = useCallback(() => {
@@ -84,6 +87,10 @@ export function ServicesScreen({ session, onTopUp, onViewOrders }: Props) {
     [categories, platform],
   )
   const category = categoryId ? platformCategories.find((c) => c.id === categoryId) ?? null : null
+
+  // The search covers the opened category, or every category of the opened platform.
+  const searchScope = useMemo(() => (categoryId ? [categoryId] : platformCategories.map((c) => c.id)), [categoryId, platformCategories])
+  const search = useServiceSearch(session, searchScope, platform ? serviceQuery : '')
 
   // The first page of a category's services, when the category is opened.
   useEffect(() => {
@@ -121,12 +128,14 @@ export function ServicesScreen({ session, onTopUp, onViewOrders }: Props) {
   const selectPlatform = (slug: string) => {
     const own = categories.filter((c) => c.platform === slug)
     setPlatform(slug)
+    setServiceQuery('')
     // a platform with a single category goes straight to its services
     setCategoryId(own.length === 1 ? own[0].id : null)
   }
 
   const back = () => {
     haptic.select()
+    setServiceQuery('')
     if (categoryId && platformCategories.length > 1) setCategoryId(null)
     else { setCategoryId(null); setPlatform(null) }
   }
@@ -139,7 +148,7 @@ export function ServicesScreen({ session, onTopUp, onViewOrders }: Props) {
         <h1 className="mb-3 text-2xl font-extrabold tracking-tight text-content-primary">{t('Services')}</h1>
       ) : (
         <div className="mb-3 flex items-center gap-3">
-          <button type="button" onClick={back} aria-label={category && platformCategories.length > 1 ? t('Back to categories') : t('Back to platforms')} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-100/70 bg-white text-content-secondary shadow-sm active:scale-90">
+          <button type="button" onClick={back} aria-label={category && platformCategories.length > 1 ? t('Back to categories') : t('Back to platforms')} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-100/70 bg-surface text-content-secondary shadow-sm active:scale-90">
             <ArrowLeft size={18} strokeWidth={1.75} className="rtl:rotate-180" />
           </button>
           <div className="min-w-0">
@@ -161,7 +170,43 @@ export function ServicesScreen({ session, onTopUp, onViewOrders }: Props) {
 
       {state.status === 'ready' && platform === null && <PlatformList platforms={entries} onSelect={selectPlatform} />}
 
-      {state.status === 'ready' && platform !== null && categoryId === null && (
+      {state.status === 'ready' && platform !== null && platformCategories.length > 0 && (
+        <ServiceSearchBox value={serviceQuery} onChange={setServiceQuery} />
+      )}
+
+      {state.status === 'ready' && platform !== null && search.active && (
+        <div className="mt-1 space-y-3">
+          {(search.status === 'idle' || search.status === 'loading') && [0, 1, 2].map((i) => <SkeletonCard key={i} />)}
+
+          {search.status === 'error' && (
+            <Card className="space-y-3 text-center">
+              <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
+              <p className="text-sm font-medium text-content-secondary">{t("Couldn't load services. Check your connection and retry.")}</p>
+              <Button className="w-full" onClick={search.retry}>{t('Retry')}</Button>
+            </Card>
+          )}
+
+          {search.status === 'ready' && search.items.length === 0 && (
+            <Card className="space-y-2 py-10 text-center">
+              <SearchX size={28} strokeWidth={1.75} className="mx-auto text-content-muted" />
+              <p className="text-sm font-semibold text-content-primary">{t('No services found')}</p>
+              <p className="text-xs text-content-secondary">{t('Try other words or a country.')}</p>
+            </Card>
+          )}
+
+          {search.status === 'ready' && search.items.map((service) => (
+            <ServiceCard key={service.id} service={service} platform={platform} platformName={current?.name} onSelect={open} />
+          ))}
+
+          {search.status === 'ready' && search.more && (
+            <Button className="w-full" onClick={search.loadMore} disabled={search.loadingMore} aria-busy={search.loadingMore}>
+              {search.loadingMore && <Loader2 size={16} strokeWidth={2} className="animate-spin" />} {t('Show more')}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {state.status === 'ready' && platform !== null && !search.active && categoryId === null && (
         platformCategories.length === 0 ? (
           <Card className="space-y-2 py-10 text-center">
             <SearchX size={28} strokeWidth={1.75} className="mx-auto text-content-muted" />
@@ -173,7 +218,7 @@ export function ServicesScreen({ session, onTopUp, onViewOrders }: Props) {
         )
       )}
 
-      {state.status === 'ready' && platform !== null && categoryId !== null && (
+      {state.status === 'ready' && platform !== null && !search.active && categoryId !== null && (
         <div className="space-y-3">
           {(!page || page.status === 'loading') && [0, 1, 2].map((i) => <SkeletonCard key={i} />)}
 

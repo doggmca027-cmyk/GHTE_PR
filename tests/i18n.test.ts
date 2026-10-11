@@ -152,7 +152,8 @@ describe('the screens in another language', () => {
     const html = await render('SettingsScreen', { session })
     for (const l of LANGUAGES) expect(html, l.code).toContain(l.name)
     expect(html).toContain('role="radiogroup"')
-    expect(html.match(/aria-checked="true"/g)).toHaveLength(1)
+    // one language is selected (the theme choice has its own radio group)
+    expect(html.match(/aria-checked="true"[^>]*lang="/g)).toHaveLength(1)
     expect(html).toMatch(/aria-checked="true"[^>]*lang="en"|lang="en"[^>]*aria-checked="true"/)
   })
 

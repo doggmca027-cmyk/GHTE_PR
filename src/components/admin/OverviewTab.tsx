@@ -38,7 +38,7 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
     return (
       <div className="grid grid-cols-2 gap-3">
         {[0, 1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-[92px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />
+          <div key={i} className="h-[92px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />
         ))}
       </div>
     )
@@ -62,7 +62,7 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
           type="button"
           aria-label="Обновить показатели"
           onClick={() => { haptic.tap(); setRefreshKey((k) => k + 1); void reload() }}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100/70 bg-white text-content-secondary shadow-sm active:scale-90"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100/70 bg-surface text-content-secondary shadow-sm active:scale-90"
         >
           <RefreshCw size={16} strokeWidth={1.75} className={cn(loading && 'animate-spin')} />
         </button>

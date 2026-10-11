@@ -28,7 +28,7 @@ export function PlatformList({ platforms, onSelect }: Props) {
   return (
     <>
       {/* stays at the top of the scrolling screen while the list moves under it; the background matches the screen's, so it looks seamless */}
-      <div data-testid="platform-search" className="sticky top-0 z-10 -mx-5 bg-[#EDF4FD] px-5 pb-2 pt-1">
+      <div data-testid="platform-search" className="sticky top-0 z-10 -mx-5 bg-screen px-5 pb-2 pt-1">
         <label className="relative block">
           <span className="sr-only">{t('Search platforms')}</span>
           <Search size={16} strokeWidth={1.75} className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-content-muted" />
@@ -41,7 +41,7 @@ export function PlatformList({ platforms, onSelect }: Props) {
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            className="h-12 w-full rounded-2xl border border-blue-100/70 bg-white pe-11 ps-10 text-[16px] font-medium text-content-primary outline-none transition-colors placeholder:text-content-muted focus:border-brand [&::-webkit-search-cancel-button]:hidden"
+            className="h-12 w-full rounded-2xl border border-blue-100/70 bg-surface pe-11 ps-10 text-[16px] font-medium text-content-primary outline-none transition-colors placeholder:text-content-muted focus:border-brand [&::-webkit-search-cancel-button]:hidden"
           />
           {query !== '' && (
             <button
@@ -69,7 +69,7 @@ export function PlatformList({ platforms, onSelect }: Props) {
               <button
                 type="button"
                 onClick={() => { haptic.tap(); onSelect(p.slug) }}
-                className="flex w-full items-center gap-3 rounded-3xl border border-blue-100/70 bg-white p-3 text-start shadow-sm transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
+                className="flex w-full items-center gap-3 rounded-3xl border border-blue-100/70 bg-surface p-3 text-start shadow-sm transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
               >
                 <PlatformBadge slug={p.slug} name={p.name} />
                 <span className="min-w-0 flex-1">

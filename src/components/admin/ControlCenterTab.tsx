@@ -44,7 +44,7 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
   const [confirming, setConfirming] = useState<SwitchKey | null>(null)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
-  if (!data && loading) return <div className="h-[200px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />
+  if (!data && loading) return <div className="h-[200px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />
   if (!data) {
     return (
       <Card className="space-y-3 text-center">
@@ -103,7 +103,7 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
             key={spec.key}
             className={cn(
               'rounded-3xl border p-4 shadow-card',
-              spec.danger ? (data.maintenanceMode ? 'border-rose-400 bg-rose-50' : 'border-rose-200 bg-white') : 'border-blue-100/70 bg-white',
+              spec.danger ? (data.maintenanceMode ? 'border-rose-400 bg-rose-50' : 'border-rose-200 bg-surface') : 'border-blue-100/70 bg-surface',
             )}
           >
             <div className="flex items-start justify-between gap-3">
@@ -127,7 +127,7 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
                   spec.danger ? (checked ? 'bg-rose-600' : 'bg-slate-300') : checked ? 'bg-brand' : 'bg-slate-300',
                 )}
               >
-                <span className={cn('absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform', checked && 'translate-x-5')} />
+                <span className={cn('absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-surface shadow transition-transform', checked && 'translate-x-5')} />
               </button>
             </div>
             {confirming === spec.key && (
@@ -136,7 +136,7 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
                   {spec.key === 'maintenance' ? 'Отключить ВСЕ заказы и пополнения для всех?' : spec.key === 'orders' ? 'Остановить приём новых заказов?' : 'Остановить приём новых пополнений?'}
                 </p>
                 <button type="button" onClick={() => void apply(spec, spec.key === 'maintenance')} className="h-8 rounded-full bg-rose-600 px-3 text-xs font-bold text-white active:scale-95">Подтвердить</button>
-                <button type="button" onClick={() => setConfirming(null)} className="h-8 rounded-full bg-white px-3 text-xs font-semibold text-content-secondary active:scale-95">Отмена</button>
+                <button type="button" onClick={() => setConfirming(null)} className="h-8 rounded-full bg-surface px-3 text-xs font-semibold text-content-secondary active:scale-95">Отмена</button>
               </div>
             )}
           </article>

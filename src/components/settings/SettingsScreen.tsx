@@ -1,7 +1,8 @@
-import { Check, ExternalLink, FileText, Languages, ShieldCheck } from 'lucide-react'
+import { Check, ExternalLink, FileText, Languages, Monitor, Moon, ShieldCheck, Sun, type LucideIcon } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { LANGUAGES, useLanguage, useT } from '@/i18n'
+import { LANGUAGES, tr, useLanguage, useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
+import { setThemePreference, useThemePreference, type ThemePreference } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 
@@ -70,6 +71,44 @@ function LanguageCard() {
   )
 }
 
+const THEMES: Array<{ value: ThemePreference; label: string; icon: LucideIcon }> = [
+  { value: 'auto', label: tr('Automatic'), icon: Monitor },
+  { value: 'light', label: tr('Light'), icon: Sun },
+  { value: 'dark', label: tr('Dark'), icon: Moon },
+]
+
+/** Light, dark, or follow Telegram. The choice is remembered on the device. */
+function ThemeCard() {
+  const t = useT()
+  const current = useThemePreference()
+  return (
+    <Card className="space-y-2 p-4">
+      <h2 className="text-xs font-bold uppercase tracking-wide text-content-muted">{t('Appearance')}</h2>
+      <div role="radiogroup" aria-label={t('Appearance')} className="grid grid-cols-3 gap-2">
+        {THEMES.map(({ value, label, icon: Icon }) => {
+          const selected = value === current
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => { if (!selected) { haptic.select(); setThemePreference(value) } }}
+              className={cn(
+                'flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-xs font-semibold transition-colors active:scale-[0.97]',
+                selected ? 'bg-brand-light text-brand-text' : 'bg-surface-sub text-content-primary',
+              )}
+            >
+              <Icon size={20} strokeWidth={1.75} />
+              {t(label)}
+            </button>
+          )
+        })}
+      </div>
+    </Card>
+  )
+}
+
 export function SettingsScreen({ session }: { session: AuthSession }) {
   const t = useT()
   const { user, isMock } = session
@@ -84,6 +123,8 @@ export function SettingsScreen({ session }: { session: AuthSession }) {
         <Row label={t('Telegram ID')} value={String(user.telegramId)} />
         {isMock && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">{t('Dev mock account: nothing here is real.')}</p>}
       </Card>
+
+      <ThemeCard />
 
       <LanguageCard />
 

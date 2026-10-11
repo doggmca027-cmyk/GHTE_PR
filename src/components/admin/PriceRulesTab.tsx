@@ -38,7 +38,7 @@ export function PriceRulesTab({ session }: { session: AuthSession }) {
     return (
       <div className="space-y-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-[110px] animate-pulse rounded-3xl border border-blue-100/70 bg-white/80" />
+          <div key={i} className="h-[110px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />
         ))}
       </div>
     )
@@ -83,7 +83,7 @@ function RuleCard({ rule, busy, onSave }: { rule: PriceRuleView; busy: boolean; 
     : null
 
   return (
-    <article className={cn('rounded-3xl border bg-white p-4 shadow-card', rule.isActive ? 'border-blue-100/70' : 'border-slate-200 opacity-80')}>
+    <article className={cn('rounded-3xl border bg-surface p-4 shadow-card', rule.isActive ? 'border-blue-100/70' : 'border-slate-200 opacity-80')}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-[15px] font-bold leading-snug text-content-primary">{rule.name.replace(/^Admin margin: ?/, 'Наценка: ')}</h3>
@@ -98,7 +98,7 @@ function RuleCard({ rule, busy, onSave }: { rule: PriceRuleView; busy: boolean; 
           onClick={() => { haptic.select(); void onSave(rule, { isActive: !rule.isActive }, `${rule.name}: правило ${rule.isActive ? 'выключено' : 'включено'}.`) }}
           className={cn('relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50', rule.isActive ? 'bg-brand' : 'bg-slate-300')}
         >
-          <span className={cn('absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform', rule.isActive && 'translate-x-5')} />
+          <span className={cn('absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-surface shadow transition-transform', rule.isActive && 'translate-x-5')} />
         </button>
       </div>
 
@@ -111,7 +111,7 @@ function RuleCard({ rule, busy, onSave }: { rule: PriceRuleView; busy: boolean; 
               inputMode="decimal"
               onChange={(e) => setDraft(e.target.value.replace(/[^\d.]/g, ''))}
               aria-invalid={!valid}
-              className={cn('mt-1 w-full rounded-xl border bg-white px-3 py-2.5 text-sm font-medium outline-none', valid ? 'border-blue-100/70 focus:border-brand' : 'border-rose-300')}
+              className={cn('mt-1 w-full rounded-xl border bg-surface px-3 py-2.5 text-sm font-medium outline-none', valid ? 'border-blue-100/70 focus:border-brand' : 'border-rose-300')}
             />
           </label>
           <p className="text-xs font-medium text-content-secondary">

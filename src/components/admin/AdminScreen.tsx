@@ -50,7 +50,7 @@ export function AdminScreen({ session }: { session: AuthSession }) {
             onClick={() => { if (tab !== id) haptic.select(); setTab(id) }}
             className={cn(
               'flex shrink-0 items-center gap-1.5 rounded-2xl px-3.5 py-2 text-[13px] font-semibold transition-colors active:scale-95',
-              tab === id ? 'bg-brand text-white shadow-sm' : 'bg-white/70 text-content-secondary hover:bg-white',
+              tab === id ? 'bg-brand text-white shadow-sm' : 'bg-surface/70 text-content-secondary hover:bg-surface',
             )}
           >
             {label}

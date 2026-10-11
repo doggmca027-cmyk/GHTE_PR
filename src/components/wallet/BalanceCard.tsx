@@ -7,7 +7,7 @@ import type { IWallet } from '@/types'
 export function BalanceCard({ wallet, onTopUp }: { wallet: IWallet; onTopUp: () => void }) {
   const t = useT()
   return (
-    <section className="relative overflow-hidden rounded-[28px] border border-blue-100/70 bg-gradient-to-br from-white via-[#F2F8FF] to-[#D6EBFD] p-5 shadow-card">
+    <section className="relative overflow-hidden rounded-[28px] border border-blue-100/70 bg-gradient-to-br from-surface via-card-mid to-card-end p-5 shadow-card">
       <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-brand/10 blur-2xl" />
       <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">{t('Available balance')}</p>
       <p className="mt-1 text-4xl font-extrabold tracking-tight text-content-primary">{formatMoneyAmount(wallet.balance)}</p>
