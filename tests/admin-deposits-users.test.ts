@@ -90,7 +90,7 @@ describe('admin client: resolveDeposit / findUsers / setUserBan', () => {
     reply(200, [{ id: 'u1', telegram_id: 910001, username: 'alice', first_name: 'Alice', is_banned: false, is_admin: false, created_at: 't', balance: '12.5', orders: 3, is_you: false }])
     reply(200, { user_id: 'u1', is_banned: true })
     const { findUsers, setUserBan } = await import('../src/services/api/admin')
-    expect(await findUsers(session(), ' @alice ')).toEqual([{ id: 'u1', telegramId: 910001, username: 'alice', firstName: 'Alice', isBanned: false, isAdmin: false, createdAt: 't', balance: 12.5, orders: 3, isYou: false }])
+    expect(await findUsers(session(), ' @alice ')).toEqual([{ id: 'u1', telegramId: 910001, email: null, username: 'alice', firstName: 'Alice', isBanned: false, isAdmin: false, createdAt: 't', balance: 12.5, orders: 3, isYou: false }])
     expect(call(0).body).toEqual({ p_query: '@alice' })
     expect(await setUserBan(session(), 'u1', true, ' fraud ')).toEqual({ userId: 'u1', isBanned: true })
     expect(call(1)).toMatchObject({ url: 'https://proj.supabase.co/rest/v1/rpc/admin_set_user_ban', body: { p_user_id: 'u1', p_is_banned: true, p_reason: 'fraud' } })

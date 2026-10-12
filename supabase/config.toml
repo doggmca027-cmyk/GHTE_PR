@@ -90,3 +90,8 @@ verify_jwt = false
 # Admin-only: authenticates itself by verifying the telegram-auth JWT (HS256, JWT_SECRET) + users.is_admin.
 [functions.admin-promos]
 verify_jwt = false
+
+# Public (no JWT yet): e-mail + password + 6-digit code sign-in and the Telegram Login Widget for browsers. Issues the same JWT as
+# telegram-auth. Rate-limited in the database (auth_rate_hit).
+[functions.web-auth]
+verify_jwt = false

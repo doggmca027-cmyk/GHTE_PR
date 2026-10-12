@@ -40,7 +40,7 @@ const publicCase = (c: Record<string, unknown>) => {
       status: String(o.status), chargeAmount: Number(o.charge_amount), quantity: Number(o.quantity), targetUrl: String(o.target_url),
       providerOrderId: (o.provider_order_id as string | null) ?? null, errorMessage: (o.error_message as string | null) ?? null,
       createdAt: String(o.created_at), serviceName: String(o.service_name ?? 'Service'), username: (o.username as string | null) ?? null,
-      telegramId: Number(o.telegram_id), canRetry: o.status === 'processing' && !o.provider_order_id && o.has_routing_snapshot === true,
+      telegramId: o.telegram_id == null ? null : Number(o.telegram_id), canRetry: o.status === 'processing' && !o.provider_order_id && o.has_routing_snapshot === true,
       userId: (o.user_id as string | null) ?? null, userBanned: o.user_banned === true,
     },
     // a deposit case: decided with admin_resolve_deposit (credit / dismiss), a client admin RPC
@@ -48,7 +48,7 @@ const publicCase = (c: Record<string, unknown>) => {
       status: String(d.status), amountUsd: Number(d.amount_usd), amountCrypto: Number(d.amount_crypto), asset: String(d.asset ?? 'TON'),
       network: String(d.network ?? 'mainnet'), memo: (d.memo as string | null) ?? null, txHash: (d.tx_hash as string | null) ?? null,
       receivedNano: d.received_amount_nano == null ? null : Number(d.received_amount_nano), validUntil: (d.valid_until as string | null) ?? null,
-      createdAt: String(d.created_at), username: (d.username as string | null) ?? null, telegramId: Number(d.telegram_id),
+      createdAt: String(d.created_at), username: (d.username as string | null) ?? null, telegramId: d.telegram_id == null ? null : Number(d.telegram_id),
       userId: (d.user_id as string | null) ?? null, userBanned: d.user_banned === true,
     },
     payment: p && {

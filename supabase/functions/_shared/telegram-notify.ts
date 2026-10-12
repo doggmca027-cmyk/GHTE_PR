@@ -181,7 +181,8 @@ export interface NotifyTarget {
 export async function notifyUser(deps: NotifyDeps, target: NotifyTarget, event: NotifyEvent, dedupeKey: string): Promise<NotifyOutcome> {
   const log = deps.log ?? console
   try {
-    if (!target.enabled) return 'disabled'
+    // a customer who signed up with e-mail has no Telegram chat (telegram_id is null, so chatId is 0): nothing to send
+    if (!target.enabled || !(Number(target.chatId) > 0)) return 'disabled'
     const text = buildMessage(event, target.lang)
 
     if (!deps.botToken) {

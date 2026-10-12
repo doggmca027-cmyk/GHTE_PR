@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { IWallet } from '@/types'
 import { mockBackend } from '@/services/api/mock-orders'
 import { AuthError, authenticateWithTelegram, fetchWallet, type AuthSession } from '@/services/api/auth'
+import { clearWebSession, insideTelegram, loadWebSession, saveWebSession } from '@/services/api/web-auth'
 
 type AuthState =
   | { status: 'loading' }
@@ -16,6 +17,10 @@ interface AuthContextValue {
   refreshWallet: () => Promise<void>
   /** Replaces the displayed wallet (e.g. with the balance returned by place-order). Works in mock mode too. */
   applyWallet: (wallet: IWallet) => void
+  /** A session from the web sign-in (e-mail / Telegram widget): shown now and remembered in this browser. */
+  signInWeb: (session: AuthSession) => void
+  /** Forgets the web session in this browser (nothing to do inside Telegram, where initData signs in again). */
+  signOut: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -27,6 +32,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async () => {
     setState({ status: 'loading' })
+    // a regular browser: the session remembered from the web sign-in, if it is still valid (Telegram always uses initData)
+    if (!insideTelegram()) {
+      const remembered = loadWebSession()
+      if (remembered) {
+        sessionRef.current = remembered
+        setState({ status: 'authenticated', session: remembered })
+        const wallet = await fetchWallet(remembered.token)
+        if (wallet && sessionRef.current === remembered) {
+          const next = { ...remembered, wallet }
+          sessionRef.current = next
+          setState({ status: 'authenticated', session: next })
+        }
+        return
+      }
+    }
     try {
       const session = await authenticateWithTelegram()
       sessionRef.current = session
@@ -50,6 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     if (session.expiresAt - Date.now() / 1000 < TOKEN_REFRESH_MARGIN_S) {
+      // a web session cannot be renewed silently: forget it, the sign-in starts again
+      if (!insideTelegram()) clearWebSession()
       await login()
       return
     }
@@ -68,6 +90,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ status: 'authenticated', session: next })
   }, [])
 
+  const signInWeb = useCallback((session: AuthSession) => {
+    saveWebSession(session)
+    sessionRef.current = session
+    setState({ status: 'authenticated', session })
+  }, [])
+
+  const signOut = useCallback(() => {
+    clearWebSession()
+    sessionRef.current = null
+    void login()
+  }, [login])
+
   useEffect(() => {
     void login()
   }, [login])
@@ -81,7 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [refreshWallet])
 
-  const value = useMemo(() => ({ state, retry: () => void login(), refreshWallet, applyWallet }), [state, login, refreshWallet, applyWallet])
+  const value = useMemo(
+    () => ({ state, retry: () => void login(), refreshWallet, applyWallet, signInWeb, signOut }),
+    [state, login, refreshWallet, applyWallet, signInWeb, signOut],
+  )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

@@ -521,7 +521,8 @@ export async function findUsers(session: AuthSession, query: string): Promise<Ad
   }
   const rows = await rpc<Record<string, unknown>[] | null>(session, 'admin_find_users', { p_query: query.trim() })
   return (rows ?? []).map((u) => ({
-    id: String(u.id), telegramId: num(u.telegram_id), username: (u.username as string | null) ?? null, firstName: (u.first_name as string | null) ?? null,
+    id: String(u.id), telegramId: u.telegram_id == null ? null : num(u.telegram_id), email: (u.email as string | null) ?? null,
+    username: (u.username as string | null) ?? null, firstName: (u.first_name as string | null) ?? null,
     isBanned: u.is_banned === true, isAdmin: u.is_admin === true, createdAt: String(u.created_at), balance: num(u.balance), orders: num(u.orders), isYou: u.is_you === true,
   }))
 }

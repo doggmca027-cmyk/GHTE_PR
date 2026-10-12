@@ -86,7 +86,7 @@ interface PeopleState {
 const PEOPLE_KEY = 'smm_mock_admin_people_v1'
 const demoUser = (n: number, username: string, now: number, extra: Partial<AdminUserView> = {}): AdminUserView => ({
   id: `demo-user-${910_000 + n}`, telegramId: 910_000 + n, username, firstName: username.split('_')[0], isBanned: false, isAdmin: false,
-  createdAt: new Date(now - n * 24 * HOUR).toISOString(), balance: 10 * n, orders: n, isYou: false, ...extra,
+  createdAt: new Date(now - n * 24 * HOUR).toISOString(), balance: 10 * n, orders: n, isYou: false, email: null, ...extra,
 })
 const DEMO_HASH = 'kq3Zk9mWvB0d7rM5tq1nqZ1y8hYQe7Q3x9vKpQ2l1cA='
 function seedPeople(now: number): PeopleState {

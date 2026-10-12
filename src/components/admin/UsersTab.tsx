@@ -76,7 +76,8 @@ export function BanControl({ session, userId, banned, label, onChanged }: {
   )
 }
 
-export const userLabel = (u: { username: string | null; telegramId: number }) => (u.username ? `@${u.username}` : `id ${u.telegramId}`)
+export const userLabel = (u: { username: string | null; telegramId: number | null; email?: string | null }) =>
+  u.username ? `@${u.username}` : u.email ? u.email : u.telegramId ? `id ${u.telegramId}` : 'клиента'
 
 /** Find a customer by Telegram id, user id or @username, and suspend or restore them. */
 export function UsersTab({ session }: { session: AuthSession }) {
@@ -102,13 +103,13 @@ export function UsersTab({ session }: { session: AuthSession }) {
   return (
     <div className="space-y-3">
       <p className="rounded-2xl bg-brand-light/60 px-3.5 py-2.5 text-[13px] font-medium text-brand-text">
-        Найдите клиента по Telegram ID, ID пользователя или @username. Заблокированный клиент не может покупать, пополнять баланс и писать в поддержку; каждое действие пишется в журнал аудита.
+        Найдите клиента по Telegram ID, ID пользователя, @username или e-mail. Заблокированный клиент не может покупать, пополнять баланс и писать в поддержку; каждое действие пишется в журнал аудита.
       </p>
       <form onSubmit={(e) => { e.preventDefault(); void search() }} className="flex gap-2">
         <label className="relative flex-1">
           <span className="sr-only">Найти клиента</span>
           <Search size={15} strokeWidth={1.75} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-muted" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} maxLength={64} placeholder="910001, @alice или UUID" className="h-11 w-full rounded-xl border border-blue-100/70 bg-surface pl-9 pr-3 text-sm outline-none focus:border-brand" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} maxLength={64} placeholder="910001, @alice, e-mail или UUID" className="h-11 w-full rounded-xl border border-blue-100/70 bg-surface pl-9 pr-3 text-sm outline-none focus:border-brand" />
         </label>
         <button type="submit" disabled={busy || query.trim().length < 2} className="h-11 rounded-xl bg-brand px-4 text-sm font-bold text-white disabled:opacity-50">
           {busy ? <Loader2 size={16} className="animate-spin" /> : 'Найти'}
@@ -122,7 +123,9 @@ export function UsersTab({ session }: { session: AuthSession }) {
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-light text-brand"><UserRound size={20} strokeWidth={1.75} /></span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[15px] font-bold text-content-primary">{u.firstName ?? userLabel(u)} {u.username && <span className="font-medium text-content-secondary">@{u.username}</span>}</p>
-              <p className="text-xs text-content-secondary">Telegram {u.telegramId} · с нами {timeAgoRu(u.createdAt).replace(/ назад$/, '')}</p>
+              <p className="text-xs text-content-secondary">
+                {[u.telegramId ? `Telegram ${u.telegramId}` : null, u.email].filter(Boolean).join(' · ')} · с нами {timeAgoRu(u.createdAt).replace(/ назад$/, '')}
+              </p>
               <p className="mt-0.5 truncate font-mono text-[11px] text-content-muted" title={u.id}>{u.id}</p>
             </div>
             {u.isBanned && <span className="shrink-0 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold text-white">Заблокирован</span>}

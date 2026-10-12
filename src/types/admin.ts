@@ -264,7 +264,8 @@ export interface ReconCaseOrder {
   createdAt: string
   serviceName: string
   username: string | null
-  telegramId: number
+  /** null for an e-mail account. */
+  telegramId: number | null
   /** A held order (processing, no provider id) that still has its routing snapshot can be re-submitted. */
   canRetry: boolean
   /** The customer, so they can be suspended from the case. */
@@ -287,7 +288,8 @@ export interface ReconCaseDeposit {
   validUntil: string | null
   createdAt: string
   username: string | null
-  telegramId: number
+  /** null for an e-mail account. */
+  telegramId: number | null
   userId: string | null
   userBanned: boolean
 }
@@ -308,7 +310,9 @@ export interface ResolveDepositResult {
 /** A customer found by admin_find_users. */
 export interface AdminUserView {
   id: string
-  telegramId: number
+  /** null for an e-mail account that never linked Telegram. */
+  telegramId: number | null
+  email: string | null
   username: string | null
   firstName: string | null
   isBanned: boolean
