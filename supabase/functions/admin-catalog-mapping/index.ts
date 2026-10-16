@@ -204,7 +204,8 @@ Deno.serve(instrument('admin-catalog-mapping', async (req: Request, { log }): Pr
         if (usable.length <= 1 && usable.some((o) => o.offerId === offer.id)) {
           return fail(409, 'last_offer', 'This is the last offer of the service: link another provider first, or switch the service off.')
         }
-        must(await db.from('provider_service_offers').update({ is_active: false }).eq('id', offer.id).select('id'), 'switch the offer off')
+        // an admin's "off" is final: the guard flags go too, so the sync never switches this offer back on (clear_catalog_anomalies)
+        must(await db.from('provider_service_offers').update({ is_active: false, anomaly_detected: false, anomaly_reason: null, anomaly_observed: null, anomaly_detected_at: null }).eq('id', offer.id).select('id'), 'switch the offer off')
         must(await db.from('admin_audit_log').insert({ admin_id: userId, action: 'unlink_offer', target_id: offer.id, details: { service_id: offer.service_id } }), 'audit')
       }
       const price = await reprice(offer.service_id)

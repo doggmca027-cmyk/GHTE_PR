@@ -9,7 +9,7 @@ import type { AdminProvider } from '@/types/admin-providers'
 import type { BundleSearchItem, BundleView, OfferBlock } from '@/types/catalog-mapping'
 
 export const BLOCK_LABEL: Record<OfferBlock, string> = {
-  anomaly: 'цена провайдера резко изменилась, оффер заморожен',
+  anomaly: 'провайдер прислал некорректные данные, оффер заморожен до исправления',
   offer_off: 'оффер выключен',
   panel_removed: 'провайдер убрал эту услугу',
   provider_off: 'провайдер выключен',

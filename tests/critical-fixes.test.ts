@@ -3,6 +3,7 @@ import path from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  LEGACY_PRICE_CHANGE_LIMIT,
   MAX_PRICE_CHANGE,
   detectCatalogAnomalies,
   diffProviderServices,
@@ -312,20 +313,30 @@ const incoming = (over: Partial<IProviderService> = {}): IProviderService => ({
   refillSupported: false, cancelSupported: false, ...over,
 })
 
+// Since 2026-10-16 the price-move guard is OFF by default (prices are applied and the storefront follows); these tests pin the guard
+// itself, which a caller can still switch on with a limit, and the impossible-data guard, which is always on.
+const LIMIT = LEGACY_PRICE_CHANGE_LIMIT
+
 describe('3. catalog anomaly detection (pure)', () => {
-  it('flags a 50% price increase and keeps what the provider reported', () => {
-    const a = detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 1.5 })], [])
+  it('by default a price move of any size is NOT an anomaly (autonomous pricing)', () => {
+    expect(MAX_PRICE_CHANGE).toBeNull()
+    expect(detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 5 })], [])).toEqual([])
+    expect(detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 0.1 })], [])).toEqual([])
+  })
+
+  it('with a limit: flags a 50% price increase and keeps what the provider reported', () => {
+    const a = detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 1.5 })], [], LIMIT)
     expect(a).toHaveLength(1)
     expect(a[0]).toMatchObject({ externalServiceId: '1', providerServiceId: PS_A, observed: { rate: 1.5, min: 100, max: 100000 } })
     expect(a[0].reason).toMatch(/price up 50%/)
   })
 
-  it('flags a large drop too, and lets moves inside the 30% band through', () => {
-    expect(MAX_PRICE_CHANGE).toBe(0.3)
-    expect(detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 0.5 })], [])[0].reason).toMatch(/price down 50%/)
-    expect(detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 1.3 })], [])).toEqual([])
-    expect(detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 0.71 })], [])).toEqual([])
-    expect(detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 1.31 })], [])).toHaveLength(1)
+  it('with a limit: flags a large drop too, and lets moves inside the 30% band through', () => {
+    expect(LIMIT).toBe(0.3)
+    expect(detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 0.5 })], [], LIMIT)[0].reason).toMatch(/price down 50%/)
+    expect(detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 1.3 })], [], LIMIT)).toEqual([])
+    expect(detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 0.71 })], [], LIMIT)).toEqual([])
+    expect(detectCatalogAnomalies([existingPS()], [incoming({ ratePer1000: 1.31 })], [], LIMIT)).toHaveLength(1)
   })
 
   it('flags a known service whose data became impossible; new services are not compared', () => {
@@ -338,7 +349,7 @@ describe('3. catalog anomaly detection (pure)', () => {
     const existing = [existingPS(), existingPS({ id: 'ps-2', external_service_id: '2', rate_per_1000: 2 })]
     const valid = [incoming({ ratePer1000: 1.5 }), incoming({ externalServiceId: '2', ratePer1000: 2.1 })]
     const diff = diffProviderServices(PROV_A, existing, valid, '2026-10-07T00:00:00Z')
-    const anomalies = detectCatalogAnomalies(existing, valid, [])
+    const anomalies = detectCatalogAnomalies(existing, valid, [], LIMIT)
     const out = withoutAnomalies(diff, valid, anomalies)
     expect(out.diff.rows.map((r) => r.external_service_id)).toEqual(['2'])
     expect(out.valid.map((s) => s.externalServiceId)).toEqual(['2'])
@@ -355,11 +366,11 @@ describe('3. catalog anomaly handling (real SQL)', () => {
   }, 120_000)
 
   /** What sync-catalog does for one provider run: diff, hold back anomalies, write the rest, flag the anomalies. */
-  async function syncRun(providerId: string, reported: IProviderService[]) {
+  async function syncRun(providerId: string, reported: IProviderService[], limit: number | null = LIMIT) {
     const existing = (await db.query<ExistingProviderService>(
       `select id, external_service_id, name, category_raw, rate_per_1000::float8 as rate_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, is_active from provider_services where provider_id = $1`, [providerId])).rows
     const diff = diffProviderServices(providerId, existing, reported, new Date().toISOString())
-    const anomalies = detectCatalogAnomalies(existing, reported, [])
+    const anomalies = detectCatalogAnomalies(existing, reported, [], limit)
     const kept = withoutAnomalies(diff, reported, anomalies)
     for (const r of kept.diff.rows) {
       await db.query(`update provider_services set rate_per_1000 = $3 where provider_id = $1 and external_service_id = $2`, [providerId, r.external_service_id, r.rate_per_1000])
@@ -407,6 +418,39 @@ describe('3. catalog anomaly handling (real SQL)', () => {
     await expect(db.query(`select accept_catalog_anomaly($1::uuid, $2::uuid)`, [OFFER_A, admin])).rejects.toThrow(/not valid/)
     const user = await newUser(db, 51, 0)
     await expect(db.query(`select accept_catalog_anomaly($1::uuid, $2::uuid)`, [OFFER_A, user])).rejects.toThrow(/forbidden/)
+  })
+
+  it('autonomous pricing (the default): a 50% increase is applied at once and the offer stays on', async () => {
+    expect(await syncRun(PROV_A, [incoming({ ratePer1000: 1.5 })], MAX_PRICE_CHANGE)).toEqual([])
+    expect(await offerA()).toMatchObject({ is_active: true, cost: '1.5000', anomaly_detected: false })
+  })
+
+  it('clear_catalog_anomalies: a frozen offer comes back when its provider service is active, except those kept', async () => {
+    await syncRun(PROV_A, [incoming({ ratePer1000: 1.5 })])
+    expect(await offerA()).toMatchObject({ is_active: false, anomaly_detected: true })
+    expect((await db.query<{ n: number }>(`select clear_catalog_anomalies($1::uuid, array[$2::uuid]) n`, [PROV_A, PS_A])).rows[0].n).toBe(0)
+    expect((await db.query<{ n: number }>(`select clear_catalog_anomalies($1::uuid) n`, [PROV_A])).rows[0].n).toBe(1)
+    expect(await offerA()).toMatchObject({ is_active: true, anomaly_detected: false, anomaly_reason: null, anomaly_observed: null })
+    // an inactive provider service stays off
+    await syncRun(PROV_A, [incoming({ ratePer1000: 2.5 })])
+    await db.query(`update provider_services set is_active = false where id = $1`, [PS_A])
+    expect((await db.query<{ n: number }>(`select clear_catalog_anomalies($1::uuid) n`, [PROV_A])).rows[0].n).toBe(0)
+  })
+
+  it('the one-time unfreeze of the migration applies the observed price and switches the offer back on; impossible data stays frozen', async () => {
+    await syncRun(PROV_A, [incoming({ ratePer1000: 1.9, maxQuantity: 50000 })]) // frozen by the old guard
+    await db.query(`select flag_catalog_anomaly($1::uuid, 'provider reports invalid max', null)`, [PS_B])
+    const sql = fs.readFileSync(path.resolve(__dirname, '../supabase/migrations/20261125000000_auto_accept_catalog_prices.sql'), 'utf8')
+    await db.exec(sql.slice(sql.indexOf('-- ---- one-time')))
+    expect(await offerA()).toMatchObject({ is_active: true, cost: '1.9000', anomaly_detected: false })
+    expect((await db.query<{ r: string; mx: number }>(`select rate_per_1000::text r, max_quantity mx from provider_services where id = $1`, [PS_A])).rows[0]).toEqual({ r: '1.9000', mx: 50000 })
+    expect((await db.query<{ a: boolean; f: boolean }>(`select is_active a, anomaly_detected f from provider_service_offers where id = $1`, [OFFER_B])).rows[0]).toEqual({ a: false, f: true })
+  })
+
+  it('only the service role may clear anomalies', async () => {
+    await db.exec(`set role authenticated`)
+    await expect(db.query(`select clear_catalog_anomalies(gen_random_uuid())`)).rejects.toThrow(/permission denied/)
+    await db.exec('reset role')
   })
 
   it('clients cannot flag or accept anomalies', async () => {

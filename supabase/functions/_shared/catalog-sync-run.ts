@@ -3,8 +3,9 @@
 //
 // What a run does, in this order, and what it never does:
 //   1. getServices() from the adapter. A failure aborts the provider BEFORE anything is written or deactivated.
-//   2. provider_services: upsert (new services appear, price / limits / names / flags are refreshed).
-//      Services whose price jumped more than 30 % or whose data became impossible are held back and their offers suspended.
+//   2. provider_services: upsert (new services appear, price / limits / names / flags are refreshed). A price move of any size is
+//      applied (the storefront price follows in step 6); only a service whose data became impossible is held back and its offers
+//      suspended. An offer suspended earlier whose provider service is valid again is switched back on (clearAnomalies).
 //   3. provider_service_offers: cost, limits and flags are made equal to the provider service they are built on
 //      (is_active, routing_score and the anomaly flags are never touched).
 //   4. Soft delete: provider_services missing from the response get is_active = false (never deleted).
@@ -15,6 +16,8 @@
 //      (admin-catalog-mapping).
 
 import {
+  LEGACY_PRICE_CHANGE_LIMIT,
+  countLargePriceMoves,
   detectCatalogAnomalies,
   diffProviderServices,
   emptyProviderReport,
@@ -58,6 +61,11 @@ export interface CatalogStore {
   loadProviderServices(providerId: string): Promise<ExistingProviderService[]>
   upsertProviderServices(rows: ProviderServiceRow[]): Promise<{ id: string; external_service_id: string }[]>
   flagAnomaly(anomaly: CatalogAnomaly): Promise<void>
+  /**
+   * Switches back on the offers of this provider that a guard suspended, except those of `keepProviderServiceIds` (still impossible in
+   * this run), when their provider service is active: the new data was applied in this run. Returns how many. Optional.
+   */
+  clearAnomalies?(providerId: string, keepProviderServiceIds: string[]): Promise<number>
   /** Every offer of this provider with the current values of its provider_services row (read AFTER the upsert). */
   loadOffers(providerId: string): Promise<ExistingOffer[]>
   updateOffers(rows: OfferRow[]): Promise<void>
@@ -119,8 +127,9 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
   const nowIso = (input.now?.() ?? new Date()).toISOString()
   let diff = diffProviderServices(provider.id, existingPS, valid, nowIso)
 
-  // 2b. Poisoned catalog protection: a service we already know whose price jumped more than 30%, or whose data became
-  //     impossible, is held back (nothing of it is written or re-priced) and its offers are suspended for an admin.
+  // 2b. Poisoned catalog protection: a service we already know whose data became impossible is held back (nothing of it is written
+  //     or re-priced) and its offers are suspended. A price move, however large, is NOT an anomaly any more: it is written below and the
+  //     storefront price follows it in step 6.
   const anomalies = detectCatalogAnomalies(existingPS, valid, skipped)
   if (anomalies.length > 0) {
     ;({ diff, valid } = withoutAnomalies(diff, valid, anomalies))
@@ -144,6 +153,18 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
   if (lean) await store.touchProviderServices!(provider.id, nowIso, diff.missing.map((m) => m.id))
   report.added = diff.added.length
   report.updated = diff.updated.length
+
+  // 3b. Offers a guard suspended earlier come back once their provider service is valid again (its new price was just written). They
+  //     can only be routed after step 6 re-prices their service: routing never takes an offer that costs more than the customer pays.
+  if (store.clearAnomalies) {
+    const restored = await store.clearAnomalies(provider.id, anomalies.map((a) => a.providerServiceId))
+    if (restored > 0) {
+      report.anomaliesCleared = restored
+      log.info('suspended offers restored with the current provider price', { providerId: provider.id, count: restored })
+    }
+  }
+  const bigMoves = countLargePriceMoves(existingPS, valid, LEGACY_PRICE_CHANGE_LIMIT)
+  if (bigMoves > 0) log.info('large provider price moves applied automatically', { providerId: provider.id, count: bigMoves })
 
   // 4. Offers: cost and limits follow the provider service, so routing always sees the real margin base.
   const providerOffers = await store.loadOffers(provider.id)

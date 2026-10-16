@@ -222,8 +222,14 @@ export function diffProviderServices(
 // Poisoned catalog protection
 // ---------------------------------------------------------------------------
 
-/** A price move larger than this (either way) is not applied automatically. */
-export const MAX_PRICE_CHANGE = 0.3
+/**
+ * The price-move guard that used to hold back a move of more than 30%. Off since 2026-10-16 (owner decision): a provider's new price is
+ * applied at once and the storefront price follows it through the price rules in the same run, so a service never stops selling because
+ * its cost moved. detectCatalogAnomalies() still takes a limit for a caller that wants one; impossible data is always held back.
+ */
+export const MAX_PRICE_CHANGE: number | null = null
+/** The old limit, for reference and for callers that opt in. */
+export const LEGACY_PRICE_CHANGE_LIMIT = 0.3
 
 export interface CatalogAnomaly {
   externalServiceId: string
@@ -238,8 +244,8 @@ const INVALID_REASONS = new Set(['invalid rate', 'invalid min', 'invalid max'])
 
 /**
  * Services we already sell whose new data must not be applied:
- *   * the price moved more than MAX_PRICE_CHANGE (30%) up or down from what we have, or
- *   * the provider now reports impossible data (negative / non-numeric price, min <= 0, max < min).
+ *   * the provider now reports impossible data (negative / non-numeric price, min <= 0, max < min), or
+ *   * only when a limit is passed (MAX_PRICE_CHANGE is null by default): the price moved more than that share up or down.
  * New services are not checked here: invalid ones are already dropped by normalizeProviderServices, and a brand-new
  * price has nothing to be compared with.
  */
@@ -247,22 +253,23 @@ export function detectCatalogAnomalies(
   existing: ExistingProviderService[],
   valid: IProviderService[],
   skipped: SkippedService[],
-  maxChange: number = MAX_PRICE_CHANGE,
+  maxChange: number | null = MAX_PRICE_CHANGE,
 ): CatalogAnomaly[] {
   const byExt = new Map(existing.map((e) => [e.external_service_id, e]))
   const out: CatalogAnomaly[] = []
-  for (const s of valid) {
+  const limit = maxChange ?? Infinity // no limit: no price move is an anomaly
+  for (const s of maxChange === null ? [] : valid) {
     const prev = byExt.get(s.externalServiceId)
     if (!prev) continue
     const old = Number(prev.rate_per_1000)
     if (!(old > 0)) continue
     const change = (s.ratePer1000 - old) / old
     // compared in whole basis points, so exactly 30% is not pushed over the limit by float error (1.3 / 1 - 1 = 0.30000000000000004)
-    if (Math.abs(Math.round(change * 10_000)) > Math.round(maxChange * 10_000)) {
+    if (Math.abs(Math.round(change * 10_000)) > Math.round(limit * 10_000)) {
       out.push({
         externalServiceId: s.externalServiceId,
         providerServiceId: prev.id,
-        reason: `price ${change > 0 ? 'up' : 'down'} ${Math.round(Math.abs(change) * 100)}% (${old} -> ${s.ratePer1000} per 1000), above the ${Math.round(maxChange * 100)}% limit`,
+        reason: `price ${change > 0 ? 'up' : 'down'} ${Math.round(Math.abs(change) * 100)}% (${old} -> ${s.ratePer1000} per 1000), above the ${Math.round(limit * 100)}% limit`,
         observed: { rate: s.ratePer1000, min: s.minQuantity, max: s.maxQuantity },
       })
     }
@@ -274,6 +281,17 @@ export function detectCatalogAnomalies(
     }
   }
   return out
+}
+
+/** How many known services moved by more than `limit` (either way) in this response: logged, no longer held back. */
+export function countLargePriceMoves(existing: ExistingProviderService[], valid: IProviderService[], limit: number): number {
+  const byExt = new Map(existing.map((e) => [e.external_service_id, Number(e.rate_per_1000)]))
+  let n = 0
+  for (const s of valid) {
+    const old = byExt.get(s.externalServiceId)
+    if (old !== undefined && old > 0 && Math.abs(Math.round(((s.ratePer1000 - old) / old) * 10_000)) > Math.round(limit * 10_000)) n++
+  }
+  return n
 }
 
 /**
@@ -493,8 +511,10 @@ export function planOfferSync(offers: ExistingOffer[]): OfferRow[] {
 // ---------------------------------------------------------------------------
 
 export interface ProviderSyncReport {
-  /** Services held back because of a suspicious price move or impossible data (their offers are suspended). */
+  /** Services held back because their data became impossible (their offers are suspended). */
   anomalies?: number
+  /** Offers suspended earlier that this run switched back on (their provider service is valid again, at its current price). */
+  anomaliesCleared?: number
   provider: string
   status: 'ok' | 'skipped' | 'failed'
   error?: string

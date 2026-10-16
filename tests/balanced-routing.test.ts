@@ -90,6 +90,17 @@ describe('Balanced routing: effective_cost = cost x penalty x (1 - min(score, 10
     expect(selectBestOffer(offers, P, { quantity: 10_000 }).id).toBe('big')
   })
 
+  it('retail vs wholesale: the quantity filter comes BEFORE the price, so a cheaper wholesale panel never gets a small order', () => {
+    const offers = [
+      offer('wholesale', 'pa', { costPer1000: 0.2, minQuantity: 1000, maxQuantity: 1_000_000 }),
+      offer('retail', 'pb', { costPer1000: 0.5, minQuantity: 10, maxQuantity: 5000 }),
+    ]
+    expect(rankOffers(offers, P, { quantity: 100 }).map((o) => o.id)).toEqual(['retail']) // below the wholesale minimum
+    expect(rankOffers(offers, P, { quantity: 3000 }).map((o) => o.id)).toEqual(['wholesale', 'retail']) // both can: cheapest first
+    expect(rankOffers(offers, P, { quantity: 50_000 }).map((o) => o.id)).toEqual(['wholesale']) // above the retail maximum
+    expect(rankOffers(offers, P, { quantity: 2_000_000 })).toEqual([]) // nobody can
+  })
+
   it('a fully assembled candidate set (database rows) is routed to the optimal offer', () => {
     const row = (id: string, prov: string, cost: number, score: number): OfferRow => ({
       id, service_id: 's1', provider_id: prov, provider_service_id: `ps-${id}`, cost_per_1000: String(cost), min_quantity: 10, max_quantity: 10_000,

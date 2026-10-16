@@ -83,9 +83,21 @@ class MemoryStore implements CatalogStore {
       return { id, external_service_id: r.external_service_id }
     })
   }
+  /** Offers a guard suspended (anomaly_detected). */
+  flagged = new Set<string>()
   async flagAnomaly(a: { providerServiceId: string }) {
     this.anomalies.push(a.providerServiceId)
-    for (const o of this.offers.values()) if (o.provider_service_id === a.providerServiceId) o.is_active = false
+    for (const o of this.offers.values()) if (o.provider_service_id === a.providerServiceId) { o.is_active = false; this.flagged.add(o.id) }
+  }
+  async clearAnomalies(providerId: string, keep: string[]) {
+    let n = 0
+    for (const o of this.offers.values()) {
+      if (o.provider_id !== providerId || !this.flagged.has(o.id) || keep.includes(o.provider_service_id) || !this.ps.get(o.provider_service_id)!.is_active) continue
+      o.is_active = true
+      this.flagged.delete(o.id)
+      n++
+    }
+    return n
   }
   async loadOffers(providerId: string): Promise<ExistingOffer[]> {
     return [...this.offers.values()].filter((o) => o.provider_id === providerId).map(({ is_active: _a, ...o }) => {
@@ -276,25 +288,58 @@ describe('syncProviderCatalog (through the IProviderAdapter contract)', () => {
     expect(store.offers.get('o1')).toMatchObject({ cost_per_1000: 1, max_quantity: 1000, is_active: false })
   })
 
-  it('holds back a price jump above 30%: nothing is written for it, its offers are suspended and the storefront price stays', async () => {
+  it('a price jump of any size is applied at once and the storefront price follows it with the same markup (no freeze)', async () => {
     const store = new MemoryStore()
     store.addPS('1', { rate_per_1000: 1 })
     store.addService('s1', 'ps-1', { customer_rate_per_1000: 2.5 })
     store.addOffer('o1', 's1', 'ps-1')
-    const report = await run(store, [svc('1', { ratePer1000: 5 })])
-    expect(report.anomalies).toBe(1)
-    expect(store.ps.get('ps-1')!.rate_per_1000).toBe(1)
-    expect(store.services.get('s1')).toMatchObject({ customer_rate_per_1000: 2.5, is_active: true })
-    expect(store.offers.get('o1')).toMatchObject({ cost_per_1000: 1, is_active: false })
-    expect(store.anomalies).toEqual(['ps-1'])
+    const report = await run(store, [svc('1', { ratePer1000: 5 })]) // x5
+    expect(report.anomalies).toBeUndefined()
+    expect(store.anomalies).toEqual([])
+    expect(store.ps.get('ps-1')!.rate_per_1000).toBe(5)
+    expect(store.offers.get('o1')).toMatchObject({ cost_per_1000: 5, is_active: true })
+    expect(store.services.get('s1')).toMatchObject({ customer_rate_per_1000: 12.5, is_active: true }) // 5 x 2.5, as 1 x 2.5 before
+    expect(report.services.repriced).toBe(1)
   })
 
-  it('an anomalous service is not treated as missing either', async () => {
+  it('a drop of any size is applied too, and the price follows it down through the rule', async () => {
     const store = new MemoryStore()
     store.addPS('1', { rate_per_1000: 1 })
-    const report = await run(store, [svc('1', { ratePer1000: 5 }), svc('2')])
+    store.addService('s1', 'ps-1', { customer_rate_per_1000: 2.5 })
+    store.addOffer('o1', 's1', 'ps-1')
+    await run(store, [svc('1', { ratePer1000: 0.4 })]) // -60%
+    expect(store.offers.get('o1')).toMatchObject({ cost_per_1000: 0.4, is_active: true })
+    expect(store.services.get('s1')!.customer_rate_per_1000).toBe(1)
+  })
+
+  it('an offer frozen by the old guard is switched back on with the current price and its service re-priced in the same run', async () => {
+    const store = new MemoryStore()
+    store.addPS('1', { rate_per_1000: 1 })
+    store.addService('s1', 'ps-1', { customer_rate_per_1000: 2.5 })
+    store.addOffer('o1', 's1', 'ps-1')
+    await store.flagAnomaly({ providerServiceId: 'ps-1' }) // what the 30% guard left behind
+    const report = await run(store, [svc('1', { ratePer1000: 1.9 })])
+    expect(report.anomaliesCleared).toBe(1)
+    expect(store.offers.get('o1')).toMatchObject({ cost_per_1000: 1.9, is_active: true })
+    expect(store.services.get('s1')).toMatchObject({ customer_rate_per_1000: 4.75, is_active: true })
+  })
+
+  it('impossible data is still held back: nothing written for it, its offers suspended and kept suspended; it is not "missing" either', async () => {
+    const store = new MemoryStore()
+    store.addPS('1', { rate_per_1000: 1 })
+    store.addService('s1', 'ps-1', { customer_rate_per_1000: 2.5 })
+    store.addOffer('o1', 's1', 'ps-1')
+    const report = await run(store, [svc('1', { minQuantity: 0 }), svc('2')]) // min 0: invalid
+    expect(report.anomalies).toBe(1)
     expect(report.deactivated).toBe(0)
-    expect(store.ps.get('ps-1')!.is_active).toBe(true)
+    expect(store.ps.get('ps-1')).toMatchObject({ rate_per_1000: 1, is_active: true })
+    expect(store.offers.get('o1')).toMatchObject({ is_active: false })
+    expect(report.anomaliesCleared).toBeUndefined()
+    // still impossible on the next run: stays suspended; valid again: back on
+    await run(store, [svc('1', { minQuantity: 0 }), svc('2')])
+    expect(store.offers.get('o1')!.is_active).toBe(false)
+    await run(store, [svc('1'), svc('2')])
+    expect(store.offers.get('o1')!.is_active).toBe(true)
   })
 
   it('refuses to deactivate more than half of a large catalogue (partial provider response)', async () => {

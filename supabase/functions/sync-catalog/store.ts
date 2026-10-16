@@ -79,6 +79,10 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       must(await db.rpc('flag_catalog_anomaly', { p_provider_service_id: a.providerServiceId, p_reason: a.reason, p_observed: a.observed }), 'flag catalog anomaly')
     },
 
+    async clearAnomalies(providerId, keepProviderServiceIds) {
+      return Number(must(await db.rpc('clear_catalog_anomalies', { p_provider_id: providerId, p_keep: keepProviderServiceIds }), 'clear catalog anomalies') ?? 0)
+    },
+
     async loadLinkedServices(providerId) {
       // services that sell through this provider = services with an offer from it
       const offers = await fetchAll<{ service_id: string }>(
