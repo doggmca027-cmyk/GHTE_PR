@@ -11,6 +11,7 @@ import { signJwt } from '../supabase/functions/_shared/jwt.ts'
 import { calculateCustomerRate, selectPriceRule } from '../supabase/functions/_shared/price-engine.ts'
 import { SMMProviderError, SMMv2Adapter, createSMMv2Adapter, mapProviderStatus } from '../supabase/functions/_shared/smm-v2-adapter.ts'
 import type { PriceRule } from '../supabase/functions/_shared/types.ts'
+import { MockProviderAdapter } from '../supabase/functions/_shared/providers/index.ts'
 
 // ---------------------------------------------------------------------------
 // 1. Telegram initData verification
@@ -247,10 +248,44 @@ describe('SMMv2Adapter response mapping', () => {
     expect([b.get('action'), b.get('service'), b.get('link'), b.get('quantity'), b.get('runs')]).toEqual(['add', '7', 'https://t.me/x', '1000', '3'])
   })
 
+  it('drip-feed: quantity is the total, the panel gets one run\'s quantity plus runs and interval', async () => {
+    const f = fakeFetch(() => jsonRes({ order: 777 }))
+    const res = await adapterWith(f.impl, { capabilities: { supportsDripFeed: true } }).createOrder({ serviceId: '7', link: 'https://t.me/x', quantity: 3000, runs: 3, interval: 30 })
+    expect(res).toEqual({ orderId: '777' })
+    const b = f.calls[0].body
+    expect([b.get('quantity'), b.get('runs'), b.get('interval')]).toEqual(['1000', '3', '30'])
+  })
+
+  it('drip-feed: runs 1 is a plain order (no runs / interval sent, interval ignored, no capability needed)', async () => {
+    const f = fakeFetch(() => jsonRes({ order: 1 }))
+    await adapterWith(f.impl).createOrder({ serviceId: '7', link: 'https://t.me/x', quantity: 1000, runs: 1, interval: 15 })
+    const b = f.calls[0].body
+    expect([b.get('quantity'), b.has('runs'), b.has('interval')]).toEqual(['1000', false, false])
+  })
+
+  it('drip-feed: refused before sending when the panel lacks the capability or the total does not split into whole runs', async () => {
+    const f = fakeFetch(() => jsonRes({ order: 1 }))
+    await expect(adapterWith(f.impl).createOrder({ serviceId: '7', link: 'https://t.me/x', quantity: 3000, runs: 3, interval: 30 })).rejects.toMatchObject({ name: 'NotSupportedError', capability: 'dripFeed' })
+    const dripFeed = adapterWith(f.impl, { capabilities: { supportsDripFeed: true } })
+    for (const bad of [{ quantity: 1000, runs: 3, interval: 30 }, { quantity: 1000, runs: 2.5, interval: 30 }, { quantity: 1000, runs: 2, interval: -1 }, { quantity: 1000, runs: 2, interval: 1.5 }]) {
+      await expect(dripFeed.createOrder({ serviceId: '7', link: 'https://t.me/x', ...bad })).rejects.toMatchObject({ name: 'SMMProviderError', code: 'invalid_quantity', ambiguous: false })
+    }
+    expect(f.calls).toHaveLength(0)
+  })
+
   it('refuses drip-feed parameters for a provider that does not support them, without sending anything', async () => {
     const f = fakeFetch(() => jsonRes({ order: 1 }))
     await expect(adapterWith(f.impl).createOrder({ serviceId: '7', link: 'https://t.me/x', quantity: 1000, extra: { runs: 3, interval: 10 } })).rejects.toMatchObject({ name: 'NotSupportedError', capability: 'dripFeed' })
     expect(f.calls).toHaveLength(0)
+  })
+
+  it('mock panel: drip-feed limits hold for one run, the cost is for the total', async () => {
+    const svc = { externalServiceId: '1', name: 'A', type: 'Default', categoryRaw: 'c', ratePer1000: 2, minQuantity: 100, maxQuantity: 1000, refillSupported: false, cancelSupported: false }
+    const mock = new MockProviderAdapter({ id: 'mock', name: 'Mock', services: [svc], balance: 100, capabilities: { supportsDripFeed: true } })
+    await expect(mock.createOrder({ serviceId: '1', link: 'https://t.me/x', quantity: 5000, runs: 5, interval: 10 })).resolves.toMatchObject({ orderId: expect.any(String) })
+    expect((await mock.getBalance()).balance).toBe(90) // 5000 x 2 / 1000
+    await expect(mock.createOrder({ serviceId: '1', link: 'https://t.me/x', quantity: 5000 })).rejects.toMatchObject({ code: 'invalid_quantity' })
+    await expect(mock.createOrder({ serviceId: '1', link: 'https://t.me/x', quantity: 500, runs: 10, interval: 10 })).rejects.toMatchObject({ code: 'invalid_quantity' })
   })
 
   it('maps order status and normalises the status string', async () => {

@@ -9,6 +9,7 @@ import type {
 } from './types.ts'
 import {
   assertSupports,
+  deliveryPlan,
   normalizeOrderStatus,
   normalizeRefillStatus,
   usesDripFeed,
@@ -230,6 +231,8 @@ export class SMMv2Adapter implements IProviderAdapter {
 
   async createOrder(params: ICreateOrderParams): Promise<{ orderId: string }> {
     if (usesDripFeed(params)) assertSupports(this.capabilities, 'dripFeed', this.name)
+    // quantity is the order's total; a drip-feed order sends one run's quantity plus runs and interval (SMM API v2)
+    const plan = deliveryPlan(params)
     if (this.isMock) {
       const orderId = String(this.mockSeq + Math.floor(Math.random() * 9_000_000_000))
       this.mockOrders.set(orderId, this.now())
@@ -237,7 +240,10 @@ export class SMMv2Adapter implements IProviderAdapter {
     }
     const data = await this.call(
       'add',
-      { service: params.serviceId, link: params.link, quantity: params.quantity, ...params.extra },
+      {
+        service: params.serviceId, link: params.link, quantity: plan.quantity, ...params.extra,
+        ...(plan.runs > 1 ? { runs: plan.runs, interval: plan.interval } : {}),
+      },
       true,
     )
     if (!isRecord(data) || data.order === undefined || data.order === null || data.order === '') {

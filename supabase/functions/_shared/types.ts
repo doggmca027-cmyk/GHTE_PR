@@ -97,6 +97,8 @@ export interface IProviderServiceOffer {
   cancelSupported: boolean
   /** The panel can deliver part of an order and refund the rest (provider_service_offers.supports_partial). Absent/false = not claimed. */
   supportsPartial?: boolean
+  /** The panel lists the provider service as drip-feed capable (provider_services.is_dripfeed_enabled). Absent = not capable. */
+  dripfeedSupported?: boolean
   isActive: boolean
   /** Higher is preferred by the (future) routing engine. */
   routingScore: number
@@ -132,8 +134,13 @@ export interface ICreateOrderParams {
   /** The provider's own service id (provider_services.external_service_id). */
   serviceId: string
   link: string
+  /** The order's TOTAL quantity. With runs > 1 the adapter sends quantity / runs, what a panel expects per delivery. */
   quantity: number
-  /** Extra panel-specific parameters (runs, interval, comments, ...). */
+  /** Drip-feed: number of deliveries (absent or 1 = a plain order). Needs the dripFeed capability when above 1. */
+  runs?: number
+  /** Drip-feed: minutes between deliveries. Sent only with runs > 1. */
+  interval?: number
+  /** Extra panel-specific parameters (comments, ...). */
   extra?: Record<string, string | number>
 }
 

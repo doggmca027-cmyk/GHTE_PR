@@ -19,7 +19,7 @@ import {
   type ProviderRefillResult,
   type ProviderRefillStatusResult,
 } from './contract.ts'
-import { SMMProviderError } from './contract.ts'
+import { SMMProviderError, deliveryPlan } from './contract.ts'
 import type { BatchStatusEntry, IProviderService } from '../types.ts'
 
 export const MOCK_CATALOG: readonly IProviderService[] = Object.freeze([
@@ -129,7 +129,9 @@ export class MockProviderAdapter extends BaseProviderAdapter {
     const svc = this.catalog.find((s) => s.externalServiceId === params.serviceId)
     if (!svc) throw new SMMProviderError('api', 'Incorrect service ID', { code: 'invalid_service' })
     if (!/^https?:\/\//.test(params.link) && !/^@/.test(params.link)) throw new SMMProviderError('api', 'Incorrect link', { code: 'invalid_link' })
-    if (!Number.isInteger(params.quantity) || params.quantity < svc.minQuantity || params.quantity > svc.maxQuantity) {
+    // like a real panel: the limits hold for ONE delivery (quantity / runs of a drip-feed order); the cost is for the total
+    const perRun = deliveryPlan(params).quantity
+    if (!Number.isInteger(perRun) || perRun < svc.minQuantity || perRun > svc.maxQuantity) {
       throw new SMMProviderError('api', 'Incorrect quantity', { code: 'invalid_quantity' })
     }
     const cost = Math.round((svc.ratePer1000 * params.quantity) / 1000 * 10_000) / 10_000

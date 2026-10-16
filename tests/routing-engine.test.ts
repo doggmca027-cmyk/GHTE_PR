@@ -85,6 +85,29 @@ describe('selectBestOffer', () => {
     expect(selectBestOffer(offers, providers).id).toBe('big-only') // no quantity: not filtered
   })
 
+  it('drip-feed (runs > 1): only drip-feed capable offers; runs 1 or none ignores the flag', () => {
+    const offers = [offer('cheap-plain', 'pa', { costPer1000: 0.1 }), offer('drip', 'pb', { costPer1000: 0.5, dripfeedSupported: true }), offer('off', 'pc', { costPer1000: 0.2, dripfeedSupported: false })]
+    const providers = [provider('pa'), provider('pb'), provider('pc')]
+    expect(rankOffers(offers, providers, { quantity: 1000, runs: 2 }).map((o) => o.id)).toEqual(['drip'])
+    expect(rankOffers(offers, providers, { quantity: 1000, runs: 1 }).map((o) => o.id)).toEqual(['cheap-plain', 'off', 'drip'])
+    expect(rankOffers(offers, providers, { quantity: 1000 }).map((o) => o.id)).toEqual(['cheap-plain', 'off', 'drip'])
+    expect(() => selectBestOffer([offers[0], offers[2]], providers, { quantity: 1000, runs: 2 })).toThrow(ServiceUnavailableError)
+  })
+
+  it('drip-feed limits hold for one run (quantity / runs), the total may exceed max', () => {
+    const offers = [offer('a', 'pa', { minQuantity: 100, maxQuantity: 1000, dripfeedSupported: true })]
+    const providers = [provider('pa')]
+    const ids = (quantity: number, runs: number) => rankOffers(offers, providers, { quantity, runs }).map((o) => o.id)
+    expect(ids(5000, 5)).toEqual(['a'])     // 1000 per run: at max
+    expect(ids(5000, 1)).toEqual([])        // the same total in one run is over max
+    expect(ids(500, 5)).toEqual(['a'])      // 100 per run: at min
+    expect(ids(500, 10)).toEqual([])        // 50 per run: under min, although the total is above it
+    expect(ids(6000, 5)).toEqual([])        // 1200 per run: over max
+    expect(ids(1000, 3)).toEqual([])        // 333.33 per run: not whole runs
+    expect(rankOffers(offers, providers, { quantity: 500, runs: 0 })).toEqual([])
+    expect(rankOffers(offers, providers, { quantity: 500, runs: 2.5 })).toEqual([])
+  })
+
   it('does not mutate its inputs and rankOffers returns the full ordering', () => {
     const offers = [offer('b', 'pb', { routingScore: 1 }), offer('a', 'pa', { routingScore: 2 })]
     const copy = structuredClone(offers)
@@ -135,6 +158,15 @@ describe('buildCandidates', () => {
   it('drops offers whose provider service was deactivated by a catalogue sync, and rows without joins', () => {
     const c = buildCandidates([row({ provider_service: { external_service_id: '1', is_active: false } }), row({ id: 'o2', provider: null }), row({ id: 'o3', provider_service: null })])
     expect(c.offers).toEqual([])
+  })
+
+  it('reads the drip-feed flag of the provider service (missing / null = not capable)', () => {
+    const c = buildCandidates([
+      row(),
+      row({ id: 'o2', provider_service: { external_service_id: '2', is_active: true, is_dripfeed_enabled: true } }),
+      row({ id: 'o3', provider_service: { external_service_id: '3', is_active: true, is_dripfeed_enabled: null } }),
+    ])
+    expect(c.offers.map((o) => [o.id, o.dripfeedSupported])).toEqual([['o1', false], ['o2', true], ['o3', false]])
   })
 
   it('shares one provider object between several offers of the same provider', () => {

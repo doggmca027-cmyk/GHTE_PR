@@ -16,7 +16,10 @@
 //      receive new orders)
 //   2. when the caller knows the price (maxCostPer1000 = services.customer_rate_per_1000), never an offer that costs more than the
 //      customer pays: the price is built on the CHEAPEST offer, so a pricier one reached through a score bonus must not sell at a loss
-//   3. only offers whose own limits take the quantity
+//   3. only offers whose own limits take the quantity. A drip-feed order (runs > 1) is `runs` deliveries of quantity / runs each,
+//      and a panel checks its min/max against ONE delivery, so the limits are compared with quantity / runs (a total that does
+//      not split into whole deliveries fits no offer). The price stays on the total quantity.
+//   4. a drip-feed order goes only to offers whose provider service the panel lists as drip-feed capable
 // The caller refuses the order BEFORE charging when nothing qualifies, and tries the next offer when one refuses before sending.
 
 import type { HealthStatus, IProvider, IProviderServiceOffer } from './types.ts'
@@ -61,8 +64,10 @@ export function costForQuantity(costPer1000: number, quantity: number): number {
 }
 
 export interface SelectOptions {
-  /** Drop offers that cannot take this quantity (outside the offer's own min/max). */
+  /** The order's TOTAL quantity. Drop offers that cannot take it (each delivery outside the offer's own min/max). */
   quantity?: number
+  /** Drip-feed: number of deliveries (default 1 = a plain order). Above 1 only drip-feed capable offers qualify. */
+  runs?: number
   /** The customer's price per 1000 for this service: offers costing more than this are dropped (never sell at a loss). */
   maxCostPer1000?: number
 }
@@ -72,9 +77,15 @@ export function rankOffers(offers: IProviderServiceOffer[], providers: IProvider
   const eligible = new Map(
     providers.filter((p) => p.isActive && p.routingEnabled && p.healthStatus === 'healthy').map((p) => [p.id, p]),
   )
+  const runs = opts.runs ?? 1
+  // not a whole number of runs: nothing qualifies (never guess what the caller meant)
+  if (!Number.isInteger(runs) || runs < 1) return []
+  const perRun = opts.quantity === undefined ? undefined : opts.quantity / runs
+  if (runs > 1 && perRun !== undefined && !Number.isInteger(perRun)) return []
   return offers
     .filter((o) => o.isActive && eligible.has(o.providerId))
-    .filter((o) => opts.quantity === undefined || (opts.quantity >= o.minQuantity && opts.quantity <= o.maxQuantity))
+    .filter((o) => runs === 1 || o.dripfeedSupported === true)
+    .filter((o) => perRun === undefined || (perRun >= o.minQuantity && perRun <= o.maxQuantity))
     .filter((o) => opts.maxCostPer1000 === undefined || round4(o.costPer1000) <= round4(opts.maxCostPer1000))
     .sort((a, b) => ec(a, eligible) - ec(b, eligible) || b.routingScore - a.routingScore || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
@@ -123,7 +134,7 @@ export interface OfferRow {
   routing_score: number
   created_at: string
   updated_at: string
-  provider_service: { external_service_id: string; is_active: boolean } | null
+  provider_service: { external_service_id: string; is_active: boolean; is_dripfeed_enabled?: boolean | null } | null
   provider: {
     id: string
     name: string
@@ -145,7 +156,7 @@ export interface OfferRow {
 /** Select list matching OfferRow (PostgREST embedded resources). */
 export const OFFER_SELECT =
   'id, service_id, provider_id, provider_service_id, cost_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, is_active, routing_score, created_at, updated_at, ' +
-  'provider_service:provider_services(external_service_id, is_active), ' +
+  'provider_service:provider_services(external_service_id, is_active, is_dripfeed_enabled), ' +
   'provider:providers(id, name, api_url, api_key_encrypted, api_version, is_active, routing_enabled, health_status, last_health_check, last_balance_sync, provider_balance, currency, priority, reliability_penalty_multiplier)'
 
 export interface RoutingCandidates {
@@ -172,6 +183,7 @@ export function buildCandidates(rows: OfferRow[]): RoutingCandidates {
       maxQuantity: r.max_quantity,
       refillSupported: r.refill_supported,
       cancelSupported: r.cancel_supported,
+      dripfeedSupported: r.provider_service.is_dripfeed_enabled === true,
       isActive: r.is_active,
       routingScore: r.routing_score,
       createdAt: r.created_at,

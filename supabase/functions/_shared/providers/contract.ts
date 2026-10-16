@@ -170,8 +170,25 @@ export function assertSupports(caps: ProviderCapabilities, capability: Capabilit
   if (!supports(caps, capability)) throw new NotSupportedError(capability, provider)
 }
 
-/** Drip-feed parameters (`runs`, `interval`) in an order request: they need the dripFeed capability. */
-export const usesDripFeed = (params: Pick<CreateOrderRequest, 'extra'>): boolean => params.extra?.runs !== undefined || params.extra?.interval !== undefined
+/** Drip-feed parameters (`runs` above 1, or runs/interval passed as extra) in an order request: they need the dripFeed capability. */
+export const usesDripFeed = (params: Pick<CreateOrderRequest, 'extra' | 'runs'>): boolean =>
+  (params.runs ?? 1) > 1 || params.extra?.runs !== undefined || params.extra?.interval !== undefined
+
+/**
+ * What one delivery of an order is: `quantity` is the order's total, a panel takes quantity / runs per run.
+ * Refused before anything is sent when runs is not a whole number >= 1, the total does not split into whole
+ * runs, or the interval is not a whole number >= 0 (a panel would round, and the customer would get less than paid for).
+ */
+export function deliveryPlan(params: Pick<CreateOrderRequest, 'quantity' | 'runs' | 'interval'>): { quantity: number; runs: number; interval: number } {
+  const runs = params.runs ?? 1
+  const interval = params.interval ?? 0
+  // a plain order is sent exactly as before
+  if (runs === 1) return { quantity: params.quantity, runs: 1, interval: 0 }
+  if (!Number.isInteger(runs) || runs < 1 || !Number.isInteger(interval) || interval < 0 || !Number.isInteger(params.quantity / runs)) {
+    throw new SMMProviderError('api', `invalid drip-feed order: ${params.quantity} in ${runs} runs every ${interval} min (not sent)`, { code: 'invalid_quantity' })
+  }
+  return { quantity: params.quantity / runs, runs, interval }
+}
 
 // ---------------------------------------------------------------------------
 // The contract
