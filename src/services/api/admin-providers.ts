@@ -101,11 +101,11 @@ export async function decideArbitrageCandidate(session: AuthSession, id: string,
   await call(session, { action: 'DECIDE_CANDIDATE', id, approve })
 }
 
-/** Runs the matcher now (the catalogue sync runs it at most hourly). */
-export async function runArbitrageMatch(session: AuthSession): Promise<{ auto_linked?: number; pending?: number }> {
+/** Asks for a matcher run: the database runs it within 5 minutes (otherwise once an hour). */
+export async function runArbitrageMatch(session: AuthSession): Promise<void> {
   if (session.isMock) {
     guardMock(session)
-    return { auto_linked: 0, pending: 0 }
+    return
   }
-  return (await call<{ result: { auto_linked?: number; pending?: number } }>(session, { action: 'RUN_ARBITRAGE_MATCH' }, ARBITRAGE_TIMEOUT_MS)).result
+  await call(session, { action: 'RUN_ARBITRAGE_MATCH' })
 }

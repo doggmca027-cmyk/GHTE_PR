@@ -27,7 +27,7 @@
 //   { action: "ARBITRAGE_CANDIDATES", status?: pending|auto_linked|approved|rejected, offset? }
 //       -> { success, items: [candidate], counts: { status: n }, refreshedAt }   cheaper donor services the matcher found (50 a page)
 //   { action: "DECIDE_CANDIDATE", id, approve }   approve links the offer; reject (also of an automatic link) removes it for good
-//   { action: "RUN_ARBITRAGE_MATCH" }              runs the matcher now (the catalogue sync runs it at most hourly)
+//   { action: "RUN_ARBITRAGE_MATCH" }              asks for a matcher run: pg_cron runs it within 5 minutes (otherwise hourly)
 //
 // Key handling: the raw apiKey is read from the POST body, encrypted here with AES-256-GCM (PROVIDER_KEY_SECRET, _shared/secrets.ts,
 // the exact envelope the workers decrypt with), registered with the logger's redactor and then dropped. SQL receives ciphertext only.
@@ -156,7 +156,7 @@ Deno.serve(instrument('admin-providers', async (req: Request, { log }): Promise<
     if (parsed.action === 'RUN_ARBITRAGE_MATCH') {
       const r = await call('admin_refresh_arbitrage', { p_actor: userId })
       if ('response' in r) return r.response
-      log.info('arbitrage matcher run by an admin')
+      log.info('arbitrage matcher requested by an admin')
       return json({ success: true, result: r.data })
     }
 

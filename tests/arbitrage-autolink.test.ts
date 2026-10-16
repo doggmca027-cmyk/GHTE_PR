@@ -136,12 +136,22 @@ describe('the matcher', () => {
     expect(list.items).toHaveLength(2)
   })
 
+  it('pg_cron runs it hourly, or at once after an admin asked (the button only queues)', async () => {
+    const run = async () => (await db.query<{ r: Record<string, unknown> }>(`select run_arbitrage_matcher() r`)).rows[0].r
+    expect(await run()).toEqual({ skipped: true }) // ran a moment ago
+    expect((await db.query<{ r: Record<string, unknown> }>(`select admin_refresh_arbitrage($1) r`, [admin])).rows[0].r).toEqual({ queued: true })
+    expect(await run()).toHaveProperty('auto_linked')
+    expect(await run()).toEqual({ skipped: true })
+    await db.query(`update arbitrage_state set refreshed_at = now() - interval '56 minutes'`)
+    expect(await run()).toHaveProperty('pending')
+  })
+
   it('only admins (through the service role)', async () => {
     const user = (await db.query<{ id: string }>(`insert into users(telegram_id) values (90002) returning id`)).rows[0].id
     await expect(db.query(`select admin_arbitrage_candidates($1)`, [user])).rejects.toThrow(/forbidden/)
     await expect(db.query(`select admin_refresh_arbitrage($1)`, [user])).rejects.toThrow(/forbidden/)
     for (const role of ['anon', 'authenticated']) {
-      for (const fn of ['refresh_arbitrage_candidates(numeric, integer, integer)', 'admin_arbitrage_candidates(uuid, text, integer, integer)', 'admin_decide_arbitrage_candidate(uuid, uuid, boolean)', 'admin_refresh_arbitrage(uuid)', 'service_fingerprint(text)']) {
+      for (const fn of ['refresh_arbitrage_candidates(numeric, integer, integer)', 'admin_arbitrage_candidates(uuid, text, integer, integer)', 'admin_decide_arbitrage_candidate(uuid, uuid, boolean)', 'admin_refresh_arbitrage(uuid)', 'run_arbitrage_matcher()', 'service_fingerprint(text)']) {
         expect((await db.query<{ p: boolean }>(`select has_function_privilege('${role}', 'public.${fn}', 'execute') p`)).rows[0].p).toBe(false)
       }
       expect((await db.query<{ p: boolean }>(`select has_table_privilege('${role}', 'public.arbitrage_candidates', 'select') p`)).rows[0].p).toBe(false)

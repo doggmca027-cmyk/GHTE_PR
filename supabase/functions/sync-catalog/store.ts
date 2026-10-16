@@ -83,8 +83,9 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       return must(await db.rpc('regroup_service_variants'), 'regroup service variants') as { groups: number; services_in_groups: number }
     },
 
-    async refreshArbitrage() {
-      return must(await db.rpc('refresh_arbitrage_candidates', { p_min_interval_minutes: 55 }), 'refresh arbitrage candidates') as { auto_linked?: number; pending?: number; skipped?: boolean }
+    async loadCategories() {
+      const rows = must(await db.from('categories').select('id, name, platform:platforms(slug)').eq('is_active', true), 'load categories') as unknown as { id: string; name: string; platform: { slug: string } | null }[]
+      return rows.filter((r) => r.platform).map((r) => ({ id: r.id, name: r.name, platform: r.platform!.slug }))
     },
 
     async refreshDripFeed() {

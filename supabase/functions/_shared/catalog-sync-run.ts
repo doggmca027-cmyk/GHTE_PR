@@ -34,7 +34,7 @@ import {
   type ProviderSyncReport,
   type ServiceRow,
 } from './catalog-sync.ts'
-import { buildPublishRows, isPublishable, type PublishCandidate, type PublishRow } from './catalog-publish.ts'
+import { buildCanonicalPublishRows, buildPublishRows, isPublishable, type ExistingCategory, type PublishCandidate, type PublishRow } from './catalog-publish.ts'
 import type { Logger } from './logger.ts'
 import type { IProviderAdapter } from './providers/contract.ts'
 import { groupByService, serviceCostBasis, type PricingOffer } from './service-cost.ts'
@@ -78,6 +78,8 @@ export interface CatalogStore {
   saveBalance(providerId: string, balance: number): Promise<void>
   /** Put the provider's qualifying services on the storefront (publish_provider_services). Optional: a store without it publishes nothing. */
   publishServices?(providerId: string, rows: PublishRow[]): Promise<{ categories_changed: number; services_created: number; services_updated: number }>
+  /** The storefront's active categories with their platform (canonical publishing puts donor services into them). Optional. */
+  loadCategories?(): Promise<ExistingCategory[]>
   /** Slugs of the platforms of the registry (a category on an unknown platform goes to "other"). */
   loadPlatformSlugs?(): Promise<string[]>
   /**
@@ -87,7 +89,8 @@ export interface CatalogStore {
   touchProviderServices?(providerId: string, atIso: string, skipIds: string[]): Promise<void>
   /** Rebuilds the variant groups of the storefront (regroup_service_variants). Optional. */
   regroupVariants?(): Promise<{ groups: number; services_in_groups: number }>
-  /** Smart Arbitrage matcher (refresh_arbitrage_candidates, at most hourly): links exact cheaper donor services, lists the rest. Optional. */
+  /** Smart Arbitrage matcher: links exact cheaper donor services, lists the rest. Optional; production runs it from pg_cron instead
+   *  (run_arbitrage_matcher, migration 20261206000000), because it takes longer than an API request may. */
   refreshArbitrage?(): Promise<{ auto_linked?: number; pending?: number; skipped?: boolean }>
   /** Rebuilds services.dripfeed_available (refresh_service_dripfeed); returns how many services changed. Optional. */
   refreshDripFeed?(): Promise<number>
@@ -95,7 +98,7 @@ export interface CatalogStore {
 
 export interface SyncProviderInput {
   /** routing_enabled false: the catalogue is imported and kept current, but nothing of this provider is put on the storefront. */
-  provider: { id: string; name: string; routing_enabled?: boolean; catalog_mode?: 'publish' | 'linked_only' }
+  provider: { id: string; name: string; routing_enabled?: boolean; catalog_mode?: 'publish' | 'linked_only'; publish_mapping?: 'translate' | 'canonical' }
   adapter: CatalogAdapter
   store: CatalogStore
   rules: PriceRule[]
@@ -214,7 +217,11 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
         chosen = ordered.slice(0, PUBLISH_BUDGET)
         backlog = ordered.length - chosen.length
       }
-      const built = buildPublishRows(chosen, new Set(await store.loadPlatformSlugs()))
+      // an English donor catalogue goes into the storefront's platform + action categories (no near-duplicate categories)
+      const slugs = new Set(await store.loadPlatformSlugs())
+      const built = provider.publish_mapping === 'canonical' && store.loadCategories
+        ? buildCanonicalPublishRows(chosen, slugs, await store.loadCategories())
+        : buildPublishRows(chosen, slugs)
       const total = { created: 0, updated: 0, categories: 0 }
       for (let i = 0; i < built.rows.length; i += PUBLISH_CHUNK) {
         const r = await store.publishServices(provider.id, built.rows.slice(i, i + PUBLISH_CHUNK))

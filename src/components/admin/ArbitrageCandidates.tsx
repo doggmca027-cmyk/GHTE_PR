@@ -67,13 +67,12 @@ export function ArbitrageCandidates({ session }: { session: AuthSession }) {
     haptic.select()
     setBusy('run'); setNote(null)
     try {
-      const r = await runArbitrageMatch(session)
+      await runArbitrageMatch(session)
       haptic.success()
-      setNote({ kind: 'ok', text: `Подбор выполнен: подключено автоматически ${r.auto_linked ?? 0}, на проверке ${r.pending ?? 0}.` })
-      await load(tab)
+      setNote({ kind: 'ok', text: 'Подбор запущен: результаты появятся здесь в течение 5 минут.' })
     } catch (e) {
       haptic.error()
-      setNote({ kind: 'error', text: e instanceof Error ? e.message : 'Подбор не выполнен.' })
+      setNote({ kind: 'error', text: e instanceof Error ? e.message : 'Подбор не запущен.' })
     } finally {
       setBusy(null)
     }
