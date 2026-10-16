@@ -185,8 +185,10 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
             }
             if (!apiKey && !mockMode) continue
             registerSecret(apiKey)
+            // These adapters only send orders that were already paid, and a drip-feed order got through routing and place_order only on a
+            // drip-feed capable provider service: it is sent with the runs / interval it was paid for.
             map.set(provider.id, createSMMv2Adapter(
-              { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log },
+              { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log, capabilities: { supportsDripFeed: true } },
               { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined },
             ))
           }

@@ -1,6 +1,6 @@
 // Pure parts of the admin-reconciliation Edge Function: request validation, error mapping, case severity and the
 // retry algorithm (all I/O injected, so every outcome is unit-testable).
-import { classifyProviderError } from './place-order-flow.ts'
+import { classifyProviderError, dripFeedOf } from './place-order-flow.ts'
 import type { ISMMProviderAdapter } from './types.ts'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -94,14 +94,15 @@ export type RetryOutcome =
  * Nothing here refunds: after a rejection the admin chooses.
  */
 export async function executeRetry(
-  input: { externalServiceId: string; link: string; quantity: number },
+  input: { externalServiceId: string; link: string; quantity: number; runs?: number; interval?: number },
   ports: RetryPorts,
   adapter: Pick<ISMMProviderAdapter, 'createOrder'>,
   log: { warn: (...a: unknown[]) => void; error: (...a: unknown[]) => void } = console,
 ): Promise<RetryOutcome> {
   let providerOrderId: string
   try {
-    providerOrderId = (await adapter.createOrder({ serviceId: input.externalServiceId, link: input.link, quantity: input.quantity })).orderId
+    // a drip-feed order is re-sent with the runs / interval it was paid for (quantity stays the total)
+    providerOrderId = (await adapter.createOrder({ serviceId: input.externalServiceId, link: input.link, quantity: input.quantity, ...dripFeedOf(input) })).orderId
   } catch (e) {
     const cls = classifyProviderError(e)
     if (cls.outcome === 'hold') {

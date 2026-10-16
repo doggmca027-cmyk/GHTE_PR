@@ -155,10 +155,21 @@ Deno.serve(instrument('admin-reconciliation', async (req: Request, { log, correl
       return fail(503, 'provider_unavailable', 'The provider is not configured, so the order cannot be retried right now.')
     }
     registerSecret(apiKey)
-    const adapter = createSMMv2Adapter({ id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey, correlationId, logger: log }, { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined })
+    // A drip-feed order is re-sent with the runs / interval it was paid for (read from the order itself).
+    const { data: shape, error: shapeError } = await db.from('orders').select('runs, interval').eq('id', job.order_id).maybeSingle()
+    if (shapeError || !shape) {
+      await release('retry could not start: order lookup failed')
+      throw new Error(`order lookup: ${shapeError?.message ?? 'no row'}`)
+    }
+    const runs = Number(shape.runs ?? 1)
+    const interval = Number(shape.interval ?? 0)
+    const adapter = createSMMv2Adapter(
+      { id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey, correlationId, logger: log, ...(runs > 1 ? { capabilities: { supportsDripFeed: true } } : {}) },
+      { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined },
+    )
 
     const outcome = await executeRetry(
-      { externalServiceId: details.externalServiceId, link: job.target_url, quantity: job.quantity },
+      { externalServiceId: details.externalServiceId, link: job.target_url, quantity: job.quantity, runs, interval },
       {
         async finish(providerOrderId) {
           const { error } = await db.rpc('finish_case_retry', { p_case_id: parsed.caseId, p_actor: userId, p_provider_order_id: providerOrderId })

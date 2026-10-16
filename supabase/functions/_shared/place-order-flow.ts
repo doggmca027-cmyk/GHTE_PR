@@ -32,6 +32,9 @@ export interface OrderRecord {
   provider_id?: string | null
   /** Set while a paid order waits for its provider to be funded (nothing reserved, nothing sent). */
   awaiting_funds_since?: string | null
+  /** Drip-feed: deliveries of quantity / runs each, interval minutes apart (absent on rows read before the columns existed = a plain order). */
+  runs?: number
+  interval?: number
 }
 
 export class PlaceOrderDbError extends Error {
@@ -65,6 +68,14 @@ export interface PlaceOrderArgs {
   promoCode?: string | null
   /** Accept the order even though the provider's balance cannot cover it (place_order checks the switch and the cap itself). */
   allowUnfunded?: boolean
+  /** Drip-feed (default 1 / 0 = a plain order). quantity stays the total; place_order checks the limits per run. */
+  runs?: number
+  interval?: number
+}
+
+/** The drip-feed part of a createOrder request for a stored order: nothing for a plain order. */
+export function dripFeedOf(order: Pick<OrderRecord, 'runs' | 'interval'>): { runs?: number; interval?: number } {
+  return (order.runs ?? 1) > 1 ? { runs: order.runs, interval: order.interval ?? 0 } : {}
 }
 
 export interface PlaceOrderPorts {
@@ -139,6 +150,8 @@ export interface PlaceOrderRequest {
   costAmount: number
   promoCode?: string | null
   allowUnfunded?: boolean
+  runs?: number
+  interval?: number
   /** The provider's own id for the service, read from the database (never from the client). */
   externalServiceId: string
 }
@@ -183,7 +196,8 @@ export async function submitClaimedOrder(
   let providerOrderId: string
   try {
     providerOrderId = (
-      await adapter.createOrder({ serviceId: externalServiceId, link: claimed.target_url, quantity: claimed.quantity })
+      // runs / interval come from the stored order, so a waiting order is sent exactly as it was paid for
+      await adapter.createOrder({ serviceId: externalServiceId, link: claimed.target_url, quantity: claimed.quantity, ...dripFeedOf(claimed) })
     ).orderId
   } catch (e) {
     const cls = classifyProviderError(e)
@@ -264,7 +278,14 @@ export function mapDbError(message: string): MappedError {
   if (/provider offer not found|quantity is outside the limits of the selected provider offer|cost does not match/.test(message)) {
     return { httpStatus: 503, error: 'service_unavailable', message: 'This service is temporarily unavailable. You were not charged.' }
   }
+  if (/does not support drip-feed/.test(message)) {
+    return { httpStatus: 503, error: 'service_unavailable', message: 'Gradual delivery is not available for this service right now. You were not charged.' }
+  }
   if (/quantity must be between/.test(message)) return { httpStatus: 400, error: 'invalid_input', message: message.replace(/^quantity/, 'Quantity') }
+  const perRun = /quantity per run must be between (\d+) and (\d+)/.exec(message)
+  if (perRun) return { httpStatus: 400, error: 'invalid_input', message: `Each delivery must be between ${perRun[1]} and ${perRun[2]}.` }
+  if (/quantity must split evenly into runs/.test(message)) return { httpStatus: 400, error: 'invalid_input', message: 'The quantity must divide evenly by the number of deliveries.' }
+  if (/runs must be at least 1|interval must not be negative/.test(message)) return { httpStatus: 400, error: 'invalid_input', message: 'Invalid delivery schedule.' }
   if (/order total is too small/.test(message)) return { httpStatus: 400, error: 'invalid_input', message: 'Order total is too small.' }
   if (/idempotency key .* different parameters/.test(message)) {
     return { httpStatus: 409, error: 'idempotency_conflict', message: 'This request key was already used for a different order.' }

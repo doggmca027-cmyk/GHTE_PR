@@ -1,6 +1,8 @@
 // Supabase Edge Function (Deno): POST /place-order
 //   Authorization: Bearer <JWT issued by telegram-auth>
-//   Body: { serviceId, targetUrl, quantity, idempotencyKey?, promoCode? }   (any price/rate/user fields are ignored)
+//   Body: { serviceId, targetUrl, quantity, idempotencyKey?, promoCode?, runs?, interval? }   (any price/rate/user fields are ignored)
+//   Drip-feed: quantity is the TOTAL, delivered in `runs` parts of quantity / runs, `interval` minutes apart; it is priced on the total and
+//   routed only to drip-feed capable offers whose limits take one part.
 //   The price is built by the database (list price - tier discount - promo discount, never under provider cost + minimum margin);
 //   see supabase/migrations/20261105000000_discount_engine.sql and the quote-order function.
 //
@@ -123,8 +125,11 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   }
   if (!service || !service.is_active) return fail(404, 'service_unavailable', 'This service is no longer available.')
 
-  const qty = validateQuantity(String(input.quantity), service.min_quantity, service.max_quantity)
-  if (!qty.ok) return fail(400, 'invalid_input', qty.error)
+  // Drip-feed: the service limits hold for one delivery (the parser already made sure the total splits evenly).
+  const runs = input.runs ?? 1
+  const interval = input.interval ?? 0
+  const qty = validateQuantity(String(input.quantity / runs), service.min_quantity, service.max_quantity)
+  if (!qty.ok) return fail(400, 'invalid_input', runs > 1 ? `Each delivery: ${qty.error.toLowerCase()}` : qty.error)
 
   const idempotencyKey = deriveIdempotencyKey(userId, input.clientKey)
 
@@ -143,8 +148,8 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   let offers: IProviderServiceOffer[]
   try {
     offers = existing?.provider_offer_id
-      ? [resolveOffer(candidates.offers, candidates.providers, { quantity: input.quantity, pinnedOfferId: existing.provider_offer_id })]
-      : rankOffers(candidates.offers, candidates.providers, { quantity: input.quantity, maxCostPer1000: Number(service.customer_rate_per_1000) })
+      ? [resolveOffer(candidates.offers, candidates.providers, { quantity: input.quantity, runs, pinnedOfferId: existing.provider_offer_id })]
+      : rankOffers(candidates.offers, candidates.providers, { quantity: input.quantity, runs, maxCostPer1000: Number(service.customer_rate_per_1000) })
   } catch (e) {
     if (e instanceof ServiceUnavailableError) return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
     throw e
@@ -169,8 +174,9 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
       }
       if (!apiKey && !mockMode) throw new PreSendRejection(`no API key for provider ${provider.name}`)
       registerSecret(apiKey)
+      // drip-feed is decided per provider service (routing + place_order check is_dripfeed_enabled), so the adapter is allowed to send it
       const adapter = createSMMv2Adapter(
-        { id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey, correlationId, logger: log },
+        { id: provider.id, name: provider.name, apiUrl: details.apiUrl, apiKey, correlationId, logger: log, ...(runs > 1 ? { capabilities: { supportsDripFeed: true } } : {}) },
         { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined },
       )
       return executePlaceOrder(
@@ -186,6 +192,8 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
           costAmount: costForQuantity(offer.costPer1000, input.quantity),
           promoCode: input.promoCode ?? null,
           allowUnfunded,
+          runs,
+          interval,
           externalServiceId: details.externalServiceId,
         },
         buildOrderPorts(db),

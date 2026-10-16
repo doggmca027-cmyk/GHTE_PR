@@ -55,7 +55,14 @@ export interface PlaceOrderInput {
   clientKey?: string
   /** A promo code typed by the customer (upper-cased); the database decides whether and how much it takes off. */
   promoCode?: string
+  /** Drip-feed: `quantity` (the total) delivered in `runs` parts, `interval` minutes apart. Present only when runs > 1. */
+  runs?: number
+  interval?: number
 }
+
+/** Drip-feed bounds accepted from a client: up to this many deliveries, at most a week between two. */
+export const MAX_DRIP_RUNS = 1000
+export const MAX_DRIP_INTERVAL_MINUTES = 10_080
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const CLIENT_KEY_RE = /^[A-Za-z0-9_-]{8,64}$/
@@ -64,8 +71,8 @@ const PROMO_CODE_RE = /^[A-Za-z0-9_-]{3,32}$/
 export type BodyError = { ok: false; error: 'invalid_input'; message: string }
 
 /**
- * Parses and validates the request body. Only serviceId / targetUrl / quantity /
- * idempotencyKey are read: any client-supplied price, rate, total or user id is ignored.
+ * Parses and validates the request body. Only serviceId / targetUrl / quantity / idempotencyKey / promoCode /
+ * runs / interval are read: any client-supplied price, rate, total or user id is ignored.
  */
 export function parsePlaceOrderBody(raw: unknown): { ok: true; value: PlaceOrderInput } | BodyError {
   const fail = (message: string): BodyError => ({ ok: false, error: 'invalid_input', message })
@@ -91,7 +98,19 @@ export function parsePlaceOrderBody(raw: unknown): { ok: true; value: PlaceOrder
     if (typeof body.promoCode !== 'string' || !PROMO_CODE_RE.test(body.promoCode.trim())) return fail('promoCode must be 3-32 characters of A-Z a-z 0-9 _ -')
     promoCode = body.promoCode.trim().toUpperCase()
   }
-  return { ok: true, value: { serviceId: body.serviceId.toLowerCase(), targetUrl: url.value, quantity: body.quantity, clientKey, ...(promoCode ? { promoCode } : {}) } }
+  // Drip-feed: runs defaults to 1 (a plain order, any interval ignored); above 1 it needs a gap of at least a minute and a total that splits
+  // into whole deliveries. The per-delivery limits are checked against the service once it is loaded.
+  const isWhole = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v)
+  const runs = body.runs === undefined || body.runs === null ? 1 : body.runs
+  if (!isWhole(runs) || runs < 1 || runs > MAX_DRIP_RUNS) return fail(`runs must be a whole number from 1 to ${MAX_DRIP_RUNS}`)
+  let drip: { runs: number; interval: number } | undefined
+  if (runs > 1) {
+    const interval = body.interval
+    if (!isWhole(interval) || interval < 1 || interval > MAX_DRIP_INTERVAL_MINUTES) return fail(`interval must be a whole number of minutes from 1 to ${MAX_DRIP_INTERVAL_MINUTES}`)
+    if (body.quantity % runs !== 0) return fail('quantity must divide evenly by runs')
+    drip = { runs, interval }
+  }
+  return { ok: true, value: { serviceId: body.serviceId.toLowerCase(), targetUrl: url.value, quantity: body.quantity, clientKey, ...(promoCode ? { promoCode } : {}), ...drip } }
 }
 
 /**

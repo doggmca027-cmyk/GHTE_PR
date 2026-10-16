@@ -25,6 +25,8 @@ export function buildOrderPorts(db: DbLike): PlaceOrderPorts {
           p_idempotency_key: a.idempotencyKey,
           p_promo_code: a.promoCode ?? null,
           p_allow_unfunded: a.allowUnfunded === true,
+          p_runs: a.runs ?? 1,
+          p_interval: a.interval ?? 0,
         }),
         'place_order',
       )
