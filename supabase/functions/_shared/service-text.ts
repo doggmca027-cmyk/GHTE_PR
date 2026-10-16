@@ -108,6 +108,26 @@ export interface ServiceAttributes {
 const num = (s: string) => Number(s.replace(',', '.'))
 const scale = (n: number, unit?: string) => (unit && /^тыс/i.test(unit) ? n * 1_000 : unit && /^млн/i.test(unit) ? n * 1_000_000 : n)
 
+/**
+ * The guarantee an English tag states: "refill: 30 days", "refill 30d", "30 days refill", "r30", "r: 30", "ar 30" / "auto-refill 30d",
+ * "refill: 1 month" / "1 year guarantee", "lifetime refill" / "lifetime guaranteed", "no refill" / "refill: no" / "non refill".
+ * A bare "refill" / "guaranteed" without a term, and "no drop" (low drop, not a guarantee), say nothing: undefined.
+ */
+export function englishRefill(tag: string): ServiceAttributes['refill'] | undefined {
+  const t = tag.toLowerCase().replace(/\s+/g, ' ').trim()
+  if (/no ?drop|low ?drop|non ?drop/.test(t)) return undefined
+  const word = /(refill|guarantee[d]?|warranty|\bar\b|auto[- ]?refill|^r\b|^r\d)/
+  if (!word.test(t)) return undefined
+  if (/\bno\b|\bnon[- ]?|without|not guaranteed|\b0 ?(d|days?)\b/.test(t)) return 'none'
+  if (/lifetime|life time|forever|permanent|\blife\b/.test(t)) return 'lifetime'
+  const m = /(\d+)\s*(d|day|days|m|mo|month|months|y|yr|year|years)?\b/.exec(t.replace(/^r(?=\d)/, 'r '))
+  if (!m) return undefined
+  const n = Number(m[1])
+  if (!Number.isFinite(n) || n <= 0) return undefined
+  const unit = m[2] ?? 'd'
+  return /^(y|yr|year|years)$/.test(unit) ? n * 365 : /^(m|mo|month|months)$/.test(unit) ? n * 30 : n
+}
+
 export function extractAttributes(tagsRu: string[]): ServiceAttributes {
   const a: ServiceAttributes = {}
   const geo = new Set<string>()
@@ -123,6 +143,11 @@ export function extractAttributes(tagsRu: string[]): ServiceAttributes {
       else {
         const m = /восстановление:?\s*(?:\d+\s*-\s*)?(\d+)\s*(?:дн|день|дня)/.exec(t)
         if (m) a.refill = Number(m[1])
+        // English panels (JAP, SMMFollows...): one bracket can hold several facts ("cheap | 10k/day | refill: 30 days")
+        else for (const part of t.split('|')) {
+          const r = englishRefill(part.trim())
+          if (r !== undefined) { a.refill = r; break }
+        }
       }
     }
     if (a.startMax === undefined) {
