@@ -27,6 +27,17 @@ describe('attributes of English names', () => {
     expect(translateService('YouTube Views [Max: 10M]', { platformSlug: 'youtube', brands: ['YouTube'] }).attributes).not.toHaveProperty('refill')
   })
 
+  it('facts listed with pipes (SMMFollows) count too; HTML entities are decoded', () => {
+    const o = { platformSlug: 'spotify', brands: ['Spotify'] }
+    expect(translateService('Spotify Saves | 🌍Location: Hungary 🇭🇺 | ⚡Speed: 3.5K–50K/Day | ♻️Refill: Lifetime | ⬆️MAX: 1M', o).attributes.refill).toBe('lifetime')
+    expect(translateService('Twitter Quote Retweets | Location: UK | ♻️Refill: 100 Days | MAX 1K', o).attributes.refill).toBe(100)
+    expect(translateService('Audiomack Streams | Location: Nigeria | ⏬Drop: No | ♻️Refill: No | ⬆️Max: 100K', o).attributes.refill).toBe('none')
+    expect(translateService('Rumble Views | Chile | No Drop Guaranteed | MAX 1M', o).attributes).not.toHaveProperty('refill')
+    const t = translateService('Rumble.com Video Views | Real &amp; Active | Provide The Video&#039;s Ad Code', o)
+    expect(t.name).toContain('Real & Active')
+    expect(t.name).toContain("Video's")
+  })
+
   it('the Russian tags of the main panel read as before', () => {
     expect(extractAttributes(['♻️ Восстановление: 60 дней']).refill).toBe(60)
     expect(extractAttributes(['❌ Без восстановления']).refill).toBe('none')

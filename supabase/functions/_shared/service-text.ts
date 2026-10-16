@@ -211,14 +211,26 @@ function platformWords(title: string, platformSlug: string): string {
   return platformSlug === 'youtube' || platformSlug === 'telegram' ? title.replace(/\bfollowers\b/gi, (m) => (m[0] === 'F' ? 'Subscribers' : 'subscribers')) : title
 }
 
-export function translateService(raw: string, opts: { platformSlug: string; brands: readonly string[] }): TranslatedService {
+/** HTML entities some panels send in names ("Real &amp; Active", "Video&#039;s"). */
+export function decodeEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+}
+
+/** Facts some English panels list with pipes instead of brackets: "Spotify Plays | Location: USA | Refill: 30 Days | MAX 1M". */
+const pipeFacts = (raw: string): string[] => raw.replace(/\[[^\]]*\]/g, ' ').split('|').slice(1).map((p) => p.trim()).filter(Boolean)
+
+export function translateService(rawName: string, opts: { platformSlug: string; brands: readonly string[] }): TranslatedService {
+  const raw = decodeEntities(rawName)
   const { titleRu, tagsRu } = parseServiceName(raw)
   const titleEn = platformWords(titleCase(brandFirst(translateText(titleRu), opts.brands)), opts.platformSlug)
   const translated = !hasCyrillic(titleEn)
   const tags = [...new Set(tagsRu.map((t) => translateText(t)).filter((t) => t !== '' && !hasCyrillic(t)))]
   const nameRu = [titleRu, ...tagsRu.map(stripDecor)].filter(Boolean).map((p, i) => (i === 0 ? p : `[${p}]`)).join(' ').replace(/\] \[/g, '] [')
   const name = translated ? [titleEn, ...tags.map((t) => `[${t}]`)].join(' ') : nameRu
-  return { name: name.slice(0, 240), nameRu: nameRu.slice(0, 240), attributes: extractAttributes(tagsRu), translated }
+  return { name: name.slice(0, 240), nameRu: nameRu.slice(0, 240), attributes: extractAttributes([...tagsRu, ...pipeFacts(raw)]), translated }
 }
 
 export interface TranslatedCategory {
