@@ -331,6 +331,9 @@ const de: Record<string, string> = {
   'The refill guarantee of this order is over.': 'Die Nachfüllgarantie dieser Bestellung ist abgelaufen.',
   'The provider could not start a refill now. Try again later.': 'Der Anbieter konnte das Nachfüllen gerade nicht starten. Versuche es später erneut.',
   'Could not request a refill. Try again later.': 'Nachfüllen konnte nicht angefordert werden. Versuche es später erneut.',
+  'Economy': 'Sparsam',
+  'Premium': 'Premium',
+  'Options': 'Optionen',
 }
 
 export default de

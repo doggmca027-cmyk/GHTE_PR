@@ -331,6 +331,9 @@ const tr: Record<string, string> = {
   'The refill guarantee of this order is over.': 'Bu siparişin telafi garantisi sona erdi.',
   'The provider could not start a refill now. Try again later.': 'Sağlayıcı telafiyi şu anda başlatamadı. Daha sonra tekrar deneyin.',
   'Could not request a refill. Try again later.': 'Telafi istenemedi. Daha sonra tekrar deneyin.',
+  'Economy': 'Ekonomik',
+  'Premium': 'Premium',
+  'Options': 'Seçenekler',
 }
 
 export default tr

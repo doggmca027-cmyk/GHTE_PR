@@ -331,6 +331,9 @@ const fr: Record<string, string> = {
   'The refill guarantee of this order is over.': 'La garantie de recharge de cette commande est terminée.',
   'The provider could not start a refill now. Try again later.': 'Le fournisseur n\'a pas pu lancer la recharge pour le moment. Réessayez plus tard.',
   'Could not request a refill. Try again later.': 'Impossible de demander une recharge. Réessayez plus tard.',
+  'Economy': 'Économique',
+  'Premium': 'Premium',
+  'Options': 'Options',
 }
 
 export default fr

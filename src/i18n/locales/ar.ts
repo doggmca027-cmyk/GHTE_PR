@@ -331,6 +331,9 @@ const ar: Record<string, string> = {
   'The refill guarantee of this order is over.': 'انتهى ضمان التعويض لهذا الطلب.',
   'The provider could not start a refill now. Try again later.': 'تعذّر على المزوّد بدء التعويض الآن. حاول لاحقًا.',
   'Could not request a refill. Try again later.': 'تعذّر طلب التعويض. حاول لاحقًا.',
+  'Economy': 'اقتصادي',
+  'Premium': 'مميز',
+  'Options': 'الخيارات',
 }
 
 export default ar

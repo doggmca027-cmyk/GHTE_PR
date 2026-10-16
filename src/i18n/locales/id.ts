@@ -331,6 +331,9 @@ const id: Record<string, string> = {
   'The refill guarantee of this order is over.': 'Garansi isi ulang pesanan ini sudah berakhir.',
   'The provider could not start a refill now. Try again later.': 'Penyedia tidak bisa memulai isi ulang sekarang. Coba lagi nanti.',
   'Could not request a refill. Try again later.': 'Gagal meminta isi ulang. Coba lagi nanti.',
+  'Economy': 'Ekonomi',
+  'Premium': 'Premium',
+  'Options': 'Pilihan',
 }
 
 export default id

@@ -331,6 +331,9 @@ const vi: Record<string, string> = {
   'The refill guarantee of this order is over.': 'Bảo hành bù của đơn này đã hết.',
   'The provider could not start a refill now. Try again later.': 'Nhà cung cấp chưa thể bắt đầu bù lúc này. Hãy thử lại sau.',
   'Could not request a refill. Try again later.': 'Không thể yêu cầu bù. Hãy thử lại sau.',
+  'Economy': 'Tiết kiệm',
+  'Premium': 'Cao cấp',
+  'Options': 'Tùy chọn',
 }
 
 export default vi

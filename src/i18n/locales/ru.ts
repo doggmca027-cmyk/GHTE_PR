@@ -331,6 +331,9 @@ const ru: Record<string, string> = {
   'The refill guarantee of this order is over.': 'Гарантия на докрутку для этого заказа закончилась.',
   'The provider could not start a refill now. Try again later.': 'Провайдер не смог запустить докрутку сейчас. Попробуйте позже.',
   'Could not request a refill. Try again later.': 'Не удалось запросить докрутку. Попробуйте позже.',
+  'Economy': 'Эконом',
+  'Premium': 'Премиум',
+  'Options': 'Варианты',
 }
 
 export default ru

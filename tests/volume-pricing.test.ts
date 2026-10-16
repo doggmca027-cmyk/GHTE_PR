@@ -74,11 +74,32 @@ describe('volume pricing (SQL)', () => {
     expect((await price(50_000)).rate_per_1000).toBe(1.8)
   })
 
-  it('the helpers are not callable by clients', async () => {
-    for (const fn of ['volume_rate(numeric, integer, jsonb)', 'valid_volume_tiers(jsonb)']) {
+  it('the helpers are not callable by clients, and the cost basis is not readable by them', async () => {
+    for (const fn of ['volume_rate(numeric, integer, jsonb, numeric)', 'valid_volume_tiers(jsonb)']) {
       const g = (await db.query<{ a: boolean; u: boolean }>(`select has_function_privilege('anon', '${fn}', 'execute') a, has_function_privilege('authenticated', '${fn}', 'execute') u`)).rows[0]
       expect([g.a, g.u]).toEqual([false, false])
     }
+    const c = (await db.query<{ a: boolean; u: boolean }>(`select has_column_privilege('anon', 'public.services', 'cost_basis_per_1000', 'select') a, has_column_privilege('authenticated', 'public.services', 'cost_basis_per_1000', 'select') u`)).rows[0]
+    expect([c.a, c.u]).toEqual([false, false])
+  })
+
+  it('with a known cost the steps scale the SERVICE\'s margin: x1.8 keeps +40/+25/+15, x1.5 goes +25/+15.625/+9.375', async () => {
+    await setTiers(TIERS)
+    // x1.8 service with its cost basis: identical to before
+    await db.query(`update services set cost_basis_per_1000 = 1, customer_rate_per_1000 = 1.8 where id = $1`, [SVC])
+    expect((await price(1000)).rate_per_1000).toBe(1.4)
+    expect((await price(100_000)).rate_per_1000).toBe(1.15)
+    // an expensive service kept at x1.5 (cost $10): the steps go down from ITS margin, never under cost
+    await db.query(`update services set cost_basis_per_1000 = 10, customer_rate_per_1000 = 15 where id = $1`, [SVC])
+    expect((await price(500, 10)).rate_per_1000).toBe(15)
+    expect((await price(1000, 10)).rate_per_1000).toBe(12.5)
+    expect((await price(10_000, 10)).rate_per_1000).toBe(11.5625)
+    expect((await price(100_000, 10)).rate_per_1000).toBe(10.9375)
+    // without the cost basis the old proportion would go under cost (15 x 1.15 / 1.8 = 9.5834): the floor lifts it
+    await db.query(`update services set cost_basis_per_1000 = null where id = $1`, [SVC])
+    expect(Number((await price(100_000, 10)).list_price)).toBeGreaterThanOrEqual(1000)
+    await db.query(`update services set customer_rate_per_1000 = 1.8 where id = $1`, [SVC])
+    await setTiers(null)
   })
 })
 

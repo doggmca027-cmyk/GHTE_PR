@@ -328,6 +328,8 @@ export interface ExistingService {
   is_active: boolean
   sort_order: number
   refill_supported: boolean
+  /** The cost the retail rate was built on (volume pricing scales its margin). undefined = the store does not track it. */
+  cost_basis_per_1000?: number | null
 }
 
 /** A storefront service as the sync sees it: plus the platform of its category, which selects the price rules. */
@@ -348,6 +350,7 @@ export interface ServiceRow {
   is_active: boolean
   sort_order: number
   refill_supported: boolean
+  cost_basis_per_1000?: number | null
 }
 
 export interface ServicePlan {
@@ -413,13 +416,18 @@ export function planService(input: PlanServiceInput): ServicePlan {
   }
   const reactivated = input.providerServiceReactivated && !existing.is_active
   const repriced = r4(existing.customer_rate_per_1000) !== r4(rate)
+  // the cost this rate is built on, for the volume steps (only where the store keeps it)
+  const tracksBasis = existing.cost_basis_per_1000 !== undefined
+  const costBasis = r4(basis.cost) / 10_000 // r4 counts ten-thousandths
+  const basisChanged = tracksBasis && (existing.cost_basis_per_1000 === null || r4(existing.cost_basis_per_1000 ?? 0) !== r4(basis.cost))
 
   const changed =
     repriced ||
     reactivated ||
     min !== existing.min_quantity ||
     max !== existing.max_quantity ||
-    existing.refill_supported !== basis.refillSupported
+    existing.refill_supported !== basis.refillSupported ||
+    basisChanged
   if (!changed) return NO_CHANGE
 
   return {
@@ -434,6 +442,7 @@ export function planService(input: PlanServiceInput): ServicePlan {
       max_quantity: max,
       is_active: reactivated ? true : existing.is_active,
       refill_supported: basis.refillSupported,
+      ...(tracksBasis ? { cost_basis_per_1000: costBasis } : {}),
     },
   }
 }
@@ -515,6 +524,8 @@ export interface ProviderSyncReport {
   anomalies?: number
   /** Offers suspended earlier that this run switched back on (their provider service is valid again, at its current price). */
   anomaliesCleared?: number
+  /** Variant groups of the storefront after this run (only for a provider that publishes its catalogue). */
+  variants?: { groups: number; services: number }
   provider: string
   status: 'ok' | 'skipped' | 'failed'
   error?: string

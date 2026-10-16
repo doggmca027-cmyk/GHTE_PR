@@ -331,6 +331,9 @@ const pt: Record<string, string> = {
   'The refill guarantee of this order is over.': 'A garantia de reposição deste pedido terminou.',
   'The provider could not start a refill now. Try again later.': 'O fornecedor não conseguiu iniciar a reposição agora. Tente mais tarde.',
   'Could not request a refill. Try again later.': 'Não foi possível pedir a reposição. Tente mais tarde.',
+  'Economy': 'Econômico',
+  'Premium': 'Premium',
+  'Options': 'Opções',
 }
 
 export default pt

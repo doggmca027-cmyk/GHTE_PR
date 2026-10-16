@@ -85,6 +85,8 @@ export interface CatalogStore {
    * Optional: a store without it gets every row rewritten on every run.
    */
   touchProviderServices?(providerId: string, atIso: string, skipIds: string[]): Promise<void>
+  /** Rebuilds the variant groups of the storefront (regroup_service_variants). Optional. */
+  regroupVariants?(): Promise<{ groups: number; services_in_groups: number }>
 }
 
 export interface SyncProviderInput {
@@ -256,5 +258,16 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
     if (plan.deactivated) report.services.deactivated++
   }
   if (planned.length > 0) await store.updateServices(planned.map((p) => p.row))
+
+  // 7. Variant groups (Economy / Standard / Premium cards) follow what the storefront now sells. Only after a run of a provider that
+  //    publishes its catalogue; a failure here never fails the sync.
+  if (provider.routing_enabled !== false && provider.catalog_mode !== 'linked_only' && store.regroupVariants) {
+    try {
+      const g = await store.regroupVariants()
+      report.variants = { groups: g.groups, services: g.services_in_groups }
+    } catch (e) {
+      log.warn('regrouping the service variants failed', { err: e, providerId: provider.id, error_code: 'regroup_failed' })
+    }
+  }
   return report
 }

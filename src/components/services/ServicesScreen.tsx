@@ -17,6 +17,7 @@ import { OrderModal } from './OrderModal'
 import { PlatformList, type PlatformEntry } from './PlatformList'
 import { ServiceCard } from './ServiceCard'
 import { ServiceSearchBox } from './ServiceSearchBox'
+import { VariantCard } from './VariantCard'
 
 type Overview = { status: 'loading' } | { status: 'error' } | { status: 'ready'; categories: ICategory[]; platforms: PlatformInfo[] }
 
@@ -248,8 +249,9 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
             </Card>
           )}
 
-          {page?.status === 'ready' && page.items.map((service) => (
-            <ServiceCard key={service.id} service={service} platform={platform} platformName={current?.name} onSelect={open} />
+          {page?.status === 'ready' && page.items.map((service) => (service.variants?.length
+            ? <VariantCard key={service.id} service={service} platform={platform} platformName={current?.name} onSelect={open} />
+            : <ServiceCard key={service.id} service={service} platform={platform} platformName={current?.name} onSelect={open} />
           ))}
 
           {page?.status === 'ready' && page.more && (

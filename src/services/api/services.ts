@@ -33,6 +33,7 @@ interface ServiceRow {
   sort_order: number
   name_i18n?: Record<string, string> | null
   attributes?: ServiceAttributes | null
+  variants?: ServiceRow[] | null
 }
 
 /** The only columns of `services` the app reads (the database also hides the provider-service ids from customers). */
@@ -72,7 +73,16 @@ export const serviceFromRow = (s: ServiceRow): ICatalogService => ({
   sortOrder: s.sort_order,
   ...(s.name_i18n && Object.keys(s.name_i18n).length > 0 ? { nameI18n: s.name_i18n } : {}),
   ...(s.attributes && Object.keys(s.attributes).length > 0 ? { attributes: s.attributes } : {}),
+  ...(s.variants && s.variants.length > 0
+    ? { variants: [...s.variants].sort((a, b) => Number(a.customer_rate_per_1000) - Number(b.customer_rate_per_1000)).map(serviceFromRow) }
+    : {}),
 })
+
+/**
+ * A category page: the main service of each variant group (and every ungrouped service), with its active variants embedded, so a
+ * group is never split across pages.
+ */
+export const CATEGORY_SELECT = `${SERVICE_COLUMNS.join(',')},variants:services!services_parent_service_id_fkey(${SERVICE_COLUMNS.join(',')})`
 
 /** The active platforms of the registry, in the admin's order. Anyone may read them (RLS: active rows only). */
 export async function fetchPlatforms(session: AuthSession): Promise<PlatformInfo[]> {
@@ -133,7 +143,7 @@ export async function fetchCategoryServices(session: AuthSession, categoryId: st
   }
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
   const rows = await rest<ServiceRow[]>(
-    `services?select=${SERVICE_COLUMNS.join(',')}&category_id=eq.${encodeURIComponent(categoryId)}&is_active=eq.true&order=sort_order,customer_rate_per_1000,id&limit=${limit}&offset=${offset}`,
+    `services?select=${CATEGORY_SELECT}&category_id=eq.${encodeURIComponent(categoryId)}&is_active=eq.true&parent_service_id=is.null&variants.is_active=eq.true&order=sort_order,customer_rate_per_1000,id&limit=${limit}&offset=${offset}`,
     session.token,
   )
   return rows.map(serviceFromRow)

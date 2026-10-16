@@ -331,6 +331,9 @@ const zh: Record<string, string> = {
   'The refill guarantee of this order is over.': '此订单的补量保障已结束。',
   'The provider could not start a refill now. Try again later.': '服务商暂时无法开始补量，请稍后再试。',
   'Could not request a refill. Try again later.': '无法申请补量，请稍后再试。',
+  'Economy': '经济',
+  'Premium': '高级',
+  'Options': '选项',
 }
 
 export default zh

@@ -331,6 +331,9 @@ const ja: Record<string, string> = {
   'The refill guarantee of this order is over.': 'この注文の補充保証は終了しました。',
   'The provider could not start a refill now. Try again later.': '提供元が今は補充を開始できませんでした。後でもう一度お試しください。',
   'Could not request a refill. Try again later.': '補充をリクエストできませんでした。後でもう一度お試しください。',
+  'Economy': 'エコノミー',
+  'Premium': 'プレミアム',
+  'Options': 'オプション',
 }
 
 export default ja

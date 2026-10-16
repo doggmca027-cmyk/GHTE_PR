@@ -331,6 +331,9 @@ const it: Record<string, string> = {
   'The refill guarantee of this order is over.': 'La garanzia di ricarica di questo ordine è scaduta.',
   'The provider could not start a refill now. Try again later.': 'Il fornitore non ha potuto avviare la ricarica ora. Riprova più tardi.',
   'Could not request a refill. Try again later.': 'Impossibile richiedere la ricarica. Riprova più tardi.',
+  'Economy': 'Economico',
+  'Premium': 'Premium',
+  'Options': 'Opzioni',
 }
 
 export default it

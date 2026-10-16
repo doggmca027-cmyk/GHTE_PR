@@ -331,6 +331,9 @@ const hi: Record<string, string> = {
   'The refill guarantee of this order is over.': 'इस ऑर्डर की रीफिल गारंटी समाप्त हो गई है।',
   'The provider could not start a refill now. Try again later.': 'प्रदाता अभी रीफिल शुरू नहीं कर सका। बाद में फिर कोशिश करें।',
   'Could not request a refill. Try again later.': 'रीफिल का अनुरोध नहीं हो सका। बाद में फिर कोशिश करें।',
+  'Economy': 'किफ़ायती',
+  'Premium': 'प्रीमियम',
+  'Options': 'विकल्प',
 }
 
 export default hi

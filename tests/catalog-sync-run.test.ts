@@ -302,6 +302,23 @@ describe('syncProviderCatalog (through the IProviderAdapter contract)', () => {
     expect(report.services.repriced).toBe(1)
   })
 
+  it('records the cost the price is built on where the store keeps it (volume steps scale from it); untouched where it does not', async () => {
+    const store = new MemoryStore()
+    store.addPS('1', { rate_per_1000: 2 })
+    store.addService('s1', 'ps-1', { customer_rate_per_1000: 5, cost_basis_per_1000: null })
+    store.addOffer('o1', 's1', 'ps-1')
+    await run(store, [svc('1', { ratePer1000: 2 })])
+    expect(store.services.get('s1')).toMatchObject({ customer_rate_per_1000: 5, cost_basis_per_1000: 2 })
+    const report = await run(store, [svc('1', { ratePer1000: 2 })]) // known and unchanged: nothing to write
+    expect(report.services.updated).toBe(0)
+    await run(store, [svc('1', { ratePer1000: 3 })])
+    expect(store.services.get('s1')).toMatchObject({ customer_rate_per_1000: 7.5, cost_basis_per_1000: 3 })
+    const plain = new MemoryStore()
+    plain.addPS('1', { rate_per_1000: 2 }); plain.addService('s1', 'ps-1', { customer_rate_per_1000: 5 }); plain.addOffer('o1', 's1', 'ps-1')
+    expect((await run(plain, [svc('1', { ratePer1000: 2 })])).services.updated).toBe(0)
+    expect(plain.services.get('s1')).not.toHaveProperty('cost_basis_per_1000')
+  })
+
   it('a drop of any size is applied too, and the price follows it down through the rule', async () => {
     const store = new MemoryStore()
     store.addPS('1', { rate_per_1000: 1 })

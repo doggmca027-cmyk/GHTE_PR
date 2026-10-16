@@ -79,6 +79,10 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       must(await db.rpc('flag_catalog_anomaly', { p_provider_service_id: a.providerServiceId, p_reason: a.reason, p_observed: a.observed }), 'flag catalog anomaly')
     },
 
+    async regroupVariants() {
+      return must(await db.rpc('regroup_service_variants'), 'regroup service variants') as { groups: number; services_in_groups: number }
+    },
+
     async clearAnomalies(providerId, keepProviderServiceIds) {
       return Number(must(await db.rpc('clear_catalog_anomalies', { p_provider_id: providerId, p_keep: keepProviderServiceIds }), 'clear catalog anomalies') ?? 0)
     },
@@ -94,7 +98,7 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
         rows.push(...await fetchAll<LinkedServiceRow>(
           (from, to) =>
             db.from('services')
-              .select('id, category_id, name, description, primary_provider_service_id, fallback_provider_service_id, customer_rate_per_1000, min_quantity, max_quantity, is_active, sort_order, refill_supported, category:categories(platform:platforms(slug))')
+              .select('id, category_id, name, description, primary_provider_service_id, fallback_provider_service_id, customer_rate_per_1000, min_quantity, max_quantity, is_active, sort_order, refill_supported, cost_basis_per_1000, category:categories(platform:platforms(slug))')
               .in('id', part).order('id').range(from, to),
           'load services',
         ))
@@ -102,6 +106,7 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       return rows.map(({ category, ...s }) => ({
         ...s,
         customer_rate_per_1000: Number(s.customer_rate_per_1000),
+        cost_basis_per_1000: s.cost_basis_per_1000 == null ? null : Number(s.cost_basis_per_1000),
         platform: (category?.platform?.slug ?? 'other') as Platform,
       }))
     },

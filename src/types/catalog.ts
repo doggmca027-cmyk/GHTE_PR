@@ -34,6 +34,11 @@ export interface ICatalogService {
   nameI18n?: Record<string, string>
   /** What the service promises, as facts the app describes in the customer's language. */
   attributes?: ServiceAttributes
+  /**
+   * Other variants of the same service (quality / speed / guarantee), cheapest first: the card shows switches. Only on the main
+   * service of a group (the cheapest), in a category listing.
+   */
+  variants?: ICatalogService[]
 }
 
 export interface ICatalog {
