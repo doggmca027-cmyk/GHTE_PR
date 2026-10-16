@@ -96,7 +96,7 @@ describe('catalogue and card', () => {
   const row = (id: string, rate: number, name = `S ${id}`) => ({ id, category_id: 'c', name, description: null, customer_rate_per_1000: rate, min_quantity: 10, max_quantity: 1000, refill_supported: false, sort_order: 0 })
 
   it('a category page embeds the active variants of each main service, cheapest first', () => {
-    expect(CATEGORY_SELECT).toContain('variants:services!services_parent_service_id_fkey(')
+    expect(CATEGORY_SELECT).toContain('variants:services!parent_service_id(')
     const s = serviceFromRow({ ...row('main', 1), variants: [row('dear', 3), row('mid', 2)] })
     expect(s.variants?.map((v) => v.id)).toEqual(['mid', 'dear'])
     expect(serviceFromRow({ ...row('solo', 1), variants: [] })).not.toHaveProperty('variants')

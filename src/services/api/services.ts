@@ -82,7 +82,9 @@ export const serviceFromRow = (s: ServiceRow): ICatalogService => ({
  * A category page: the main service of each variant group (and every ungrouped service), with its active variants embedded, so a
  * group is never split across pages.
  */
-export const CATEGORY_SELECT = `${SERVICE_COLUMNS.join(',')},variants:services!services_parent_service_id_fkey(${SERVICE_COLUMNS.join(',')})`
+// The hint names the COLUMN: PostgREST does not resolve this self-referencing key by its constraint name (PGRST200 on production),
+// while `!parent_service_id` embeds the children (the variants) of each main service.
+export const CATEGORY_SELECT = `${SERVICE_COLUMNS.join(',')},variants:services!parent_service_id(${SERVICE_COLUMNS.join(',')})`
 
 /** The active platforms of the registry, in the admin's order. Anyone may read them (RLS: active rows only). */
 export async function fetchPlatforms(session: AuthSession): Promise<PlatformInfo[]> {

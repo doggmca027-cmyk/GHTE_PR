@@ -300,7 +300,7 @@ describe('web-auth flow (database)', () => {
   it('a client address is limited across all actions', async () => {
     for (let i = 0; i < LIMITS.ip.limit; i++) await run({ action: 'LOGIN_PASSWORD', email: `x${i}@example.com`, password: 'whatever-1' })
     expect(await run({ action: 'LOGIN_PASSWORD', email: 'y@example.com', password: 'whatever-1' })).toMatchObject({ status: 429, body: { error: 'rate_limited' } })
-  })
+  }, 30_000) // a password hash per attempt: slower than 5 s when the whole suite runs in parallel
 
   it('password sign-in: right password -> session; wrong password and unknown address get the same answer', async () => {
     const ok = await run({ action: 'LOGIN_PASSWORD', email: 'new@example.com', password: 'new-password-1' })
