@@ -2,6 +2,7 @@ import { Check, ExternalLink, FileText, Languages, Monitor, Moon, ShieldCheck, S
 import { Card } from '@/components/ui/Card'
 import { LANGUAGES, tr, useLanguage, useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
+import { legalDocPath } from '@/lib/legal'
 import { setThemePreference, useThemePreference, type ThemePreference } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
@@ -111,6 +112,7 @@ function ThemeCard() {
 
 export function SettingsScreen({ session }: { session: AuthSession }) {
   const t = useT()
+  const { lang } = useLanguage()
   const { user, isMock } = session
   return (
     <div className="space-y-4">
@@ -130,8 +132,8 @@ export function SettingsScreen({ session }: { session: AuthSession }) {
 
       <Card className="space-y-2 p-4">
         <h2 className="text-xs font-bold uppercase tracking-wide text-content-muted">{t('Legal')}</h2>
-        <LinkRow href="/terms.html" icon={FileText} label={t('Terms of Service')} />
-        <LinkRow href="/privacy.html" icon={ShieldCheck} label={t('Privacy Policy')} />
+        <LinkRow href={legalDocPath('terms', lang)} icon={FileText} label={t('Terms of Service')} />
+        <LinkRow href={legalDocPath('privacy', lang)} icon={ShieldCheck} label={t('Privacy Policy')} />
       </Card>
     </div>
   )

@@ -22,8 +22,9 @@ describe('SettingsScreen', () => {
     expect(html).toContain('Settings')
     expect(html).toContain('@someone')
     expect(html).toContain('6288342755')
-    expect(html).toContain('href="/terms.html"')
-    expect(html).toContain('href="/privacy.html"')
+    // the clean URLs the sitemap lists (English in a test: no language is loaded)
+    expect(html).toContain('href="/terms"')
+    expect(html).toContain('href="/privacy"')
     expect(html).toContain('rel="noopener noreferrer"')
   })
 

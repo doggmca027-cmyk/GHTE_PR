@@ -1,112 +1,223 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
-    <meta charset="UTF-8" />
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#EBF3FE" />
-    <title>Privacy Policy</title>
-    <style>
-      :root { color-scheme: light; }
-      * { box-sizing: border-box; }
-      body { margin: 0; font: 16px/1.65 "Plus Jakarta Sans", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #0f172a; background: linear-gradient(#ebf3fe, #fff 420px) no-repeat #fff; }
-      main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
-      h1 { font-size: 28px; line-height: 1.2; margin: 0 0 4px; }
-      h2 { font-size: 18px; margin: 32px 0 8px; }
-      p, li { color: #334155; }
-      li { margin: 4px 0; }
-      .meta { color: #64748b; font-size: 14px; margin-bottom: 24px; }
-      .card { background: #fff; border: 1px solid rgb(219 234 254 / .7); border-radius: 24px; padding: 20px 22px; box-shadow: 0 8px 30px rgb(0 136 204 / .06); }
-      table { width: 100%; border-collapse: collapse; font-size: 15px; background: #fff; border-radius: 16px; overflow: hidden; }
-      th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; color: #334155; }
-      th { background: #f5f9fd; color: #0f172a; }
-      a { color: #0277bd; }
-      nav { margin-top: 32px; font-size: 14px; }
-    </style>
+    <title>Privacy Policy | GRAM Hub</title>
+    <meta name="description" content="What personal data GRAM Hub, the Telegram Mini App for social media promotion paid in TON, collects, why, who receives it, how long it is kept and your rights." />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+    <link rel="canonical" href="__SITE_URL__/privacy" />
+    <link rel="alternate" hreflang="en" href="__SITE_URL__/privacy" />
+    <link rel="alternate" hreflang="ru" href="__SITE_URL__/ru/privacy" />
+    <link rel="alternate" hreflang="uk" href="__SITE_URL__/uk/privacy" />
+    <link rel="alternate" hreflang="x-default" href="__SITE_URL__/privacy" />
+    <meta name="theme-color" content="#EBF3FE" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0E1621" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="GRAM Hub" />
+    <meta property="og:title" content="Privacy Policy | GRAM Hub" />
+    <meta property="og:description" content="GRAM Hub collects only what it needs to run your account, deposits and orders. No phone, no email, no ad tracking, no data sales." />
+    <meta property="og:url" content="__SITE_URL__/privacy" />
+    <meta property="og:image" content="__SITE_URL__/tonconnect-icon.png" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="ru_RU" />
+    <meta property="og:locale:alternate" content="uk_UA" />
+    <meta property="article:modified_time" content="2026-10-12" />
+    <meta name="twitter:card" content="summary" />
+    <link rel="icon" href="/tonconnect-icon.png" type="image/png" />
+    <link rel="stylesheet" href="/legal.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          { "@type": "Organization", "@id": "__SITE_URL__/#organization", "name": "GRAM Hub", "url": "__SITE_URL__/", "logo": "__SITE_URL__/tonconnect-icon.png", "sameAs": ["__BOT_URL__"] },
+          { "@type": "WebSite", "@id": "__SITE_URL__/#website", "url": "__SITE_URL__/", "name": "GRAM Hub", "publisher": { "@id": "__SITE_URL__/#organization" }, "inLanguage": ["en", "ru", "uk"] },
+          {
+            "@type": "WebPage", "@id": "__SITE_URL__/privacy#webpage", "url": "__SITE_URL__/privacy", "name": "Privacy Policy | GRAM Hub",
+            "description": "What personal data GRAM Hub collects, why, who receives it, how long it is kept and your rights.",
+            "inLanguage": "en", "isPartOf": { "@id": "__SITE_URL__/#website" }, "about": { "@id": "__SITE_URL__/#organization" },
+            "datePublished": "2026-10-06", "dateModified": "2026-10-12", "breadcrumb": { "@id": "__SITE_URL__/privacy#breadcrumb" }
+          },
+          {
+            "@type": "BreadcrumbList", "@id": "__SITE_URL__/privacy#breadcrumb",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "GRAM Hub", "item": "__SITE_URL__/" },
+              { "@type": "ListItem", "position": 2, "name": "Privacy Policy", "item": "__SITE_URL__/privacy" }
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
-    <main>
-      <h1>Privacy Policy</h1>
-      <p class="meta">Last updated: 6 October 2026</p>
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="top">
+      <a class="brand" href="/">GRAM Hub<small>TON Ecosystem</small></a>
+      <nav class="langs" aria-label="Language">
+        <a href="/privacy" hreflang="en" lang="en" aria-current="page">EN</a>
+        <a href="/ru/privacy" hreflang="ru" lang="ru">RU</a>
+        <a href="/uk/privacy" hreflang="uk" lang="uk">UK</a>
+      </nav>
+    </header>
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <ol><li><a href="/">GRAM Hub</a></li><li aria-current="page">Privacy Policy</li></ol>
+    </nav>
 
-      <div class="card">
-        <p>
-          This policy explains what personal data this Telegram Mini App and its bot (the "Service") collect, why, who
-          receives it and what choices you have. It applies together with our <a href="/terms">Terms of Service</a>.
-          "We" means the operator of the bot.
-        </p>
-      </div>
+    <main id="content">
+      <article>
+        <h1>Privacy Policy</h1>
+        <p class="meta">Last updated: <time datetime="2026-10-12">12 October 2026</time> · Applies to the GRAM Hub Telegram Mini App and its bot <a href="__BOT_URL__">__BOT_NAME__</a></p>
 
-      <h2>1. Data we collect</h2>
-      <table>
-        <thead><tr><th>Data</th><th>Source</th><th>Why</th></tr></thead>
-        <tbody>
-          <tr><td>Telegram user ID, username, first name, language code</td><td>Telegram, when you open the Mini App (verified cryptographically)</td><td>To create and secure your account, show your name, and send messages in your language</td></tr>
-          <tr><td>Wallet address you pay from, deposit amounts, transaction hashes</td><td>The TON blockchain, when you make a deposit</td><td>To confirm and credit deposits, prevent double crediting, and keep financial records</td></tr>
-          <tr><td>Balance and transaction history (deposits, purchases, refunds)</td><td>Generated by the Service</td><td>To operate your prepaid balance and show your history</td></tr>
-          <tr><td>Orders: the link you provide, quantity, price, status</td><td>You</td><td>To fulfil the order, show its progress and handle refunds and support</td></tr>
-          <tr><td>Technical data: IP address, device and request logs</td><td>Our hosting and infrastructure providers</td><td>To run, secure and troubleshoot the Service, and to detect abuse</td></tr>
-        </tbody>
-      </table>
-      <p>
-        We do not ask for your phone number, email, real name, passwords, or your wallet's private keys or seed phrase.
-        We never receive them: wallet connection uses the TON Connect standard and you approve each payment in your own wallet.
-      </p>
+        <section class="summary" aria-labelledby="in-short">
+          <h2 id="in-short">In short</h2>
+          <ul>
+            <li>We use your Telegram ID, username, first name and language to run your account. We never ask for your phone, email or wallet keys.</li>
+            <li>Deposits are public TON blockchain transactions; we record them to credit your balance.</li>
+            <li>Providers that fulfil orders receive only the link and the quantity, not who you are.</li>
+            <li>We do not sell your data and do not use it for advertising. There are no third-party trackers.</li>
+            <li>You can ask us what we hold, to correct it or to delete it, except financial records we must keep.</li>
+          </ul>
+        </section>
 
-      <h2>2. What we do with it</h2>
-      <ul>
-        <li>Provide the Service: sign you in, process deposits, place and track orders, issue refunds.</li>
-        <li>Send you service messages in the Telegram bot: deposit received, order completed, cancelled or partially completed. These are transactional, not marketing.</li>
-        <li>Prevent fraud and abuse, enforce our Terms and comply with legal obligations.</li>
-        <li>Support: investigate payment or order problems you report.</li>
-      </ul>
-      <p>We do not sell your personal data and we do not use it for advertising or profiling.</p>
+        <nav class="toc" aria-labelledby="contents">
+          <h2 id="contents">Contents</h2>
+          <ol>
+            <li><a href="#data">Data we collect</a></li>
+            <li><a href="#use">What we do with it</a></li>
+            <li><a href="#recipients">Who receives data</a></li>
+            <li><a href="#device">What is stored on your device</a></li>
+            <li><a href="#retention">How long we keep it</a></li>
+            <li><a href="#security">Security</a></li>
+            <li><a href="#rights">Your choices and rights</a></li>
+            <li><a href="#children">Children</a></li>
+            <li><a href="#transfers">International transfers</a></li>
+            <li><a href="#changes">Changes</a></li>
+            <li><a href="#contact">Contact</a></li>
+          </ol>
+        </nav>
 
-      <h2>3. Who receives data</h2>
-      <ul>
-        <li><strong>SMM providers</strong> that fulfil your orders receive only the link you want promoted and the quantity. They do not receive your Telegram identity from us. Links you provide are by nature public content or profiles.</li>
-        <li><strong>Telegram</strong> delivers the Mini App and bot messages under its own privacy policy.</li>
-        <li><strong>Infrastructure providers</strong> that host the app and database (for example Supabase and Vercel) process data on our behalf.</li>
-        <li><strong>TON network and a blockchain data API</strong>: deposits are public blockchain transactions; we query a public API to confirm them. Blockchain data is public and permanent by design.</li>
-        <li><strong>Exchange-rate service</strong>: we fetch a public TON/USD price; no personal data is sent.</li>
-        <li>Authorities or advisers, where required by law or to protect our rights.</li>
-      </ul>
+        <div class="card intro">
+          <p>
+            This policy explains what personal data the GRAM Hub Telegram Mini App and its bot (the "Service") collect, why,
+            who receives it and what choices you have. It applies together with our <a href="/terms">Terms of Service</a>.
+            "We" means the operator of the bot.
+          </p>
+        </div>
 
-      <h2>4. How long we keep it</h2>
-      <p>
-        Account data is kept while your account exists. Financial records (balances, deposits, orders, refunds) are kept
-        as long as needed for accounting, dispute handling and legal obligations, even after you stop using the Service,
-        because the ledger must stay complete and unaltered. Technical logs are kept for a limited period for security and
-        troubleshooting.
-      </p>
+        <section id="data">
+          <h2>1. Data we collect</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Data</th><th>Source</th><th>Why</th></tr></thead>
+              <tbody>
+                <tr><td>Telegram user ID, username, first name, language code</td><td>Telegram, when you open the Mini App (verified cryptographically)</td><td>To create and secure your account, show your name and write to you in your language</td></tr>
+                <tr><td>Wallet address you pay from, deposit amounts, transaction hashes</td><td>The TON blockchain, when you make a deposit</td><td>To confirm and credit deposits, prevent double crediting and keep financial records</td></tr>
+                <tr><td>Balance and transaction history (deposits, purchases, refunds)</td><td>Generated by the Service</td><td>To operate your prepaid balance and show your history</td></tr>
+                <tr><td>Orders: the link you provide, quantity, price, status</td><td>You</td><td>To fulfil the order, show its progress and handle refunds and support</td></tr>
+                <tr><td>Referral data: who invited you, whom you invited, your earnings</td><td>Generated by the Service when an invite link is used</td><td>To run the referral programme and pay rewards</td></tr>
+                <tr><td>Support requests and your messages in them</td><td>You</td><td>To answer you and resolve problems</td></tr>
+                <tr><td>Usage events: app opened, screens and catalogue sections viewed, steps of an order</td><td>The app, only while you are signed in</td><td>To understand which parts of the app work and improve them (first-party only)</td></tr>
+                <tr><td>Technical data: IP address, device and request logs</td><td>Our hosting and infrastructure providers</td><td>To run, secure and troubleshoot the Service and detect abuse</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            We do not ask for your phone number, email, real name, passwords, or your wallet's private keys or seed phrase. We never
+            receive them: wallet connection uses the TON Connect standard and you approve each payment in your own wallet.
+          </p>
+        </section>
 
-      <h2>5. Security</h2>
-      <p>
-        Access to data is restricted by role-based database rules; money movements are recorded in an append-only ledger;
-        secrets are stored only on our servers; traffic is encrypted in transit. No system is perfectly secure, and we
-        cannot guarantee absolute security.
-      </p>
+        <section id="use">
+          <h2>2. What we do with it</h2>
+          <ul>
+            <li>Provide the Service: sign you in, process deposits, place and track orders, issue refunds, run the referral programme.</li>
+            <li>Send you service messages in the bot: deposit received, order completed, cancelled or partially completed. These are transactional, not marketing.</li>
+            <li>Prevent fraud and abuse, enforce our Terms (including suspending accounts) and comply with legal obligations.</li>
+            <li>Support: investigate payment or order problems you report.</li>
+            <li>Improve the app using aggregated usage events.</li>
+          </ul>
+          <p>We do not sell your personal data and we do not use it for advertising or profiling.</p>
+        </section>
 
-      <h2>6. Your choices and rights</h2>
-      <ul>
-        <li>Ask us what data we hold about you, to correct it, or to delete it. We will act on requests where the law allows. Some records (for example financial transactions) must be retained and cannot be deleted.</li>
-        <li>You can stop receiving bot messages at any time by blocking or stopping the bot. Service messages are not required to use the app, but you will then not be notified of deposits and orders.</li>
-        <li>You can disconnect your wallet at any time from the Wallet screen.</li>
-        <li>Depending on where you live, you may also have the right to object to or restrict processing, to data portability, and to complain to your local data protection authority.</li>
-      </ul>
+        <section id="recipients">
+          <h2>3. Who receives data</h2>
+          <ul>
+            <li><strong>Promotion providers</strong> that fulfil your orders receive only the link you want promoted and the quantity. They do not receive your Telegram identity from us. Links you provide are by nature public content or profiles.</li>
+            <li><strong>Telegram</strong> delivers the Mini App and bot messages under its own privacy policy.</li>
+            <li><strong>Infrastructure providers</strong> that host the app and database (Supabase and Vercel) process data on our behalf.</li>
+            <li><strong>The TON network and a blockchain data API</strong>: deposits are public blockchain transactions; we query a public API to confirm them. Blockchain data is public and permanent by design.</li>
+            <li><strong>An exchange-rate service</strong>: we fetch a public TON/USD price; no personal data is sent.</li>
+            <li>Authorities or advisers, where required by law or to protect our rights.</li>
+          </ul>
+        </section>
 
-      <h2>7. Children</h2>
-      <p>The Service is not intended for anyone under 18 and we do not knowingly collect data from them. If you believe a minor has used the Service, contact us and we will remove the account where possible.</p>
+        <section id="device">
+          <h2>4. What is stored on your device</h2>
+          <p>
+            The app does not use advertising or tracking cookies. It keeps a few settings in your device's local storage: your
+            chosen language and theme, and a marker that an invite link was already applied. You can clear them by clearing the
+            app's data in Telegram.
+          </p>
+        </section>
 
-      <h2>8. International transfers</h2>
-      <p>Our infrastructure providers may process data in countries other than your own. We choose providers that apply appropriate safeguards.</p>
+        <section id="retention">
+          <h2>5. How long we keep it</h2>
+          <p>
+            Account data is kept while your account exists. Financial records (balances, deposits, orders, refunds, referral
+            earnings) are kept as long as needed for accounting, dispute handling and legal obligations, even after you stop using
+            the Service, because the ledger must stay complete and unaltered. Usage events and technical logs are kept for a limited
+            period.
+          </p>
+        </section>
 
-      <h2>9. Changes</h2>
-      <p>We may update this policy; the date at the top shows the current version. If a change is significant we will tell you in the bot.</p>
+        <section id="security">
+          <h2>6. Security</h2>
+          <p>
+            Access to data is restricted by role-based database rules; money movements are recorded in an append-only ledger;
+            secrets are stored only on our servers; traffic is encrypted in transit. No system is perfectly secure, and we cannot
+            guarantee absolute security.
+          </p>
+        </section>
 
-      <h2>10. Contact</h2>
-      <p>For privacy questions or requests, write to us in the bot's chat or use the contact shown on the bot's profile.</p>
+        <section id="rights">
+          <h2>7. Your choices and rights</h2>
+          <ul>
+            <li>Ask us what data we hold about you, to correct it, or to delete it. We act on requests where the law allows. Some records (for example financial transactions) must be retained and cannot be deleted.</li>
+            <li>Stop receiving bot messages at any time by stopping or blocking the bot. You will then not be told about deposits and orders.</li>
+            <li>Disconnect your wallet at any time from the Wallet screen.</li>
+            <li>Depending on where you live (for example the EU, the UK or Ukraine), you may also have the right to object to or restrict processing, to data portability, and to complain to your data protection authority.</li>
+          </ul>
+        </section>
 
-      <nav><a href="/terms">Terms of Service</a></nav>
+        <section id="children">
+          <h2>8. Children</h2>
+          <p>The Service is not intended for anyone under 18 and we do not knowingly collect data from them. If you believe a minor has used the Service, contact us and we will remove the account where possible.</p>
+        </section>
+
+        <section id="transfers">
+          <h2>9. International transfers</h2>
+          <p>Our infrastructure providers may process data in countries other than your own. We choose providers that apply appropriate safeguards.</p>
+        </section>
+
+        <section id="changes">
+          <h2>10. Changes</h2>
+          <p>We may update this policy; the date at the top shows the current version. If a change is significant we will tell you in the bot.</p>
+        </section>
+
+        <section id="contact">
+          <h2>11. Contact</h2>
+          <p>For privacy questions or requests, write to the bot <a href="__BOT_URL__">__BOT_NAME__</a> or open a request in the app's Support section.</p>
+        </section>
+      </article>
     </main>
+
+    <footer class="foot">
+      <nav aria-label="Documents">
+        <a href="/terms">Terms of Service</a>
+        <a href="/privacy" aria-current="page">Privacy Policy</a>
+        <a href="__BOT_URL__">Open GRAM Hub in Telegram</a>
+      </nav>
+      <p>© 2026 GRAM Hub</p>
+    </footer>
   </body>
 </html>
