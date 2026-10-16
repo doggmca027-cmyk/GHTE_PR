@@ -87,6 +87,8 @@ export interface CatalogStore {
   touchProviderServices?(providerId: string, atIso: string, skipIds: string[]): Promise<void>
   /** Rebuilds the variant groups of the storefront (regroup_service_variants). Optional. */
   regroupVariants?(): Promise<{ groups: number; services_in_groups: number }>
+  /** Smart Arbitrage matcher (refresh_arbitrage_candidates, at most hourly): links exact cheaper donor services, lists the rest. Optional. */
+  refreshArbitrage?(): Promise<{ auto_linked?: number; pending?: number; skipped?: boolean }>
   /** Rebuilds services.dripfeed_available (refresh_service_dripfeed); returns how many services changed. Optional. */
   refreshDripFeed?(): Promise<number>
 }
@@ -272,7 +274,18 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
     }
   }
 
-  // 8. Which storefront services offer gradual delivery (drip-feed), from the flags this run may have changed. After every provider:
+  // 8. Cheaper donor services for the storefront (at most hourly, whichever provider this run synced): exact matches are linked, the
+  //    rest wait for an admin. Before step 9, so a new offer counts for drip-feed. A failure here never fails the sync.
+  if (store.refreshArbitrage) {
+    try {
+      const a = await store.refreshArbitrage()
+      if (!a.skipped) report.arbitrage = { autoLinked: a.auto_linked ?? 0, pending: a.pending ?? 0 }
+    } catch (e) {
+      log.warn('the arbitrage matcher failed', { err: e, providerId: provider.id, error_code: 'arbitrage_refresh_failed' })
+    }
+  }
+
+  // 9. Which storefront services offer gradual delivery (drip-feed), from the flags this run may have changed. After every provider:
   //    a donor's offer counts too. A failure here never fails the sync.
   if (store.refreshDripFeed) {
     try {

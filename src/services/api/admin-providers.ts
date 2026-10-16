@@ -1,11 +1,11 @@
 // Client of the admin-providers Edge Function (LIST_PROVIDERS / UPSERT_PROVIDER / TOGGLE_ROUTING / ARBITRAGE_STATUS /
-// SET_ARBITRAGE_MODE). Admins only; the server checks it.
+// SET_ARBITRAGE_MODE / ARBITRAGE_CANDIDATES / DECIDE_CANDIDATE / RUN_ARBITRAGE_MATCH). Admins only; the server checks it.
 // The API key travels only in the body of an UPSERT_PROVIDER request and is never logged, kept or echoed here.
 
 import { AdminApiError } from './mock-admin'
 import { mockProviders } from './mock-providers'
 import type { AuthSession } from './auth'
-import type { AdminProvider, ArbitrageStatus, SetArbitrageModeResponse, UpsertProviderRequest, UpsertProviderResponse } from '@/types/admin-providers'
+import type { AdminProvider, ArbitrageCandidatesPage, ArbitrageStatus, CandidateStatus, SetArbitrageModeResponse, UpsertProviderRequest, UpsertProviderResponse } from '@/types/admin-providers'
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -80,4 +80,32 @@ export async function setArbitrageMode(session: AuthSession, enabled: boolean): 
     return mockProviders().setArbitrageMode(enabled)
   }
   return call<SetArbitrageModeResponse>(session, { action: 'SET_ARBITRAGE_MODE', enabled }, ARBITRAGE_TIMEOUT_MS)
+}
+
+/** Cheaper donor services the matcher found, 50 a page, closest first. */
+export async function listArbitrageCandidates(session: AuthSession, status: CandidateStatus, offset = 0): Promise<ArbitrageCandidatesPage> {
+  if (session.isMock) {
+    guardMock(session)
+    return { items: [], counts: {}, refreshedAt: null }
+  }
+  const r = await call<ArbitrageCandidatesPage>(session, { action: 'ARBITRAGE_CANDIDATES', status, offset })
+  return { items: r.items, counts: r.counts ?? {}, refreshedAt: r.refreshedAt ?? null }
+}
+
+/** Approve (link the offer) or reject (never propose it again; an automatic link is removed). */
+export async function decideArbitrageCandidate(session: AuthSession, id: string, approve: boolean): Promise<void> {
+  if (session.isMock) {
+    guardMock(session)
+    return
+  }
+  await call(session, { action: 'DECIDE_CANDIDATE', id, approve })
+}
+
+/** Runs the matcher now (the catalogue sync runs it at most hourly). */
+export async function runArbitrageMatch(session: AuthSession): Promise<{ auto_linked?: number; pending?: number }> {
+  if (session.isMock) {
+    guardMock(session)
+    return { auto_linked: 0, pending: 0 }
+  }
+  return (await call<{ result: { auto_linked?: number; pending?: number } }>(session, { action: 'RUN_ARBITRAGE_MATCH' }, ARBITRAGE_TIMEOUT_MS)).result
 }

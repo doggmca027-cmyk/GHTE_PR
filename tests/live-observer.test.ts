@@ -586,5 +586,5 @@ describe('the command-line tool', () => {
       expect(r.stderr).toMatch(message)
       expect(r.stderr).toContain('Nothing was observed and nothing was changed.')
     }
-  })
+  }, 60_000) // four node processes in a row: slower than 5 s when the whole suite runs in parallel
 })

@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { listProviderConfigs, setProviderPayout, updateProviderConfig } from '@/services/api/admin'
 import { getArbitrageStatus, listAdminProviders, setArbitrageMode, toggleProviderRouting, upsertProvider } from '@/services/api/admin-providers'
+import { ArbitrageCandidates } from './ArbitrageCandidates'
 import { ArbitrageCard } from './ArbitrageCard'
 import { OfferBundlePanel } from './OfferBundlePanel'
 import { ProviderModal } from './ProviderModal'
@@ -93,6 +94,7 @@ export function ProvidersTab({ session }: { session: AuthSession }) {
           }}
         />
       )}
+      <ArbitrageCandidates session={session} />
       <p className="rounded-2xl bg-brand-light/60 px-3.5 py-2.5 text-[13px] font-medium text-brand-text">
         Состояние и баланс обновляются раз в минуту у провайдеров с включённой маршрутизацией. Когда баланс опускается до порога, приходит одно уведомление в Telegram. Провайдер с выключенной маршрутизацией только загружает каталог: его услуги не попадают в продажу.
       </p>

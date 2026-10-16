@@ -83,6 +83,10 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       return must(await db.rpc('regroup_service_variants'), 'regroup service variants') as { groups: number; services_in_groups: number }
     },
 
+    async refreshArbitrage() {
+      return must(await db.rpc('refresh_arbitrage_candidates', { p_min_interval_minutes: 55 }), 'refresh arbitrage candidates') as { auto_linked?: number; pending?: number; skipped?: boolean }
+    },
+
     async refreshDripFeed() {
       return Number(must(await db.rpc('refresh_service_dripfeed'), 'refresh service drip-feed') ?? 0)
     },

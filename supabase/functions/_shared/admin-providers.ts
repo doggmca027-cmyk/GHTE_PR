@@ -26,6 +26,9 @@ export type ParsedProviderRequest =
   | { action: 'TOGGLE_ROUTING'; id: string; enabled: boolean }
   | { action: 'ARBITRAGE_STATUS' }
   | { action: 'SET_ARBITRAGE_MODE'; enabled: boolean }
+  | { action: 'ARBITRAGE_CANDIDATES'; status: CandidateStatus; offset: number }
+  | { action: 'DECIDE_CANDIDATE'; id: string; approve: boolean }
+  | { action: 'RUN_ARBITRAGE_MATCH' }
 
 type Obj = Record<string, unknown>
 
@@ -120,7 +123,21 @@ export function parseProviderRequest(body: unknown): ParsedProviderRequest | { e
   const b = body as Obj
   const action = typeof b.action === 'string' ? b.action.toUpperCase() : ''
 
-  if (action === 'LIST_PROVIDERS' || action === 'ARBITRAGE_STATUS') return { action }
+  if (action === 'LIST_PROVIDERS' || action === 'ARBITRAGE_STATUS' || action === 'RUN_ARBITRAGE_MATCH') return { action }
+
+  if (action === 'ARBITRAGE_CANDIDATES') {
+    const status = b.status === undefined ? 'pending' : b.status
+    if (typeof status !== 'string' || !(CANDIDATE_STATUSES as readonly string[]).includes(status)) return { error: 'status must be pending, auto_linked, approved or rejected.' }
+    const offset = b.offset === undefined ? 0 : b.offset
+    if (typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0) return { error: 'offset must be a whole number >= 0.' }
+    return { action, status: status as CandidateStatus, offset }
+  }
+
+  if (action === 'DECIDE_CANDIDATE') {
+    if (!isUuid(b.id)) return { error: 'id must be a UUID.' }
+    if (typeof b.approve !== 'boolean') return { error: 'approve must be true or false.' }
+    return { action, id: b.id, approve: b.approve }
+  }
 
   if (action === 'SET_ARBITRAGE_MODE') {
     if (typeof b.enabled !== 'boolean') return { error: 'enabled must be true or false.' }
@@ -206,8 +223,32 @@ export function mapProviderError(message: string): { status: number; error: stri
   if (/name_taken/.test(message)) return { status: 409, error: 'name_taken', message: 'A provider with this name already exists.' }
   if (/provider_inactive/.test(message)) return { status: 409, error: 'provider_inactive', message: 'An inactive provider cannot receive orders.' }
   if (/no_api_key/.test(message)) return { status: 409, error: 'no_api_key', message: 'Save the API key of the provider before switching routing on.' }
+  if (/candidate_not_found/.test(message)) return { status: 404, error: 'candidate_not_found', message: 'This candidate no longer exists. Refresh the list.' }
+  if (/candidate_not_pending/.test(message)) return { status: 409, error: 'candidate_not_pending', message: 'This candidate was already decided. Refresh the list.' }
+  if (/already_linked/.test(message)) return { status: 409, error: 'already_linked', message: 'This provider already serves this service.' }
+  if (/provider_service_inactive/.test(message)) return { status: 409, error: 'provider_service_inactive', message: 'The panel no longer lists this service.' }
   if (/invalid_parameter_value/.test(message)) return { status: 400, error: 'invalid_input', message: message.replace(/^.*invalid_parameter_value: ?/, '') || 'Invalid input.' }
   return { status: 500, error: 'server_error', message: 'Something went wrong. Please try again.' }
+}
+
+// ---- Automatic matching of cheaper donor services (migration 20261204000000) ------------------------------------------------
+
+export const CANDIDATE_STATUSES = ['pending', 'auto_linked', 'approved', 'rejected'] as const
+export type CandidateStatus = (typeof CANDIDATE_STATUSES)[number]
+
+/** One row of admin_arbitrage_candidates() for the app. */
+export function toCandidateDto(r: Record<string, unknown>) {
+  const n = (v: unknown) => Number(v ?? 0)
+  return {
+    id: r.id as string,
+    status: r.status as CandidateStatus,
+    saving: n(r.saving),
+    mismatches: Array.isArray(r.mismatches) ? (r.mismatches as string[]) : [],
+    currentCost: n(r.current_cost),
+    donorCost: n(r.donor_cost),
+    service: { id: r.service_id as string, name: r.service_name as string, min: n(r.service_min), max: n(r.service_max) },
+    donor: { name: r.donor_name as string, externalId: r.donor_external_id as string, min: n(r.donor_min), max: n(r.donor_max), provider: r.provider_name as string },
+  }
 }
 
 // ---- Smart Arbitrage (donor networks: catalog_mode = 'linked_only') -------------------------------------------------------

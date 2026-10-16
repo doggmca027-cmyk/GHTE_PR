@@ -111,4 +111,27 @@ export interface SetArbitrageModeResponse {
   donors: ArbitrageDonor[]
 }
 
+/** A cheaper donor service the matcher found for a storefront service (migration 20261204000000). */
+export type CandidateStatus = 'pending' | 'auto_linked' | 'approved' | 'rejected'
+/** Why the matcher is not sure: other bracketed facts (quality, country...), another / unstated guarantee, limits that do not cover ours. */
+export type CandidateMismatch = 'details' | 'refill' | 'limits'
+
+export interface ArbitrageCandidate {
+  id: string
+  status: CandidateStatus
+  /** Share cheaper than the service's cheapest offer now (0.4 = 40%). */
+  saving: number
+  mismatches: CandidateMismatch[]
+  currentCost: number
+  donorCost: number
+  service: { id: string; name: string; min: number; max: number }
+  donor: { name: string; externalId: string; min: number; max: number; provider: string }
+}
+
+export interface ArbitrageCandidatesPage {
+  items: ArbitrageCandidate[]
+  counts: Partial<Record<CandidateStatus, number>>
+  refreshedAt: string | null
+}
+
 export type AdminProvidersRequest = ListProvidersRequest | UpsertProviderRequest | ToggleRoutingRequest | { action: 'ARBITRAGE_STATUS' } | SetArbitrageModeRequest

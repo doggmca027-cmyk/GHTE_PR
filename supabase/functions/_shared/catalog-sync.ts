@@ -532,6 +532,8 @@ export interface ProviderSyncReport {
   anomaliesCleared?: number
   /** Variant groups of the storefront after this run (only for a provider that publishes its catalogue). */
   variants?: { groups: number; services: number }
+  /** What the Smart Arbitrage matcher did after this run (absent when it was not due). */
+  arbitrage?: { autoLinked: number; pending: number }
   /** Storefront services whose drip-feed availability changed after this run. */
   dripfeedChanged?: number
   provider: string

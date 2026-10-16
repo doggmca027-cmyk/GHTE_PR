@@ -24,6 +24,10 @@
 //          enabled=true: the live balance of every active donor with a key is read from its panel first (in parallel, 8 s each),
 //          then one transaction stores it and switches routing on: 'healthy' if the panel answered, even at a zero balance (the
 //          router only sends what the balance covers and falls back to the primary), 'unavailable' if it did not.
+//   { action: "ARBITRAGE_CANDIDATES", status?: pending|auto_linked|approved|rejected, offset? }
+//       -> { success, items: [candidate], counts: { status: n }, refreshedAt }   cheaper donor services the matcher found (50 a page)
+//   { action: "DECIDE_CANDIDATE", id, approve }   approve links the offer; reject (also of an automatic link) removes it for good
+//   { action: "RUN_ARBITRAGE_MATCH" }              runs the matcher now (the catalogue sync runs it at most hourly)
 //
 // Key handling: the raw apiKey is read from the POST body, encrypted here with AES-256-GCM (PROVIDER_KEY_SECRET, _shared/secrets.ts,
 // the exact envelope the workers decrypt with), registered with the logger's redactor and then dropped. SQL receives ciphertext only.
@@ -34,7 +38,7 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
-import { mapProviderError, parseProviderRequest, readDonorBalances, toArbitrageDonorDto, toProviderDto } from '../_shared/admin-providers.ts'
+import { mapProviderError, parseProviderRequest, readDonorBalances, toArbitrageDonorDto, toCandidateDto, toProviderDto } from '../_shared/admin-providers.ts'
 import { PING_TIMEOUT_MS } from '../_shared/health-monitor.ts'
 import { registerSecret } from '../_shared/logger.ts'
 import { mockModeEnabled } from '../_shared/mock-guard.ts'
@@ -132,6 +136,28 @@ Deno.serve(instrument('admin-providers', async (req: Request, { log }): Promise<
       const data = r.data as { enabled: boolean; skipped: unknown[]; donors: Record<string, unknown>[] }
       log.info('arbitrage mode set', { enabled: parsed.enabled })
       return json({ success: true, enabled: data.enabled, skipped: data.skipped, donors: data.donors.map(toArbitrageDonorDto) })
+    }
+
+    // ---- automatic matching of cheaper donor services ---------------------------------------------------
+    if (parsed.action === 'ARBITRAGE_CANDIDATES') {
+      const r = await call('admin_arbitrage_candidates', { p_actor: userId, p_status: parsed.status, p_limit: 50, p_offset: parsed.offset })
+      if ('response' in r) return r.response
+      const data = r.data as { items: Record<string, unknown>[]; counts: Record<string, number> | null; refreshed_at: string | null }
+      return json({ success: true, items: data.items.map(toCandidateDto), counts: data.counts ?? {}, refreshedAt: data.refreshed_at })
+    }
+
+    if (parsed.action === 'DECIDE_CANDIDATE') {
+      const r = await call('admin_decide_arbitrage_candidate', { p_actor: userId, p_id: parsed.id, p_approve: parsed.approve })
+      if ('response' in r) return r.response
+      log.info('arbitrage candidate decided', { approve: parsed.approve })
+      return json({ success: true, result: r.data })
+    }
+
+    if (parsed.action === 'RUN_ARBITRAGE_MATCH') {
+      const r = await call('admin_refresh_arbitrage', { p_actor: userId })
+      if ('response' in r) return r.response
+      log.info('arbitrage matcher run by an admin')
+      return json({ success: true, result: r.data })
     }
 
     // ---- UPSERT_PROVIDER -----------------------------------------------------------------------------
