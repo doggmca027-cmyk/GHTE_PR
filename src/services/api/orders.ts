@@ -43,6 +43,7 @@ export async function createOrder(session: AuthSession, payload: CreateOrderPayl
         quantity: payload.quantity,
         idempotencyKey: payload.idempotencyKey,
         ...(payload.promoCode ? { promoCode: payload.promoCode } : {}),
+        ...(payload.runs && payload.runs > 1 ? { runs: payload.runs, interval: payload.interval } : {}),
       }),
       signal: AbortSignal.timeout(PLACE_ORDER_TIMEOUT_MS),
     })

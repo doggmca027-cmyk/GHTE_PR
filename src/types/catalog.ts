@@ -39,6 +39,8 @@ export interface ICatalogService {
    * service of a group (the cheapest), in a category listing.
    */
   variants?: ICatalogService[]
+  /** The order form offers gradual delivery (drip-feed): at least one routable offer of this service can do it. */
+  dripfeedAvailable?: boolean
 }
 
 export interface ICatalog {

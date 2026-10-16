@@ -334,6 +334,18 @@ const ja: Record<string, string> = {
   'Economy': 'エコノミー',
   'Premium': 'プレミアム',
   'Options': 'オプション',
+  'Drip-feed (gradual delivery)': 'Drip-feed（段階的な配信）',
+  'Deliver the order in parts over time instead of all at once.': '注文を一度にではなく、時間をかけて分割して配信します。',
+  'Quantity per run': '1回あたりの数量',
+  'Runs': '回数',
+  'Interval (minutes)': '間隔（分）',
+  'Total quantity': '合計数量',
+  'Enter from 2 to {max} runs': '2〜{max}回で入力してください',
+  'Enter from 1 to {max} minutes': '1〜{max}分で入力してください',
+  'Each delivery must be between {a} and {b}.': '1回あたり{a}〜{b}の範囲で指定してください。',
+  'The quantity must divide evenly by the number of deliveries.': '数量は回数で割り切れる必要があります。',
+  'Gradual delivery is not available for this service right now. You were not charged.': 'このサービスでは現在、段階的な配信をご利用いただけません。料金は請求されていません。',
+  'Invalid delivery schedule.': '配信スケジュールが無効です。',
 }
 
 export default ja

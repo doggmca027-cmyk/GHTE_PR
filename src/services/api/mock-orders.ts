@@ -200,8 +200,12 @@ export function createMockBackend(
 
       const url = validateTargetUrl(payload.targetUrl)
       if (!url.ok) throw new OrderApiError('invalid_input', url.error)
-      const qty = validateQuantity(String(payload.quantity), service.minQuantity, service.maxQuantity)
-      if (!qty.ok) throw new OrderApiError('invalid_input', qty.error)
+      // Like the server: a drip-feed order is `runs` deliveries, the limits hold for one of them, the price is for the total.
+      const runs = payload.runs ?? 1
+      if (payload.quantity % runs !== 0) throw new OrderApiError('invalid_input', 'The quantity must divide evenly by the number of deliveries.')
+      const perRun = validateQuantity(String(payload.quantity / runs), service.minQuantity, service.maxQuantity)
+      if (!perRun.ok) throw new OrderApiError('invalid_input', perRun.error)
+      const qty = { ok: true as const, value: payload.quantity }
 
       // The total is recomputed here from the catalogue rate, never taken from the caller.
       let totalUnits: number

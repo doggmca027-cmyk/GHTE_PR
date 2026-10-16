@@ -34,10 +34,11 @@ interface ServiceRow {
   name_i18n?: Record<string, string> | null
   attributes?: ServiceAttributes | null
   variants?: ServiceRow[] | null
+  dripfeed_available?: boolean | null
 }
 
 /** The only columns of `services` the app reads (the database also hides the provider-service ids from customers). */
-export const SERVICE_COLUMNS = ['id', 'category_id', 'name', 'description', 'customer_rate_per_1000', 'min_quantity', 'max_quantity', 'refill_supported', 'sort_order', 'name_i18n', 'attributes'] as const
+export const SERVICE_COLUMNS = ['id', 'category_id', 'name', 'description', 'customer_rate_per_1000', 'min_quantity', 'max_quantity', 'refill_supported', 'sort_order', 'name_i18n', 'attributes', 'dripfeed_available'] as const
 
 /** Services shown at a time in a category: a category can hold hundreds, the customer asks for more. */
 export const SERVICES_PAGE = 30
@@ -73,6 +74,7 @@ export const serviceFromRow = (s: ServiceRow): ICatalogService => ({
   sortOrder: s.sort_order,
   ...(s.name_i18n && Object.keys(s.name_i18n).length > 0 ? { nameI18n: s.name_i18n } : {}),
   ...(s.attributes && Object.keys(s.attributes).length > 0 ? { attributes: s.attributes } : {}),
+  ...(s.dripfeed_available === true ? { dripfeedAvailable: true } : {}),
   ...(s.variants && s.variants.length > 0
     ? { variants: [...s.variants].sort((a, b) => Number(a.customer_rate_per_1000) - Number(b.customer_rate_per_1000)).map(serviceFromRow) }
     : {}),

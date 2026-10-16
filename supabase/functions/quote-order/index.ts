@@ -1,6 +1,6 @@
 // Supabase Edge Function (Deno): POST /quote-order   (signed-in users)
 //   Authorization: Bearer <JWT issued by telegram-auth>
-//   Body: { serviceId, quantity, promoCode? }
+//   Body: { serviceId, quantity, promoCode?, runs? }   (drip-feed: quantity is the total, the offer limits hold for quantity / runs)
 //   -> { success, listPrice, tier: { slug, percentage, discount }, promo: { applied, discount }, finalPrice, totalDiscount, discountReduced }
 //
 // The price the customer will be charged, from the same SQL function place_order uses (calculate_order_price): list price,
@@ -35,6 +35,7 @@ Deno.serve(instrument('quote-order', async (req: Request, { log }): Promise<Resp
   const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
   const { data, error } = await db.rpc('quote_order_price', {
     p_user_id: userId, p_service_id: parsed.value.serviceId, p_quantity: parsed.value.quantity, p_promo_code: parsed.value.promoCode,
+    p_runs: parsed.value.runs ?? 1,
   })
   if (error) {
     const m = mapQuoteError(error.message)

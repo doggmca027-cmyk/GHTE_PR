@@ -334,6 +334,18 @@ const ar: Record<string, string> = {
   'Economy': 'اقتصادي',
   'Premium': 'مميز',
   'Options': 'الخيارات',
+  'Drip-feed (gradual delivery)': 'Drip-feed (تسليم تدريجي)',
+  'Deliver the order in parts over time instead of all at once.': 'تسليم الطلب على أجزاء مع مرور الوقت بدلاً من دفعة واحدة.',
+  'Quantity per run': 'الكمية لكل دفعة',
+  'Runs': 'عدد الدفعات',
+  'Interval (minutes)': 'الفاصل (دقائق)',
+  'Total quantity': 'الكمية الإجمالية',
+  'Enter from 2 to {max} runs': 'أدخل من 2 إلى {max} دفعة',
+  'Enter from 1 to {max} minutes': 'أدخل من 1 إلى {max} دقيقة',
+  'Each delivery must be between {a} and {b}.': 'يجب أن تكون كل دفعة بين {a} و{b}.',
+  'The quantity must divide evenly by the number of deliveries.': 'يجب أن تقبل الكمية القسمة على عدد الدفعات دون باقٍ.',
+  'Gradual delivery is not available for this service right now. You were not charged.': 'التسليم التدريجي غير متاح لهذه الخدمة حاليًا. لم يتم خصم أي مبلغ.',
+  'Invalid delivery schedule.': 'جدول الدفعات غير صالح.',
 }
 
 export default ar

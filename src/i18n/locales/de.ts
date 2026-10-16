@@ -334,6 +334,18 @@ const de: Record<string, string> = {
   'Economy': 'Sparsam',
   'Premium': 'Premium',
   'Options': 'Optionen',
+  'Drip-feed (gradual delivery)': 'Drip-feed (schrittweise Lieferung)',
+  'Deliver the order in parts over time instead of all at once.': 'Liefert die Bestellung in Teilen über die Zeit statt auf einmal.',
+  'Quantity per run': 'Menge pro Durchgang',
+  'Runs': 'Durchgänge',
+  'Interval (minutes)': 'Abstand (Minuten)',
+  'Total quantity': 'Gesamtmenge',
+  'Enter from 2 to {max} runs': 'Gib 2 bis {max} Durchgänge ein',
+  'Enter from 1 to {max} minutes': 'Gib 1 bis {max} Minuten ein',
+  'Each delivery must be between {a} and {b}.': 'Jeder Durchgang muss zwischen {a} und {b} liegen.',
+  'The quantity must divide evenly by the number of deliveries.': 'Die Menge muss ohne Rest durch die Anzahl der Durchgänge teilbar sein.',
+  'Gradual delivery is not available for this service right now. You were not charged.': 'Schrittweise Lieferung ist für diesen Dienst gerade nicht verfügbar. Dir wurde nichts berechnet.',
+  'Invalid delivery schedule.': 'Ungültiger Lieferplan.',
 }
 
 export default de

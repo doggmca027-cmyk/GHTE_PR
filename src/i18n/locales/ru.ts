@@ -334,6 +334,18 @@ const ru: Record<string, string> = {
   'Economy': 'Эконом',
   'Premium': 'Премиум',
   'Options': 'Варианты',
+  'Drip-feed (gradual delivery)': 'Drip-feed (постепенная накрутка)',
+  'Deliver the order in parts over time instead of all at once.': 'Заказ выполняется частями через промежутки времени, а не сразу целиком.',
+  'Quantity per run': 'Количество за один запуск',
+  'Runs': 'Число запусков',
+  'Interval (minutes)': 'Интервал (минуты)',
+  'Total quantity': 'Общее количество',
+  'Enter from 2 to {max} runs': 'Укажите от 2 до {max} запусков',
+  'Enter from 1 to {max} minutes': 'Укажите от 1 до {max} минут',
+  'Each delivery must be between {a} and {b}.': 'Каждый запуск должен быть от {a} до {b}.',
+  'The quantity must divide evenly by the number of deliveries.': 'Количество должно делиться на число запусков без остатка.',
+  'Gradual delivery is not available for this service right now. You were not charged.': 'Постепенная накрутка для этой услуги сейчас недоступна. Деньги не списаны.',
+  'Invalid delivery schedule.': 'Неверное расписание запусков.',
 }
 
 export default ru

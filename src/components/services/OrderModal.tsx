@@ -23,12 +23,14 @@ import {
   validateTargetUrl,
 } from '@/lib/order-calc'
 import { useQuote } from '@/hooks/useQuote'
+import { DEFAULT_DRIP_INTERVAL_MINUTES, DEFAULT_DRIP_RUNS, orderShape, validateDripSchedule } from '@/lib/drip-feed'
 import { cn } from '@/lib/utils'
 import { OrderApiError } from '@/services/api/order-errors'
 import { createOrder } from '@/services/api/orders'
 import type { AuthSession } from '@/services/api/auth'
 import type { ICatalogService, Platform } from '@/types/catalog'
 import type { CreateOrderResult } from '@/types/orders'
+import { DripFeedFields } from './DripFeedFields'
 import { PlatformIcon } from './PlatformIcon'
 import { PriceSummary, displayedTotalUnits } from './PriceSummary'
 import { PromoField } from './PromoField'
@@ -64,6 +66,10 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
   const [link, setLink] = useState('')
   const [quantity, setQuantity] = useState(String(service.minQuantity))
   const [promo, setPromo] = useState('')
+  // Drip-feed: the quantity field then holds ONE delivery; the order's quantity is that times the runs.
+  const [drip, setDrip] = useState(false)
+  const [runs, setRuns] = useState(String(DEFAULT_DRIP_RUNS))
+  const [dripInterval, setDripInterval] = useState(String(DEFAULT_DRIP_INTERVAL_MINUTES))
   const [linkTouched, setLinkTouched] = useState(false)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [phase, setPhase] = useState<Phase>({ kind: 'form' })
@@ -101,10 +107,15 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
   // Display-only maths: the server recomputes the real charge from the database.
   const qty = validateQuantity(quantity, service.minQuantity, service.maxQuantity)
   const url = validateTargetUrl(link)
-  const estimateUnits = qty.ok ? calcTotalUnits(qty.value, service.ratePer1000) : 0
+  const dripOn = drip && service.dripfeedAvailable === true
+  const schedule = validateDripSchedule(runs, dripInterval)
+  // What is priced and sent: the TOTAL quantity (+ runs / interval for a drip-feed order). Null while anything is invalid.
+  const shape = orderShape(qty.ok ? qty.value : null, dripOn, schedule)
+  const orderOk = shape !== null
+  const estimateUnits = shape ? calcTotalUnits(shape.quantity, service.ratePer1000) : 0
 
   // The live price (tier + promo applied) from the quote-order function: debounced, one request in flight (see quote-controller).
-  const { state: quoteState, invalidate } = useQuote(session, service.id, qty.ok ? qty.value : null, promo)
+  const { state: quoteState, invalidate } = useQuote(session, service.id, shape ? shape.quantity : null, promo, shape?.runs ?? 1)
   const { units: totalUnits } = displayedTotalUnits(quoteState, estimateUnits)
   const balance = checkBalance(wallet.balance, totalUnits)
   const pricing = quoteState.kind === 'loading'
@@ -122,7 +133,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
   }
 
   async function submit() {
-    if (!qty.ok || !url.ok || submittingRef.current || pricing || promoRefused) return
+    if (!shape || !url.ok || submittingRef.current || pricing || promoRefused) return
     submittingRef.current = true
     dirtySinceAttempt.current = true
     setPhase({ kind: 'submitting' })
@@ -131,7 +142,8 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
       const result = await createOrder(session, {
         serviceId: service.id,
         targetUrl: url.value,
-        quantity: qty.value,
+        quantity: shape.quantity,
+        ...(shape.runs > 1 ? { runs: shape.runs, interval: shape.interval } : {}),
         idempotencyKey: keyRef.current,
         ...(promo.trim() ? { promoCode: promo.trim().toUpperCase() } : {}),
       })
@@ -157,7 +169,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
   }
 
   function handleCta() {
-    if (busy || !qty.ok || pricing || promoRefused) return
+    if (busy || !orderOk || pricing || promoRefused) return
     if (!balance.sufficient) {
       haptic.tap()
       onTopUp(balance.shortfallUnits / 10_000)
@@ -173,7 +185,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
 
   const ctaLabel = busy
     ? t('Placing order…')
-    : !qty.ok
+    : !orderOk
       ? t('Enter a valid quantity')
       : pricing
         ? t('Calculating price…')
@@ -244,7 +256,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
 
             {/* Quantity */}
             <label className="mt-4 block">
-              <span className="mb-1.5 block text-sm font-bold text-content-primary">{t('Quantity')}</span>
+              <span className="mb-1.5 block text-sm font-bold text-content-primary">{dripOn ? t('Quantity per run') : t('Quantity')}</span>
               <input
                 type="text"
                 inputMode="numeric"
@@ -274,11 +286,25 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
               ))}
             </div>
 
+            {service.dripfeedAvailable === true && (
+              <DripFeedFields
+                enabled={drip}
+                onToggle={(on) => { setDrip(on); edited() }}
+                runs={runs}
+                onRuns={(v) => { setRuns(v); edited() }}
+                interval={dripInterval}
+                onInterval={(v) => { setDripInterval(v); edited() }}
+                schedule={schedule}
+                perRun={qty.ok ? qty.value : null}
+                disabled={busy}
+              />
+            )}
+
             <PromoField value={promo} onChange={(v) => { setPromo(v); edited() }} disabled={busy} state={quoteState} />
 
             {/* Price + balance */}
             <PriceSummary
-              quantity={qty.ok ? qty.value : null}
+              quantity={shape ? shape.quantity : null}
               ratePer1000={service.ratePer1000}
               estimateUnits={estimateUnits}
               state={quoteState}
@@ -295,8 +321,8 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
             )}
 
             <Button
-              className={cn('mt-5 h-14 w-full text-[15px]', (!qty.ok || busy || pricing || promoRefused) && 'cursor-not-allowed opacity-60 hover:bg-brand')}
-              disabled={!qty.ok || busy || pricing || promoRefused}
+              className={cn('mt-5 h-14 w-full text-[15px]', (!orderOk || busy || pricing || promoRefused) && 'cursor-not-allowed opacity-60 hover:bg-brand')}
+              disabled={!orderOk || busy || pricing || promoRefused}
               aria-busy={busy}
               onClick={handleCta}
             >

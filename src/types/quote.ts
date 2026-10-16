@@ -7,6 +7,8 @@ export interface QuoteRequest {
   quantity: number
   /** Optional; the server upper-cases and validates it. */
   promoCode?: string
+  /** Drip-feed: number of deliveries (quantity is the total). Sent only when above 1. */
+  runs?: number
 }
 
 export interface Quote {

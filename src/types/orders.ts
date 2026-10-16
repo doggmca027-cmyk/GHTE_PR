@@ -10,6 +10,9 @@ export interface CreateOrderPayload {
   idempotencyKey: string
   /** Optional promo code; the server validates it and prices the order (the client total is never sent). */
   promoCode?: string
+  /** Drip-feed: quantity (the total) is delivered in `runs` parts, `interval` minutes apart. Sent only when runs > 1. */
+  runs?: number
+  interval?: number
 }
 
 export interface CreatedOrder {

@@ -334,6 +334,18 @@ const uk: Record<string, string> = {
   'Economy': 'Економ',
   'Premium': 'Преміум',
   'Options': 'Варіанти',
+  'Drip-feed (gradual delivery)': 'Drip-feed (поступова накрутка)',
+  'Deliver the order in parts over time instead of all at once.': 'Замовлення виконується частинами через проміжки часу, а не одразу повністю.',
+  'Quantity per run': 'Кількість за один запуск',
+  'Runs': 'Кількість запусків',
+  'Interval (minutes)': 'Інтервал (хвилини)',
+  'Total quantity': 'Загальна кількість',
+  'Enter from 2 to {max} runs': 'Вкажіть від 2 до {max} запусків',
+  'Enter from 1 to {max} minutes': 'Вкажіть від 1 до {max} хвилин',
+  'Each delivery must be between {a} and {b}.': 'Кожен запуск має бути від {a} до {b}.',
+  'The quantity must divide evenly by the number of deliveries.': 'Кількість має ділитися на кількість запусків без залишку.',
+  'Gradual delivery is not available for this service right now. You were not charged.': 'Поступова накрутка для цієї послуги зараз недоступна. Кошти не списано.',
+  'Invalid delivery schedule.': 'Неправильний розклад запусків.',
 }
 
 export default uk

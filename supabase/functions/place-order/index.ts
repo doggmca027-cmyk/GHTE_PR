@@ -129,7 +129,7 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   const runs = input.runs ?? 1
   const interval = input.interval ?? 0
   const qty = validateQuantity(String(input.quantity / runs), service.min_quantity, service.max_quantity)
-  if (!qty.ok) return fail(400, 'invalid_input', runs > 1 ? `Each delivery: ${qty.error.toLowerCase()}` : qty.error)
+  if (!qty.ok) return fail(400, 'invalid_input', runs > 1 ? `Each delivery must be between ${service.min_quantity} and ${service.max_quantity}.` : qty.error)
 
   const idempotencyKey = deriveIdempotencyKey(userId, input.clientKey)
 

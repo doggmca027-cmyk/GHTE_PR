@@ -334,6 +334,18 @@ const vi: Record<string, string> = {
   'Economy': 'Tiết kiệm',
   'Premium': 'Cao cấp',
   'Options': 'Tùy chọn',
+  'Drip-feed (gradual delivery)': 'Drip-feed (giao dần)',
+  'Deliver the order in parts over time instead of all at once.': 'Giao đơn hàng thành nhiều phần theo thời gian thay vì giao một lần.',
+  'Quantity per run': 'Số lượng mỗi lần',
+  'Runs': 'Số lần',
+  'Interval (minutes)': 'Khoảng cách (phút)',
+  'Total quantity': 'Tổng số lượng',
+  'Enter from 2 to {max} runs': 'Nhập từ 2 đến {max} lần',
+  'Enter from 1 to {max} minutes': 'Nhập từ 1 đến {max} phút',
+  'Each delivery must be between {a} and {b}.': 'Mỗi lần phải từ {a} đến {b}.',
+  'The quantity must divide evenly by the number of deliveries.': 'Số lượng phải chia hết cho số lần.',
+  'Gradual delivery is not available for this service right now. You were not charged.': 'Hiện không thể giao dần cho dịch vụ này. Bạn chưa bị trừ tiền.',
+  'Invalid delivery schedule.': 'Lịch giao không hợp lệ.',
 }
 
 export default vi

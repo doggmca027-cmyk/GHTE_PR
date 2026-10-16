@@ -83,6 +83,10 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       return must(await db.rpc('regroup_service_variants'), 'regroup service variants') as { groups: number; services_in_groups: number }
     },
 
+    async refreshDripFeed() {
+      return Number(must(await db.rpc('refresh_service_dripfeed'), 'refresh service drip-feed') ?? 0)
+    },
+
     async clearAnomalies(providerId, keepProviderServiceIds) {
       return Number(must(await db.rpc('clear_catalog_anomalies', { p_provider_id: providerId, p_keep: keepProviderServiceIds }), 'clear catalog anomalies') ?? 0)
     },

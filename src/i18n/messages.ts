@@ -10,6 +10,7 @@ const PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^Minimum deposit is (.+)$/, tr('Minimum deposit is {n}')],
   [/^Maximum deposit is (.+)$/, tr('Maximum deposit is {n}')],
   [/^Quantity must be between (.+?) and (.+?)\.?$/, tr('Quantity must be between {a} and {b}.')],
+  [/^Each delivery must be between (.+?) and (.+?)\.?$/, tr('Each delivery must be between {a} and {b}.')],
 ]
 
 /** Fixed sentences. Listing them here is what makes the test require a translation for each of the 14 other languages. */
@@ -41,6 +42,10 @@ export const KNOWN_MESSAGES = [
   tr('This request key was already used for a different order.'),
   tr('Something went wrong. You were not charged.'),
   tr('Sign in again.'),
+  // drip-feed (gradual delivery)
+  tr('The quantity must divide evenly by the number of deliveries.'),
+  tr('Gradual delivery is not available for this service right now. You were not charged.'),
+  tr('Invalid delivery schedule.'),
   // deposits
   tr('Could not get a live exchange rate. Please try again in a minute.'),
   tr('Deposits are temporarily unavailable.'),

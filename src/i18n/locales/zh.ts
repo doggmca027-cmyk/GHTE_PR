@@ -334,6 +334,18 @@ const zh: Record<string, string> = {
   'Economy': '经济',
   'Premium': '高级',
   'Options': '选项',
+  'Drip-feed (gradual delivery)': 'Drip-feed（分批交付）',
+  'Deliver the order in parts over time instead of all at once.': '将订单分多次按时间间隔交付，而不是一次性完成。',
+  'Quantity per run': '每次数量',
+  'Runs': '次数',
+  'Interval (minutes)': '间隔（分钟）',
+  'Total quantity': '总数量',
+  'Enter from 2 to {max} runs': '请输入 2 到 {max} 次',
+  'Enter from 1 to {max} minutes': '请输入 1 到 {max} 分钟',
+  'Each delivery must be between {a} and {b}.': '每次数量必须在 {a} 到 {b} 之间。',
+  'The quantity must divide evenly by the number of deliveries.': '数量必须能被次数整除。',
+  'Gradual delivery is not available for this service right now. You were not charged.': '该服务目前不支持分批交付。未扣除任何费用。',
+  'Invalid delivery schedule.': '交付计划无效。',
 }
 
 export default zh

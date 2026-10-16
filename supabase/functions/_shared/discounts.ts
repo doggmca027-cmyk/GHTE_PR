@@ -6,9 +6,15 @@ const PROMO_CODE_RE = /^[A-Za-z0-9_-]{3,32}$/
 
 export interface QuoteInput {
   serviceId: string
+  /** The order's TOTAL quantity (a drip-feed order is priced on the total). */
   quantity: number
   promoCode: string | null
+  /** Drip-feed: number of deliveries. Present only when above 1. */
+  runs?: number
 }
+
+/** Same bound as the place-order body (order-validation.ts MAX_DRIP_RUNS). */
+const MAX_QUOTE_RUNS = 1000
 
 export function parseQuoteBody(raw: unknown): { ok: true; value: QuoteInput } | { ok: false; message: string } {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { ok: false, message: 'Request body must be a JSON object.' }
@@ -20,7 +26,10 @@ export function parseQuoteBody(raw: unknown): { ok: true; value: QuoteInput } | 
     if (typeof b.promoCode !== 'string' || !PROMO_CODE_RE.test(b.promoCode.trim())) return { ok: false, message: 'promoCode must be 3-32 characters of A-Z a-z 0-9 _ -.' }
     promoCode = b.promoCode.trim().toUpperCase()
   }
-  return { ok: true, value: { serviceId: b.serviceId.toLowerCase(), quantity: b.quantity, promoCode } }
+  const runs = b.runs === undefined || b.runs === null ? 1 : b.runs
+  if (typeof runs !== 'number' || !Number.isSafeInteger(runs) || runs < 1 || runs > MAX_QUOTE_RUNS) return { ok: false, message: `runs must be a whole number from 1 to ${MAX_QUOTE_RUNS}.` }
+  if (b.quantity % runs !== 0) return { ok: false, message: 'quantity must divide evenly by runs.' }
+  return { ok: true, value: { serviceId: b.serviceId.toLowerCase(), quantity: b.quantity, promoCode, ...(runs > 1 ? { runs } : {}) } }
 }
 
 /** A database error (message of the SQL exception) -> the HTTP answer. 500 means "not a business error". */
@@ -33,6 +42,7 @@ export function mapQuoteError(message: string): { status: number; error: string;
   if (/promo_not_applicable/.test(message)) return { status: 409, error: 'promo_not_applicable', message: 'This promo code cannot be applied to this order.' }
   if (/service not found or inactive/.test(message)) return { status: 404, error: 'service_unavailable', message: 'This service is no longer available.' }
   if (/service_unavailable|below_cost/.test(message)) return { status: 503, error: 'service_unavailable', message: 'This service is temporarily unavailable.' }
+  if (/quantity must split evenly into runs/.test(message)) return { status: 400, error: 'invalid_input', message: 'The quantity must divide evenly by the number of deliveries.' }
   if (/invalid_parameter_value/.test(message)) return { status: 400, error: 'invalid_input', message: 'Invalid input.' }
   return { status: 500, error: 'server_error', message: 'Something went wrong. Please try again.' }
 }

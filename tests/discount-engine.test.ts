@@ -114,7 +114,7 @@ describe('discount engine (SQL)', () => {
   describe('access and shape', () => {
     it('only the service role may execute the engine; the tables are closed to clients', async () => {
       for (const fn of ['place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text, boolean, integer, integer)', 'calculate_order_price(uuid, uuid, integer, numeric, text)',
-        'quote_order_price(uuid, uuid, integer, text)', 'recalculate_user_tiers()', 'admin_upsert_promo_code(uuid, text, promo_discount_type, numeric, integer, timestamptz, boolean)']) {
+        'quote_order_price(uuid, uuid, integer, text, integer)', 'recalculate_user_tiers()', 'admin_upsert_promo_code(uuid, text, promo_discount_type, numeric, integer, timestamptz, boolean)']) {
         const g = (await rows(`select has_function_privilege('anon', '${fn}', 'execute') a, has_function_privilege('authenticated', '${fn}', 'execute') u`))[0]
         expect([g.a, g.u]).toEqual([false, false])
       }

@@ -24,7 +24,7 @@ export interface QuoteControllerOptions {
   now?: () => number
 }
 
-const keyOf = (r: QuoteRequest) => `${r.serviceId}|${r.quantity}|${(r.promoCode ?? '').trim().toUpperCase()}`
+const keyOf = (r: QuoteRequest) => `${r.serviceId}|${r.quantity}|${(r.promoCode ?? '').trim().toUpperCase()}|${r.runs ?? 1}`
 const isAbort = (e: unknown) => e instanceof DOMException && e.name === 'AbortError'
 const isPromoProblem = (e: unknown): e is Error & { isPromoProblem: true } => e instanceof Error && (e as { isPromoProblem?: boolean }).isPromoProblem === true
 
@@ -65,7 +65,7 @@ export function createQuoteController(opts: QuoteControllerOptions) {
         if (isAbort(e) || stale()) return
         if (!isPromoProblem(e) || !request.promoCode) throw e
         // The code was refused: show the price without it, plus why.
-        const plain = await opts.fetchQuote({ serviceId: request.serviceId, quantity: request.quantity }, controller.signal)
+        const plain = await opts.fetchQuote({ serviceId: request.serviceId, quantity: request.quantity, ...(request.runs ? { runs: request.runs } : {}) }, controller.signal)
         state = { kind: 'ready', quote: plain, promoError: e.message }
       }
       if (stale()) return

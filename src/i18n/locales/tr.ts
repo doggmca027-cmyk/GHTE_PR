@@ -334,6 +334,18 @@ const tr: Record<string, string> = {
   'Economy': 'Ekonomik',
   'Premium': 'Premium',
   'Options': 'Seçenekler',
+  'Drip-feed (gradual delivery)': 'Drip-feed (kademeli teslimat)',
+  'Deliver the order in parts over time instead of all at once.': 'Siparişi tek seferde değil, zamana yayarak parça parça teslim eder.',
+  'Quantity per run': 'Teslimat başına miktar',
+  'Runs': 'Teslimat sayısı',
+  'Interval (minutes)': 'Aralık (dakika)',
+  'Total quantity': 'Toplam miktar',
+  'Enter from 2 to {max} runs': '2 ile {max} arasında teslimat girin',
+  'Enter from 1 to {max} minutes': '1 ile {max} dakika arasında girin',
+  'Each delivery must be between {a} and {b}.': 'Her teslimat {a} ile {b} arasında olmalı.',
+  'The quantity must divide evenly by the number of deliveries.': 'Miktar, teslimat sayısına tam bölünmelidir.',
+  'Gradual delivery is not available for this service right now. You were not charged.': 'Bu hizmet için kademeli teslimat şu anda kullanılamıyor. Ücret alınmadı.',
+  'Invalid delivery schedule.': 'Geçersiz teslimat planı.',
 }
 
 export default tr

@@ -165,6 +165,40 @@ describe('place_order: drip-feed', () => {
     expect(await err(place(2000, 2, 15, { key: 'replay-1' }))).toMatch(/already used with different parameters/)
   })
 
+  it('quote_order_price prices a drip-feed order like place_order: per-run limits, capable offers only, price on the total', async () => {
+    const quote = (quantity: number, runs?: number, svc = DSVC) =>
+      db.query<{ q: Record<string, unknown> }>(`select quote_order_price($1::uuid, $2::uuid, $3, null, $4) q`, [user, svc, quantity, runs ?? 1]).then((r) => r.rows[0].q)
+    const expected = await num(`select (calculate_order_price($1::uuid, '${DSVC}', 5000, 5, null)->>'final_price')::numeric`, [user])
+    expect(Number((await quote(5000, 5)).final_price)).toBe(expected)
+    expect(await err(quote(5000))).toMatch(/service_unavailable/)                 // one run of 5000 is over the max
+    expect(await err(quote(1000, 3))).toMatch(/quantity must split evenly into runs/)
+    expect(await err(quote(2000, 2, PLAIN_SVC))).toMatch(/service_unavailable/)  // no drip-feed capable offer
+    expect(Number((await quote(1000, 1, PLAIN_SVC)).final_price)).toBeGreaterThan(0)
+    // the old 4-argument call is a plain quote
+    expect(Number((await db.query<{ q: Record<string, unknown> }>(`select quote_order_price($1::uuid, '${PLAIN_SVC}', 1000, null) q`, [user])).rows[0].q.final_price)).toBeGreaterThan(0)
+  })
+
+  it('services.dripfeed_available follows the routable drip-feed capable offers; clients may read it, only the service role rebuilds it', async () => {
+    const flags = async () => Object.fromEntries((await db.query<{ id: string; d: boolean }>(`select id, dripfeed_available d from services where id in ('${DSVC}', '${PLAIN_SVC}')`)).rows.map((r) => [r.id, r.d]))
+    await db.query(`select refresh_service_dripfeed()`)
+    expect(await flags()).toEqual({ [DSVC]: true, [PLAIN_SVC]: false })
+    await db.query(`update providers set routing_enabled = false where id = $1`, [DPROV])
+    expect(await num(`select refresh_service_dripfeed()`)).toBe(1)
+    expect(await flags()).toEqual({ [DSVC]: false, [PLAIN_SVC]: false })
+    await db.query(`update providers set routing_enabled = true where id = $1`, [DPROV])
+    await db.query(`update provider_services set is_dripfeed_enabled = true where id = $1`, [PLAIN_PS])
+    await db.query(`select refresh_service_dripfeed()`)
+    expect(await flags()).toEqual({ [DSVC]: true, [PLAIN_SVC]: true })
+    expect(await num(`select refresh_service_dripfeed()`)).toBe(0)                 // nothing to change: nothing written
+    await db.query(`update provider_services set is_dripfeed_enabled = false where id = $1`, [PLAIN_PS])
+    await db.query(`select refresh_service_dripfeed()`)
+    for (const role of ['anon', 'authenticated']) {
+      expect(await num(`select has_column_privilege('${role}', 'public.services', 'dripfeed_available', 'select')::int`)).toBe(1)
+      expect(await num(`select has_function_privilege('${role}', 'public.refresh_service_dripfeed()', 'execute')::int`)).toBe(0)
+      expect(await num(`select has_function_privilege('${role}', 'public.quote_order_price(uuid, uuid, integer, text, integer)', 'execute')::int`)).toBe(0)
+    }
+  })
+
   it('only the service role may call it', async () => {
     for (const role of ['anon', 'authenticated']) {
       expect(await num(`select has_function_privilege('${role}', 'public.place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text, boolean, integer, integer)', 'execute')::int`)).toBe(0)

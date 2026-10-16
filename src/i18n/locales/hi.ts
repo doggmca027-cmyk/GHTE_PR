@@ -334,6 +334,18 @@ const hi: Record<string, string> = {
   'Economy': 'किफ़ायती',
   'Premium': 'प्रीमियम',
   'Options': 'विकल्प',
+  'Drip-feed (gradual delivery)': 'Drip-feed (धीरे-धीरे डिलीवरी)',
+  'Deliver the order in parts over time instead of all at once.': 'ऑर्डर को एक बार में नहीं, बल्कि समय के साथ हिस्सों में डिलीवर करें।',
+  'Quantity per run': 'प्रति रन मात्रा',
+  'Runs': 'रन की संख्या',
+  'Interval (minutes)': 'अंतराल (मिनट)',
+  'Total quantity': 'कुल मात्रा',
+  'Enter from 2 to {max} runs': '2 से {max} रन दर्ज करें',
+  'Enter from 1 to {max} minutes': '1 से {max} मिनट दर्ज करें',
+  'Each delivery must be between {a} and {b}.': 'हर रन {a} से {b} के बीच होना चाहिए।',
+  'The quantity must divide evenly by the number of deliveries.': 'मात्रा रन की संख्या से पूरी तरह विभाज्य होनी चाहिए।',
+  'Gradual delivery is not available for this service right now. You were not charged.': 'इस सेवा के लिए अभी धीरे-धीरे डिलीवरी उपलब्ध नहीं है। आपसे शुल्क नहीं लिया गया।',
+  'Invalid delivery schedule.': 'डिलीवरी शेड्यूल अमान्य है।',
 }
 
 export default hi

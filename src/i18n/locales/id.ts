@@ -334,6 +334,18 @@ const id: Record<string, string> = {
   'Economy': 'Ekonomi',
   'Premium': 'Premium',
   'Options': 'Pilihan',
+  'Drip-feed (gradual delivery)': 'Drip-feed (pengiriman bertahap)',
+  'Deliver the order in parts over time instead of all at once.': 'Kirim pesanan secara bertahap, bukan sekaligus.',
+  'Quantity per run': 'Jumlah per pengiriman',
+  'Runs': 'Jumlah pengiriman',
+  'Interval (minutes)': 'Interval (menit)',
+  'Total quantity': 'Jumlah total',
+  'Enter from 2 to {max} runs': 'Masukkan 2 sampai {max} pengiriman',
+  'Enter from 1 to {max} minutes': 'Masukkan 1 sampai {max} menit',
+  'Each delivery must be between {a} and {b}.': 'Setiap pengiriman harus antara {a} dan {b}.',
+  'The quantity must divide evenly by the number of deliveries.': 'Jumlah harus habis dibagi jumlah pengiriman.',
+  'Gradual delivery is not available for this service right now. You were not charged.': 'Pengiriman bertahap tidak tersedia untuk layanan ini saat ini. Anda tidak dikenai biaya.',
+  'Invalid delivery schedule.': 'Jadwal pengiriman tidak valid.',
 }
 
 export default id

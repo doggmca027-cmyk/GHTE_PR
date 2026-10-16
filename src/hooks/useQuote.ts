@@ -6,9 +6,9 @@ import type { QuoteState } from '@/types/quote'
 
 /**
  * The live price of an order. `quantity` is null until it is valid (nothing is requested then). Typing is debounced and
- * superseded requests are aborted: see lib/quote-controller.ts.
+ * superseded requests are aborted: see lib/quote-controller.ts. A drip-feed order passes its TOTAL quantity and `runs` (> 1).
  */
-export function useQuote(session: AuthSession, serviceId: string, quantity: number | null, promoCode: string): { state: QuoteState; invalidate: () => void } {
+export function useQuote(session: AuthSession, serviceId: string, quantity: number | null, promoCode: string, runs = 1): { state: QuoteState; invalidate: () => void } {
   const [state, setState] = useState<QuoteState>({ kind: 'idle' })
   const sessionRef = useRef(session)
   sessionRef.current = session
@@ -25,8 +25,8 @@ export function useQuote(session: AuthSession, serviceId: string, quantity: numb
 
   const code = promoCode.trim()
   useEffect(() => {
-    controllerRef.current?.update(quantity === null ? null : { serviceId, quantity, ...(code ? { promoCode: code } : {}) })
-  }, [serviceId, quantity, code])
+    controllerRef.current?.update(quantity === null ? null : { serviceId, quantity, ...(code ? { promoCode: code } : {}), ...(runs > 1 ? { runs } : {}) })
+  }, [serviceId, quantity, code, runs])
 
   return { state, invalidate: () => controllerRef.current?.invalidate() }
 }

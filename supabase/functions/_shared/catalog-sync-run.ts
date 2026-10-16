@@ -87,6 +87,8 @@ export interface CatalogStore {
   touchProviderServices?(providerId: string, atIso: string, skipIds: string[]): Promise<void>
   /** Rebuilds the variant groups of the storefront (regroup_service_variants). Optional. */
   regroupVariants?(): Promise<{ groups: number; services_in_groups: number }>
+  /** Rebuilds services.dripfeed_available (refresh_service_dripfeed); returns how many services changed. Optional. */
+  refreshDripFeed?(): Promise<number>
 }
 
 export interface SyncProviderInput {
@@ -267,6 +269,16 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
       report.variants = { groups: g.groups, services: g.services_in_groups }
     } catch (e) {
       log.warn('regrouping the service variants failed', { err: e, providerId: provider.id, error_code: 'regroup_failed' })
+    }
+  }
+
+  // 8. Which storefront services offer gradual delivery (drip-feed), from the flags this run may have changed. After every provider:
+  //    a donor's offer counts too. A failure here never fails the sync.
+  if (store.refreshDripFeed) {
+    try {
+      report.dripfeedChanged = await store.refreshDripFeed()
+    } catch (e) {
+      log.warn('refreshing the drip-feed flags of services failed', { err: e, providerId: provider.id, error_code: 'dripfeed_refresh_failed' })
     }
   }
   return report
