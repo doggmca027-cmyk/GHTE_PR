@@ -130,6 +130,8 @@ export interface ExistingProviderService {
   service_type?: string | null
   /** The panel's own text about the service. Absent on rows read before the column existed. */
   description?: string | null
+  /** The panel's drip-feed flag. Absent on rows read before the column existed. */
+  is_dripfeed_enabled?: boolean
   is_active: boolean
 }
 
@@ -145,6 +147,8 @@ export interface ProviderServiceRow {
   cancel_supported: boolean
   service_type: string
   description: string | null
+  /** Sent only when the adapter reports the flag, so an adapter that does not know it never clears it. */
+  is_dripfeed_enabled?: boolean
   is_active: true
   last_synced_at: string
 }
@@ -188,6 +192,7 @@ export function diffProviderServices(
       cancel_supported: s.cancelSupported,
       service_type: (s.type ?? '').trim() || 'Default',
       description: s.description?.trim() || null,
+      ...(s.dripfeedSupported === undefined ? {} : { is_dripfeed_enabled: s.dripfeedSupported }),
       is_active: true,
       last_synced_at: nowIso,
     }
@@ -209,7 +214,8 @@ export function diffProviderServices(
       prev.refill_supported !== row.refill_supported ||
       prev.cancel_supported !== row.cancel_supported ||
       (prev.service_type ?? 'Default') !== row.service_type ||
-      (prev.description ?? null) !== row.description
+      (prev.description ?? null) !== row.description ||
+      (row.is_dripfeed_enabled !== undefined && (prev.is_dripfeed_enabled ?? false) !== row.is_dripfeed_enabled)
     if (changed) diff.updated.push(s.externalServiceId)
     else diff.unchanged++
   }

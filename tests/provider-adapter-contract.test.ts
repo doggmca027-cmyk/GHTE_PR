@@ -158,7 +158,10 @@ describe.each(implementations)('IProviderAdapter contract: $name', ({ make, read
     const balance = await a.getBalance()
     expect(balance).toEqual({ balance: expect.any(Number), currency: expect.any(String) })
     const services = await a.getServices()
-    expect(services[0]).toEqual({
+    // the drip-feed flag is optional in the contract (an adapter may not know it); when present it is a boolean
+    const { dripfeedSupported, ...first } = services[0]
+    expect(dripfeedSupported === undefined || typeof dripfeedSupported === 'boolean').toBe(true)
+    expect(first).toEqual({
       externalServiceId: expect.any(String), name: expect.any(String), type: expect.any(String), categoryRaw: expect.any(String), ratePer1000: expect.any(Number),
       minQuantity: expect.any(Number), maxQuantity: expect.any(Number), refillSupported: expect.any(Boolean), cancelSupported: expect.any(Boolean),
     })

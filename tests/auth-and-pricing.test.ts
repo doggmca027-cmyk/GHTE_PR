@@ -229,8 +229,14 @@ describe('SMMv2Adapter response mapping', () => {
       jsonRes([{ service: '1', name: 'Followers', type: 'Default', category: 'First Category', rate: '0.90', min: '50', max: '10000', refill: true, cancel: false }]),
     )
     await expect(adapterWith(f.impl).getServices()).resolves.toEqual([
-      { externalServiceId: '1', name: 'Followers', type: 'Default', categoryRaw: 'First Category', ratePer1000: 0.9, minQuantity: 50, maxQuantity: 10000, refillSupported: true, cancelSupported: false },
+      { externalServiceId: '1', name: 'Followers', type: 'Default', categoryRaw: 'First Category', ratePer1000: 0.9, minQuantity: 50, maxQuantity: 10000, refillSupported: true, cancelSupported: false, dripfeedSupported: false },
     ])
+  })
+
+  it('maps the drip-feed flag in every form panels send it', async () => {
+    const item = { service: '1', name: 'A', type: 'Default', category: 'c', rate: '1', min: '10', max: '100' }
+    const f = fakeFetch(() => jsonRes([true, 1, '1', 'true', false, 0, '0', null].map((dripfeed, i) => ({ ...item, service: String(i), dripfeed }))))
+    expect((await adapterWith(f.impl).getServices()).map((s) => s.dripfeedSupported)).toEqual([true, true, true, true, false, false, false, false])
   })
 
   it('creates an order with extra params and returns the order id as string', async () => {

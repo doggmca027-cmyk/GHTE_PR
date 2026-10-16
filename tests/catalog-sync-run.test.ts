@@ -157,6 +157,24 @@ describe('syncProviderCatalog (through the IProviderAdapter contract)', () => {
     expect(store.ps.get('ps-1')).toMatchObject({ name: 'Renamed', rate_per_1000: 1.1, min_quantity: 20, max_quantity: 900, is_active: true })
   })
 
+  it('saves the panel\'s drip-feed flag, rewrites a row when only that flag moved, and leaves it alone when the adapter does not report it', async () => {
+    const store = new MemoryStore()
+    store.addPS('1')
+    store.addPS('2', { is_dripfeed_enabled: true })
+    store.addPS('3', { is_dripfeed_enabled: true })
+    const report = await run(store, [svc('1', { dripfeedSupported: true }), svc('2', { dripfeedSupported: true }), svc('3'), svc('4', { dripfeedSupported: true })])
+    expect(report).toMatchObject({ added: 1, updated: 1 })
+    expect(store.upserted).toEqual([['1', '4']])
+    expect(store.ps.get('ps-1')!.is_dripfeed_enabled).toBe(true)
+    expect(store.ps.get('ps-2')!.is_dripfeed_enabled).toBe(true)
+    expect(store.ps.get('ps-3')!.is_dripfeed_enabled).toBe(true) // the adapter said nothing: not cleared
+    expect([...store.ps.values()].find((p) => p.external_service_id === '4')!.is_dripfeed_enabled).toBe(true)
+    // the panel switches it off again
+    const off = await run(store, [svc('1', { dripfeedSupported: false })])
+    expect(off).toMatchObject({ updated: 1 })
+    expect(store.ps.get('ps-1')!.is_dripfeed_enabled).toBe(false)
+  })
+
   it('soft-deletes services missing from the response: the provider service and the storefront service that lost its only offer go inactive, nothing is removed', async () => {
     const store = new MemoryStore()
     store.addPS('1'); store.addPS('2'); store.addPS('3')

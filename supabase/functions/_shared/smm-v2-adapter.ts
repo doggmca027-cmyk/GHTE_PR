@@ -222,6 +222,7 @@ export class SMMv2Adapter implements IProviderAdapter {
         maxQuantity: toNumber(item.max, 'max'),
         refillSupported: toBool(item.refill),
         cancelSupported: toBool(item.cancel),
+        dripfeedSupported: toBool(item.dripfeed),
         ...describe(item.desc ?? item.description),
       }
     })
