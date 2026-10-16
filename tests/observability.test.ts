@@ -403,7 +403,7 @@ describe('cron pulse', () => {
   })
 
   it('right after a deploy a worker has not reported yet: trusted while the scheduler fires, late once overdue', () => {
-    expect(classifyJob(job('sync-catalog'), [cronJob('sync-catalog', { last_run_at: ago(60) })], [], NOW)).toMatchObject({ state: 'ok' })
+    expect(classifyJob(job('sync-catalog'), [cronJob('sync-catalog', { last_run_at: ago(30) })], [], NOW)).toMatchObject({ state: 'ok' })
     expect(classifyJob(job('sync-catalog'), [cronJob('sync-catalog', { last_run_at: ago(200) })], [], NOW).state).toBe('late')
   })
 

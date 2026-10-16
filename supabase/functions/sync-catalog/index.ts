@@ -1,4 +1,5 @@
 // Supabase Edge Function (Deno): POST /sync-catalog  { providerId?: uuid, republishOffset?: number, republishLimit?: number }
+//   Without providerId (pg_cron, every 5 minutes): ONE due provider per run, in rotation (claim_catalog_sync_provider).
 //   republishOffset / republishLimit (with providerId): put that slice of the provider's catalogue on the storefront again instead of what is new or
 //   changed, e.g. after the translator improved. A run does a bounded amount of work, so a big catalogue is taken slice by slice.
 //
@@ -96,11 +97,21 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
   async function runCatalog(): Promise<Response> {
   const reports: ProviderSyncReport[] = []
   try {
-    let q = db.from('providers').select('id, name, api_url, api_key_encrypted, routing_enabled, catalog_mode').eq('is_active', true).order('priority', { ascending: false })
-    // The hourly run keeps the providers that sell current. One with routing switched off (imported, not enabled yet) is only synced when it is
-    // asked for by id: a catalogue of tens of thousands of services is not worth the hourly time budget until it is actually used.
-    q = onlyProvider ? q.eq('id', onlyProvider) : q.eq('routing_enabled', true)
-    const providers = must(await q, 'load providers') as ProviderRow[]
+    // The scheduled run (every 5 minutes) syncs ONE provider: the routing-enabled one that is due and waited longest
+    // (claim_catalog_sync_provider, migration 20261203000000). All of them in one invocation exceeded the worker's resources.
+    // A provider with routing switched off (imported, not enabled yet) is only synced when it is asked for by id.
+    let target = onlyProvider
+    if (!target) {
+      target = (must(await db.rpc('claim_catalog_sync_provider'), 'claim catalogue provider') as string | null) ?? undefined
+      if (!target) {
+        await recordHeartbeat(db, 'sync-catalog', { ok: true, startedAt: started }, log)
+        return json({ success: true, idle: 'no provider is due' })
+      }
+    }
+    const providers = must(
+      await db.from('providers').select('id, name, api_url, api_key_encrypted, routing_enabled, catalog_mode').eq('is_active', true).eq('id', target),
+      'load providers',
+    ) as ProviderRow[]
 
     const rules = (must(
       await db.from('price_rules').select('id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, name_all, name_any, priority, is_active').eq('is_active', true),
@@ -115,7 +126,10 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
 
     for (const provider of providers) {
       try {
-        reports.push(await syncProvider(db, provider, rules, log, correlationId, republish))
+        const report = await syncProvider(db, provider, rules, log, correlationId, republish)
+        reports.push(report)
+        // a good run takes the provider out of the rotation for the next 50 minutes
+        if (report.status === 'ok') must(await db.rpc('finish_catalog_sync', { p_provider_id: provider.id }), 'finish catalogue sync')
       } catch (e) {
         log.error('provider sync failed', { err: e, providerId: provider.id, error_code: 'provider_sync_failed' })
         const failed = emptyProviderReport(provider.name)
