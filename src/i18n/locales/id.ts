@@ -320,6 +320,8 @@ const id: Record<string, string> = {
   'Copy invite link': 'Salin tautan undangan',
   'Copy invite code: {code}': 'Salin kode: {code}',
   'Order now': 'Pesan',
+  'Bulk prices': 'Harga grosir',
+  'from {n}': 'mulai {n}',
 }
 
 export default id

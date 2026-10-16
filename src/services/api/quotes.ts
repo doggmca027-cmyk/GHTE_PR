@@ -38,6 +38,11 @@ export async function getQuote(session: AuthSession, request: QuoteRequest, sign
       finalPrice: body.finalPrice,
       totalDiscount: body.totalDiscount ?? 0,
       discountReduced: body.discountReduced === true,
+      ...(typeof body.ratePer1000 === 'number' ? { ratePer1000: body.ratePer1000 } : {}),
+      ...(typeof body.baseRatePer1000 === 'number' ? { baseRatePer1000: body.baseRatePer1000 } : {}),
+      volumeRates: Array.isArray(body.volumeRates)
+        ? body.volumeRates.filter((v) => typeof v?.minQuantity === 'number' && typeof v?.ratePer1000 === 'number')
+        : [],
     }
   }
   if (res.status === 401) throw new QuoteApiError('unauthorized', 'Please reopen the app.')

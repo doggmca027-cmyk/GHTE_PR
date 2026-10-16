@@ -54,5 +54,12 @@ export function toQuoteDto(r: Record<string, unknown>) {
     totalDiscount: Math.round((tier + promo) * 10_000) / 10_000,
     /** The discounts were reduced to keep the price above the platform's floor. */
     discountReduced: r.capped === true,
+    /** The rate per 1000 this quantity pays (volume pricing) and the retail rate of the first step, when the database says. */
+    ...(r.rate_per_1000 != null ? { ratePer1000: n(r.rate_per_1000) } : {}),
+    ...(r.base_rate_per_1000 != null ? { baseRatePer1000: n(r.base_rate_per_1000) } : {}),
+    /** Every volume step of this service: from this quantity, this rate per 1000 (empty when volume pricing is off). */
+    ...(Array.isArray(r.volume_rates)
+      ? { volumeRates: (r.volume_rates as Record<string, unknown>[]).map((v) => ({ minQuantity: n(v.min_quantity), ratePer1000: n(v.rate_per_1000) })) }
+      : {}),
   }
 }

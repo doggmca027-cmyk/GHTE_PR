@@ -320,6 +320,8 @@ const ar: Record<string, string> = {
   'Copy invite link': 'نسخ رابط الدعوة',
   'Copy invite code: {code}': 'نسخ الرمز: {code}',
   'Order now': 'اطلب الآن',
+  'Bulk prices': 'أسعار الجملة',
+  'from {n}': 'من {n}',
 }
 
 export default ar

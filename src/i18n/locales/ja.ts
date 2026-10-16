@@ -320,6 +320,8 @@ const ja: Record<string, string> = {
   'Copy invite link': '招待リンクをコピー',
   'Copy invite code: {code}': 'コードをコピー：{code}',
   'Order now': '注文する',
+  'Bulk prices': 'まとめ買い価格',
+  'from {n}': '{n} から',
 }
 
 export default ja

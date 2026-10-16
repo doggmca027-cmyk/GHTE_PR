@@ -18,6 +18,12 @@ export interface Quote {
   totalDiscount: number
   /** The discounts were reduced to keep the price above the platform's floor. */
   discountReduced: boolean
+  /** The rate per 1000 this quantity pays (lower than the retail rate on a bigger order when volume pricing is on). */
+  ratePer1000?: number
+  /** The retail rate per 1000 (the first volume step). */
+  baseRatePer1000?: number
+  /** Volume steps of this service: from minQuantity units, ratePer1000. Empty when volume pricing is off. */
+  volumeRates?: { minQuantity: number; ratePer1000: number }[]
 }
 
 export type QuoteErrorCode =

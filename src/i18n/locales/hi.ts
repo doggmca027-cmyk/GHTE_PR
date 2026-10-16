@@ -320,6 +320,8 @@ const hi: Record<string, string> = {
   'Copy invite link': 'आमंत्रण लिंक कॉपी करें',
   'Copy invite code: {code}': 'कोड कॉपी करें: {code}',
   'Order now': 'ऑर्डर करें',
+  'Bulk prices': 'थोक मूल्य',
+  'from {n}': '{n} से',
 }
 
 export default hi

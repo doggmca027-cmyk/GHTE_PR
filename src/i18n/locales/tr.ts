@@ -320,6 +320,8 @@ const tr: Record<string, string> = {
   'Copy invite link': 'Davet bağlantısını kopyala',
   'Copy invite code: {code}': 'Kodu kopyala: {code}',
   'Order now': 'Sipariş ver',
+  'Bulk prices': 'Toplu fiyatlar',
+  'from {n}': '{n} ve üzeri',
 }
 
 export default tr

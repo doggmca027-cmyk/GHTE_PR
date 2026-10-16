@@ -320,6 +320,8 @@ const pt: Record<string, string> = {
   'Copy invite link': 'Copiar link de convite',
   'Copy invite code: {code}': 'Copiar código: {code}',
   'Order now': 'Pedir',
+  'Bulk prices': 'Preços por volume',
+  'from {n}': 'a partir de {n}',
 }
 
 export default pt

@@ -320,6 +320,8 @@ const vi: Record<string, string> = {
   'Copy invite link': 'Sao chép liên kết mời',
   'Copy invite code: {code}': 'Sao chép mã: {code}',
   'Order now': 'Đặt ngay',
+  'Bulk prices': 'Giá sỉ',
+  'from {n}': 'từ {n}',
 }
 
 export default vi

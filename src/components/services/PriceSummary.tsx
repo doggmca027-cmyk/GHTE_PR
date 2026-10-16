@@ -35,8 +35,9 @@ export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, bala
       {quantity !== null ? (
         <>
           <p className="mt-1 text-[13px] font-medium text-content-secondary">
-            {formatInt(quantity)} × ({formatMoneyAmount(ratePer1000)} / 1,000)
+            {formatInt(quantity)} × ({formatMoneyAmount(quote?.ratePer1000 ?? ratePer1000)} / 1,000)
           </p>
+          {quote?.volumeRates && quote.volumeRates.length > 1 && <VolumeRates steps={quote.volumeRates} quantity={quantity} />}
 
           {quote && quote.totalDiscount > 0 && (
             <dl className="mt-2 space-y-1 text-[13px]">
@@ -91,6 +92,28 @@ export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, bala
       {quantity !== null && !sufficient && (
         <p className="mt-1.5 text-xs font-medium text-rose-500">{t('You need {amount} more to place this order.', { amount: formatUnits(shortfallUnits) })}</p>
       )}
+    </div>
+  )
+}
+
+/** The bulk price list of a service (volume pricing): from N units, this rate per 1000; the step this quantity falls in is marked. */
+export function VolumeRates({ steps, quantity }: { steps: { minQuantity: number; ratePer1000: number }[]; quantity: number }) {
+  const t = useT()
+  const current = [...steps].reverse().find((s) => quantity >= s.minQuantity)?.minQuantity
+  return (
+    <div className="mt-2" data-testid="volume-rates">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-content-muted">{t('Bulk prices')}</p>
+      <ul className="mt-1 flex flex-wrap gap-1.5">
+        {steps.map((s) => (
+          <li
+            key={s.minQuantity}
+            aria-current={s.minQuantity === current ? 'true' : undefined}
+            className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold', s.minQuantity === current ? 'bg-brand text-white' : 'bg-surface text-content-secondary')}
+          >
+            {t('from {n}', { n: formatInt(Math.max(s.minQuantity, 1)) })} · {formatMoneyAmount(s.ratePer1000)}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

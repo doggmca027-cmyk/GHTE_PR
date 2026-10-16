@@ -320,6 +320,8 @@ const uk: Record<string, string> = {
   'Copy invite link': 'Скопіювати посилання',
   'Copy invite code: {code}': 'Скопіювати код: {code}',
   'Order now': 'Замовити',
+  'Bulk prices': 'Оптові ціни',
+  'from {n}': 'від {n}',
 }
 
 export default uk

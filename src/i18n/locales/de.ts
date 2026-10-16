@@ -320,6 +320,8 @@ const de: Record<string, string> = {
   'Copy invite link': 'Einladungslink kopieren',
   'Copy invite code: {code}': 'Code kopieren: {code}',
   'Order now': 'Bestellen',
+  'Bulk prices': 'Mengenpreise',
+  'from {n}': 'ab {n}',
 }
 
 export default de

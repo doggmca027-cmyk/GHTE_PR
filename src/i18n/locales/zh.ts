@@ -320,6 +320,8 @@ const zh: Record<string, string> = {
   'Copy invite link': '复制邀请链接',
   'Copy invite code: {code}': '复制邀请码：{code}',
   'Order now': '下单',
+  'Bulk prices': '批量价格',
+  'from {n}': '{n} 起',
 }
 
 export default zh

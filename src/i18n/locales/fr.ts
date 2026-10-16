@@ -320,6 +320,8 @@ const fr: Record<string, string> = {
   'Copy invite link': 'Copier le lien d’invitation',
   'Copy invite code: {code}': 'Copier le code : {code}',
   'Order now': 'Commander',
+  'Bulk prices': 'Prix de gros',
+  'from {n}': 'dès {n}',
 }
 
 export default fr
