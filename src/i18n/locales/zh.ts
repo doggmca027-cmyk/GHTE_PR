@@ -322,6 +322,15 @@ const zh: Record<string, string> = {
   'Order now': '下单',
   'Bulk prices': '批量价格',
   'from {n}': '{n} 起',
+  'Request refill': '申请补量',
+  'Refill requested': '已申请补量',
+  'Refill is in progress': '补量进行中',
+  'Available from {date}': '{date} 起可用',
+  'A refill can be requested 24 hours after the order.': '下单 24 小时后可申请补量。',
+  'A refill was requested recently. Try again tomorrow.': '刚刚申请过补量，请明天再试。',
+  'The refill guarantee of this order is over.': '此订单的补量保障已结束。',
+  'The provider could not start a refill now. Try again later.': '服务商暂时无法开始补量，请稍后再试。',
+  'Could not request a refill. Try again later.': '无法申请补量，请稍后再试。',
 }
 
 export default zh

@@ -322,6 +322,15 @@ const uk: Record<string, string> = {
   'Order now': 'Замовити',
   'Bulk prices': 'Оптові ціни',
   'from {n}': 'від {n}',
+  'Request refill': 'Докрутити (Refill)',
+  'Refill requested': 'Докрутку запитано',
+  'Refill is in progress': 'Докрутка виконується',
+  'Available from {date}': 'Доступно з {date}',
+  'A refill can be requested 24 hours after the order.': 'Докрутку можна запросити через 24 години після замовлення.',
+  'A refill was requested recently. Try again tomorrow.': 'Докрутку вже нещодавно запитували. Спробуйте завтра.',
+  'The refill guarantee of this order is over.': 'Гарантія на докрутку для цього замовлення закінчилася.',
+  'The provider could not start a refill now. Try again later.': 'Провайдер не зміг запустити докрутку зараз. Спробуйте пізніше.',
+  'Could not request a refill. Try again later.': 'Не вдалося запитати докрутку. Спробуйте пізніше.',
 }
 
 export default uk

@@ -79,6 +79,9 @@ interface OrderRow {
   partial_refund_amount: number | string
   awaiting_funds_since: string | null
   created_at: string
+  refill_available?: boolean
+  refill_status?: IOrderView['refillStatus']
+  refill_requested_at?: string | null
   services: { name: string; categories: { platforms: { slug: Platform } | null } | null } | null
 }
 
@@ -86,7 +89,7 @@ interface OrderRow {
  * The only columns of `orders` the app reads. They are also the only ones the database lets a customer read (column grants in
  * 20261111000000_rls_hardening.sql): cost, profit, provider and internal notes are private. Name the columns explicitly: a wildcard select is refused.
  */
-export const ORDER_COLUMNS = ['id', 'target_url', 'quantity', 'charge_amount', 'status', 'remains', 'start_count', 'partial_refund_amount', 'awaiting_funds_since', 'created_at'] as const
+export const ORDER_COLUMNS = ['id', 'target_url', 'quantity', 'charge_amount', 'status', 'remains', 'start_count', 'partial_refund_amount', 'awaiting_funds_since', 'created_at', 'refill_available', 'refill_status', 'refill_requested_at'] as const
 
 /** The signed-in user's orders, newest first. Row Level Security scopes the query to auth.uid(). */
 export async function getOrders(session: AuthSession): Promise<IOrderView[]> {
@@ -113,6 +116,43 @@ export async function getOrders(session: AuthSession): Promise<IOrderView[]> {
     startCount: o.start_count,
     refundedAmount: Number(o.partial_refund_amount ?? 0),
     awaitingFunds: o.status === 'paid' && o.awaiting_funds_since != null,
+    refillAvailable: o.refill_available === true,
+    refillStatus: o.refill_status ?? null,
+    refillRequestedAt: o.refill_requested_at ?? null,
     createdAt: o.created_at,
   }))
+}
+
+export type RefillErrorCode = 'refill_not_delivered' | 'refill_unavailable' | 'refill_too_early' | 'refill_expired' | 'refill_cooldown' | 'refill_refused' | 'order_not_found' | 'banned' | 'network' | 'server'
+
+export class RefillError extends Error {
+  readonly code: RefillErrorCode
+  constructor(code: RefillErrorCode, message: string) {
+    super(message)
+    this.name = 'RefillError'
+    this.code = code
+  }
+}
+
+const REFILL_CODES: RefillErrorCode[] = ['refill_not_delivered', 'refill_unavailable', 'refill_too_early', 'refill_expired', 'refill_cooldown', 'refill_refused', 'order_not_found', 'banned']
+
+/** Asks the provider to refill a delivered order (request-refill). Every rule is checked by the server. */
+export async function requestRefill(session: AuthSession, orderId: string): Promise<{ refillStatus: 'requested' | 'in_progress' }> {
+  if (session.isMock) return { refillStatus: 'in_progress' }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new RefillError('server', 'Backend is not configured')
+  let res: Response
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/request-refill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify({ orderId }),
+      signal: AbortSignal.timeout(READ_TIMEOUT_MS * 2),
+    })
+  } catch {
+    throw new RefillError('network', 'Could not reach the server.')
+  }
+  const body = (await res.json().catch(() => null)) as { success?: boolean; refillStatus?: 'requested' | 'in_progress'; error?: string; message?: string } | null
+  if (res.ok && body?.success) return { refillStatus: body.refillStatus === 'requested' ? 'requested' : 'in_progress' }
+  const code = REFILL_CODES.find((c) => c === body?.error) ?? 'server'
+  throw new RefillError(code, body?.message ?? 'Could not request a refill.')
 }

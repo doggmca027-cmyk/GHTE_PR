@@ -322,6 +322,15 @@ const fr: Record<string, string> = {
   'Order now': 'Commander',
   'Bulk prices': 'Prix de gros',
   'from {n}': 'dès {n}',
+  'Request refill': 'Demander une recharge',
+  'Refill requested': 'Recharge demandée',
+  'Refill is in progress': 'Recharge en cours',
+  'Available from {date}': 'Disponible à partir du {date}',
+  'A refill can be requested 24 hours after the order.': 'La recharge peut être demandée 24 heures après la commande.',
+  'A refill was requested recently. Try again tomorrow.': 'Une recharge a été demandée récemment. Réessayez demain.',
+  'The refill guarantee of this order is over.': 'La garantie de recharge de cette commande est terminée.',
+  'The provider could not start a refill now. Try again later.': 'Le fournisseur n\'a pas pu lancer la recharge pour le moment. Réessayez plus tard.',
+  'Could not request a refill. Try again later.': 'Impossible de demander une recharge. Réessayez plus tard.',
 }
 
 export default fr

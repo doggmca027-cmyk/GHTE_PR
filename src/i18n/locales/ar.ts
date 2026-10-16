@@ -322,6 +322,15 @@ const ar: Record<string, string> = {
   'Order now': 'اطلب الآن',
   'Bulk prices': 'أسعار الجملة',
   'from {n}': 'من {n}',
+  'Request refill': 'طلب التعويض',
+  'Refill requested': 'تم طلب التعويض',
+  'Refill is in progress': 'التعويض قيد التنفيذ',
+  'Available from {date}': 'متاح من {date}',
+  'A refill can be requested 24 hours after the order.': 'يمكن طلب التعويض بعد 24 ساعة من الطلب.',
+  'A refill was requested recently. Try again tomorrow.': 'تم طلب التعويض مؤخرًا. حاول غدًا.',
+  'The refill guarantee of this order is over.': 'انتهى ضمان التعويض لهذا الطلب.',
+  'The provider could not start a refill now. Try again later.': 'تعذّر على المزوّد بدء التعويض الآن. حاول لاحقًا.',
+  'Could not request a refill. Try again later.': 'تعذّر طلب التعويض. حاول لاحقًا.',
 }
 
 export default ar

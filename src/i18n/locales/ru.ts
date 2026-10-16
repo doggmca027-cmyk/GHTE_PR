@@ -322,6 +322,15 @@ const ru: Record<string, string> = {
   'Order now': 'Заказать',
   'Bulk prices': 'Оптовые цены',
   'from {n}': 'от {n}',
+  'Request refill': 'Докрутить (Refill)',
+  'Refill requested': 'Докрутка запрошена',
+  'Refill is in progress': 'Докрутка выполняется',
+  'Available from {date}': 'Доступно с {date}',
+  'A refill can be requested 24 hours after the order.': 'Докрутку можно запросить через 24 часа после заказа.',
+  'A refill was requested recently. Try again tomorrow.': 'Докрутку уже запрашивали недавно. Попробуйте завтра.',
+  'The refill guarantee of this order is over.': 'Гарантия на докрутку для этого заказа закончилась.',
+  'The provider could not start a refill now. Try again later.': 'Провайдер не смог запустить докрутку сейчас. Попробуйте позже.',
+  'Could not request a refill. Try again later.': 'Не удалось запросить докрутку. Попробуйте позже.',
 }
 
 export default ru

@@ -46,5 +46,10 @@ export interface IOrderView {
   refundedAmount: number
   /** Paid, and waiting for the service to be connected (the provider is being funded). */
   awaitingFunds: boolean
+  /** The service and the provider it went to give a guarantee: a refill can be asked once it is delivered. */
+  refillAvailable?: boolean
+  /** null = never asked; requested = waiting for the provider; in_progress = the provider is restoring; rejected / completed. */
+  refillStatus?: 'requested' | 'in_progress' | 'completed' | 'rejected' | null
+  refillRequestedAt?: string | null
   createdAt: string
 }

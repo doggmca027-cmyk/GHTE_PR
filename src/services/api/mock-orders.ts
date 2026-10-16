@@ -154,7 +154,7 @@ export function createMockBackend(
   /** Status is derived from age, so the history screen shows live-looking progress. */
   function view(o: StoredOrder): IOrderView {
     const age = now() - Date.parse(o.createdAt)
-    const base = { ...o, refundedAmount: o.refundedAmount ?? 0, awaitingFunds: false }
+    const base = { ...o, refundedAmount: o.refundedAmount ?? 0, awaitingFunds: false, refillAvailable: o.refillAvailable ?? false, refillStatus: o.refillStatus ?? null, refillRequestedAt: o.refillRequestedAt ?? null }
     if (age < delays.submittedMs) return { ...base, status: 'submitted', remains: o.quantity }
     if (age < delays.completedMs) {
       const progress = (age - delays.submittedMs) / (delays.completedMs - delays.submittedMs)

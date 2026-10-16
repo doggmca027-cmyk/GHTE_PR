@@ -322,6 +322,15 @@ const de: Record<string, string> = {
   'Order now': 'Bestellen',
   'Bulk prices': 'Mengenpreise',
   'from {n}': 'ab {n}',
+  'Request refill': 'Nachfüllen anfordern',
+  'Refill requested': 'Nachfüllen angefordert',
+  'Refill is in progress': 'Nachfüllen läuft',
+  'Available from {date}': 'Verfügbar ab {date}',
+  'A refill can be requested 24 hours after the order.': 'Nachfüllen kann 24 Stunden nach der Bestellung angefordert werden.',
+  'A refill was requested recently. Try again tomorrow.': 'Nachfüllen wurde kürzlich angefordert. Versuche es morgen erneut.',
+  'The refill guarantee of this order is over.': 'Die Nachfüllgarantie dieser Bestellung ist abgelaufen.',
+  'The provider could not start a refill now. Try again later.': 'Der Anbieter konnte das Nachfüllen gerade nicht starten. Versuche es später erneut.',
+  'Could not request a refill. Try again later.': 'Nachfüllen konnte nicht angefordert werden. Versuche es später erneut.',
 }
 
 export default de

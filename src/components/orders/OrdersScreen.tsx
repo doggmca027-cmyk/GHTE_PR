@@ -8,7 +8,7 @@ import { haptic } from '@/lib/haptics'
 import { isActiveStatus, matchesFilter, ORDER_FILTERS, type OrderFilter } from '@/lib/order-view'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
-import { getOrders } from '@/services/api/orders'
+import { getOrders, requestRefill } from '@/services/api/orders'
 import type { IOrderView } from '@/types/orders'
 import { OrderCard } from './OrderCard'
 
@@ -123,7 +123,7 @@ export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
           </Card>
         )}
 
-        {visible.map((order) => <OrderCard key={order.id} order={order} onReportIssue={onReportIssue} />)}
+        {visible.map((order) => <OrderCard key={order.id} order={order} onReportIssue={onReportIssue} onRefill={async (o) => { await requestRefill(session, o.id); await load() }} />)}
       </div>
     </>
   )

@@ -322,6 +322,15 @@ const hi: Record<string, string> = {
   'Order now': 'ऑर्डर करें',
   'Bulk prices': 'थोक मूल्य',
   'from {n}': '{n} से',
+  'Request refill': 'रीफिल माँगें',
+  'Refill requested': 'रीफिल का अनुरोध भेजा गया',
+  'Refill is in progress': 'रीफिल जारी है',
+  'Available from {date}': '{date} से उपलब्ध',
+  'A refill can be requested 24 hours after the order.': 'रीफिल ऑर्डर के 24 घंटे बाद माँगा जा सकता है।',
+  'A refill was requested recently. Try again tomorrow.': 'हाल ही में रीफिल माँगा गया था। कल फिर कोशिश करें।',
+  'The refill guarantee of this order is over.': 'इस ऑर्डर की रीफिल गारंटी समाप्त हो गई है।',
+  'The provider could not start a refill now. Try again later.': 'प्रदाता अभी रीफिल शुरू नहीं कर सका। बाद में फिर कोशिश करें।',
+  'Could not request a refill. Try again later.': 'रीफिल का अनुरोध नहीं हो सका। बाद में फिर कोशिश करें।',
 }
 
 export default hi

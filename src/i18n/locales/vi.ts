@@ -322,6 +322,15 @@ const vi: Record<string, string> = {
   'Order now': 'Đặt ngay',
   'Bulk prices': 'Giá sỉ',
   'from {n}': 'từ {n}',
+  'Request refill': 'Yêu cầu bù',
+  'Refill requested': 'Đã yêu cầu bù',
+  'Refill is in progress': 'Đang bù',
+  'Available from {date}': 'Có từ {date}',
+  'A refill can be requested 24 hours after the order.': 'Có thể yêu cầu bù sau 24 giờ kể từ khi đặt.',
+  'A refill was requested recently. Try again tomorrow.': 'Bạn vừa yêu cầu bù gần đây. Hãy thử lại vào ngày mai.',
+  'The refill guarantee of this order is over.': 'Bảo hành bù của đơn này đã hết.',
+  'The provider could not start a refill now. Try again later.': 'Nhà cung cấp chưa thể bắt đầu bù lúc này. Hãy thử lại sau.',
+  'Could not request a refill. Try again later.': 'Không thể yêu cầu bù. Hãy thử lại sau.',
 }
 
 export default vi

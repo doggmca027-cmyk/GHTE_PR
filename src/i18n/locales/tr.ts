@@ -322,6 +322,15 @@ const tr: Record<string, string> = {
   'Order now': 'Sipariş ver',
   'Bulk prices': 'Toplu fiyatlar',
   'from {n}': '{n} ve üzeri',
+  'Request refill': 'Telafi iste',
+  'Refill requested': 'Telafi istendi',
+  'Refill is in progress': 'Telafi sürüyor',
+  'Available from {date}': '{date} tarihinden itibaren',
+  'A refill can be requested 24 hours after the order.': 'Telafi, siparişten 24 saat sonra istenebilir.',
+  'A refill was requested recently. Try again tomorrow.': 'Kısa süre önce telafi istendi. Yarın tekrar deneyin.',
+  'The refill guarantee of this order is over.': 'Bu siparişin telafi garantisi sona erdi.',
+  'The provider could not start a refill now. Try again later.': 'Sağlayıcı telafiyi şu anda başlatamadı. Daha sonra tekrar deneyin.',
+  'Could not request a refill. Try again later.': 'Telafi istenemedi. Daha sonra tekrar deneyin.',
 }
 
 export default tr

@@ -322,6 +322,15 @@ const id: Record<string, string> = {
   'Order now': 'Pesan',
   'Bulk prices': 'Harga grosir',
   'from {n}': 'mulai {n}',
+  'Request refill': 'Minta isi ulang',
+  'Refill requested': 'Isi ulang diminta',
+  'Refill is in progress': 'Isi ulang sedang berjalan',
+  'Available from {date}': 'Tersedia mulai {date}',
+  'A refill can be requested 24 hours after the order.': 'Isi ulang bisa diminta 24 jam setelah pesanan.',
+  'A refill was requested recently. Try again tomorrow.': 'Isi ulang baru saja diminta. Coba lagi besok.',
+  'The refill guarantee of this order is over.': 'Garansi isi ulang pesanan ini sudah berakhir.',
+  'The provider could not start a refill now. Try again later.': 'Penyedia tidak bisa memulai isi ulang sekarang. Coba lagi nanti.',
+  'Could not request a refill. Try again later.': 'Gagal meminta isi ulang. Coba lagi nanti.',
 }
 
 export default id

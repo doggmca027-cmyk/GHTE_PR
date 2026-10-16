@@ -1,5 +1,6 @@
 import { currentLocale, t, tr } from '@/i18n'
 import type { OrderStatus } from '@/types'
+import type { IOrderView } from '@/types/orders'
 
 export type OrderFilter = 'all' | 'active' | 'completed' | 'closed'
 
@@ -68,4 +69,25 @@ export function formatOrderDate(iso: string, locale = currentLocale()): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   return d.toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+export type RefillView =
+  | { kind: 'available' }
+  /** asked: the provider is on it (or its answer is awaited) */
+  | { kind: 'pending'; status: 'requested' | 'in_progress' }
+  /** possible later: 24 h after the order, or a day after the last request */
+  | { kind: 'wait'; until: string }
+
+const DAY_MS = 86_400_000
+
+/**
+ * What the order card offers about a refill (the server re-checks everything): nothing for a service without a guarantee or an order
+ * that is not delivered; the request in flight; or the button, available 24 h after the order and once a day.
+ */
+export function refillView(o: Pick<IOrderView, 'status' | 'createdAt' | 'refillAvailable' | 'refillStatus' | 'refillRequestedAt'>, now = Date.now()): RefillView | null {
+  if (!o.refillAvailable || (o.status !== 'completed' && o.status !== 'partial')) return null
+  const last = o.refillRequestedAt ? Date.parse(o.refillRequestedAt) : null
+  if ((o.refillStatus === 'requested' || o.refillStatus === 'in_progress') && last !== null && now - last < DAY_MS) return { kind: 'pending', status: o.refillStatus }
+  const notBefore = Math.max(Date.parse(o.createdAt) + DAY_MS, last !== null ? last + DAY_MS : 0)
+  return now < notBefore ? { kind: 'wait', until: new Date(notBefore).toISOString() } : { kind: 'available' }
 }

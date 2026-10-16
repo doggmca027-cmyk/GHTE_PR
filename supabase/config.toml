@@ -95,3 +95,7 @@ verify_jwt = false
 # telegram-auth. Rate-limited in the database (auth_rate_hit).
 [functions.web-auth]
 verify_jwt = false
+
+# Signed-in users: ask the provider to refill a delivered order (every rule in begin_order_refill). Authenticates the JWT itself.
+[functions.request-refill]
+verify_jwt = false

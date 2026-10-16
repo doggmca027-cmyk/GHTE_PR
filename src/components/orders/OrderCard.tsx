@@ -1,19 +1,53 @@
 import { useState } from 'react'
-import { Check, Copy, LifeBuoy } from 'lucide-react'
+import { Check, Copy, LifeBuoy, Loader2, RefreshCcw } from 'lucide-react'
 import { PlatformIcon } from '@/components/services/PlatformIcon'
-import { useT } from '@/i18n'
+import { tr, useT } from '@/i18n'
 import { copyText } from '@/lib/clipboard'
 import { haptic } from '@/lib/haptics'
 import { formatInt, formatUnits, toUnits } from '@/lib/order-calc'
-import { deliveredRatio, formatOrderDate, isActiveStatus, truncateUrl } from '@/lib/order-view'
+import { deliveredRatio, formatOrderDate, isActiveStatus, refillView, truncateUrl } from '@/lib/order-view'
 import type { IOrderView } from '@/types/orders'
 import { StatusBadge } from './StatusBadge'
 
-export function OrderCard({ order, onReportIssue }: { order: IOrderView; onReportIssue?: (order: IOrderView) => void }) {
+/** The customer's words for each refusal of request-refill. */
+const REFILL_ERROR: Record<string, string> = {
+  refill_too_early: tr('A refill can be requested 24 hours after the order.'),
+  refill_cooldown: tr('A refill was requested recently. Try again tomorrow.'),
+  refill_expired: tr('The refill guarantee of this order is over.'),
+  refill_refused: tr('The provider could not start a refill now. Try again later.'),
+  other: tr('Could not request a refill. Try again later.'),
+}
+
+export function OrderCard({ order, onReportIssue, onRefill }: {
+  order: IOrderView
+  onReportIssue?: (order: IOrderView) => void
+  /** Asks the provider to refill this order; rejects with { code } on a refusal. */
+  onRefill?: (order: IOrderView) => Promise<void>
+}) {
   const t = useT()
   const [copied, setCopied] = useState(false)
   const ratio = deliveredRatio(order.quantity, order.remains)
   const showProgress = ratio !== null && isActiveStatus(order.status)
+  const refill = onRefill ? refillView(order) : null
+  const [refillBusy, setRefillBusy] = useState(false)
+  const [refillError, setRefillError] = useState<string | null>(null)
+
+  async function handleRefill() {
+    if (!onRefill) return
+    haptic.tap()
+    setRefillBusy(true)
+    setRefillError(null)
+    try {
+      await onRefill(order)
+      haptic.success()
+    } catch (e) {
+      haptic.error()
+      const code = (e as { code?: string } | null)?.code
+      setRefillError(t(REFILL_ERROR[code && REFILL_ERROR[code] ? code : 'other']))
+    } finally {
+      setRefillBusy(false)
+    }
+  }
 
   async function handleCopy() {
     if (await copyText(order.targetUrl)) {
@@ -72,6 +106,27 @@ export function OrderCard({ order, onReportIssue }: { order: IOrderView; onRepor
             ? t('Partially completed: {n} undelivered. {amount} refunded to your balance.', { n: formatInt(order.remains), amount: formatUnits(toUnits(order.refundedAmount)) })
             : t('{amount} refunded to your balance.', { amount: formatUnits(toUnits(order.refundedAmount)) })}
         </p>
+      )}
+
+      {refill && (
+        <div className="mt-3">
+          {refill.kind === 'pending' ? (
+            <p className="flex items-center gap-1.5 rounded-2xl bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-700">
+              <RefreshCcw size={14} strokeWidth={1.75} /> {refill.status === 'in_progress' ? t('Refill is in progress') : t('Refill requested')}
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleRefill()}
+              disabled={refill.kind === 'wait' || refillBusy}
+              className="flex h-9 items-center gap-1.5 rounded-full bg-brand-light px-3.5 text-[13px] font-semibold text-brand-text active:scale-95 disabled:opacity-50"
+            >
+              {refillBusy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} strokeWidth={1.75} />} {t('Request refill')}
+            </button>
+          )}
+          {refill.kind === 'wait' && <p className="mt-1 text-xs text-content-muted">{t('Available from {date}', { date: formatOrderDate(refill.until) })}</p>}
+          {refillError && <p role="alert" className="mt-1 text-xs font-medium text-amber-700">{refillError}</p>}
+        </div>
       )}
 
       {onReportIssue && (

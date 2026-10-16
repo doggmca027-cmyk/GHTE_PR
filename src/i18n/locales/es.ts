@@ -322,6 +322,15 @@ const es: Record<string, string> = {
   'Order now': 'Pedir',
   'Bulk prices': 'Precios por volumen',
   'from {n}': 'desde {n}',
+  'Request refill': 'Pedir reposición',
+  'Refill requested': 'Reposición solicitada',
+  'Refill is in progress': 'Reposición en curso',
+  'Available from {date}': 'Disponible desde {date}',
+  'A refill can be requested 24 hours after the order.': 'Puedes pedir la reposición 24 horas después del pedido.',
+  'A refill was requested recently. Try again tomorrow.': 'Ya pediste una reposición hace poco. Inténtalo mañana.',
+  'The refill guarantee of this order is over.': 'La garantía de reposición de este pedido ha terminado.',
+  'The provider could not start a refill now. Try again later.': 'El proveedor no pudo iniciar la reposición ahora. Inténtalo más tarde.',
+  'Could not request a refill. Try again later.': 'No se pudo pedir la reposición. Inténtalo más tarde.',
 }
 
 export default es

@@ -322,6 +322,15 @@ const ja: Record<string, string> = {
   'Order now': '注文する',
   'Bulk prices': 'まとめ買い価格',
   'from {n}': '{n} から',
+  'Request refill': '補充をリクエスト',
+  'Refill requested': '補充をリクエストしました',
+  'Refill is in progress': '補充中です',
+  'Available from {date}': '{date} から利用可能',
+  'A refill can be requested 24 hours after the order.': '補充は注文から24時間後にリクエストできます。',
+  'A refill was requested recently. Try again tomorrow.': '最近補充をリクエストしました。明日もう一度お試しください。',
+  'The refill guarantee of this order is over.': 'この注文の補充保証は終了しました。',
+  'The provider could not start a refill now. Try again later.': '提供元が今は補充を開始できませんでした。後でもう一度お試しください。',
+  'Could not request a refill. Try again later.': '補充をリクエストできませんでした。後でもう一度お試しください。',
 }
 
 export default ja
