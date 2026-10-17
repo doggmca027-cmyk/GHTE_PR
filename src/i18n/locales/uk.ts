@@ -482,6 +482,18 @@ const uk: Record<string, string> = {
   '{n}/day': '{n}/день',
   'up to {n}': 'до {n}',
   'Recovery: {time}': 'Відновлення: {time}',
+  'Like': 'Подобається',
+  'Love': 'Супер',
+  'Care': 'Ми разом',
+  'Haha': 'Ха-ха',
+  'Wow': 'Ух ти!',
+  'Sad': 'Співчуваю',
+  'Angry': 'Обурливо',
+  'Star': 'Зірка',
+  'Fire': 'Вогонь',
+  'Party': 'Свято',
+  'Positive': 'Позитивні',
+  'Negative': 'Негативні',
 }
 
 export default uk

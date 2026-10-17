@@ -482,6 +482,18 @@ const zh: Record<string, string> = {
   '{n}/day': '{n}/天',
   'up to {n}': '最多 {n}',
   'Recovery: {time}': '补量：{time}',
+  'Like': '赞',
+  'Love': '大爱',
+  'Care': '抱抱',
+  'Haha': '笑趴',
+  'Wow': '哇',
+  'Sad': '心碎',
+  'Angry': '怒',
+  'Star': '星星',
+  'Fire': '火',
+  'Party': '派对',
+  'Positive': '正面',
+  'Negative': '负面',
 }
 
 export default zh

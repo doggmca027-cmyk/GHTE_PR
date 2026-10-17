@@ -482,6 +482,18 @@ const de: Record<string, string> = {
   '{n}/day': '{n}/Tag',
   'up to {n}': 'bis {n}',
   'Recovery: {time}': 'Nachfüllung: {time}',
+  'Like': 'Gefällt mir',
+  'Love': 'Love',
+  'Care': 'Umarmung',
+  'Haha': 'Haha',
+  'Wow': 'Wow',
+  'Sad': 'Traurig',
+  'Angry': 'Wütend',
+  'Star': 'Stern',
+  'Fire': 'Feuer',
+  'Party': 'Party',
+  'Positive': 'Positiv',
+  'Negative': 'Negativ',
 }
 
 export default de

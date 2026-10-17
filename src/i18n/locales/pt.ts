@@ -482,6 +482,18 @@ const pt: Record<string, string> = {
   '{n}/day': '{n}/dia',
   'up to {n}': 'até {n}',
   'Recovery: {time}': 'Reposição: {time}',
+  'Like': 'Curtir',
+  'Love': 'Amei',
+  'Care': 'Força',
+  'Haha': 'Haha',
+  'Wow': 'Uau',
+  'Sad': 'Triste',
+  'Angry': 'Grr',
+  'Star': 'Estrela',
+  'Fire': 'Fogo',
+  'Party': 'Festa',
+  'Positive': 'Positivas',
+  'Negative': 'Negativas',
 }
 
 export default pt

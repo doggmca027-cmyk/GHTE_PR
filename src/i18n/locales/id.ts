@@ -482,6 +482,18 @@ const id: Record<string, string> = {
   '{n}/day': '{n}/hari',
   'up to {n}': 'hingga {n}',
   'Recovery: {time}': 'Pemulihan: {time}',
+  'Like': 'Suka',
+  'Love': 'Super',
+  'Care': 'Peduli',
+  'Haha': 'Haha',
+  'Wow': 'Wow',
+  'Sad': 'Sedih',
+  'Angry': 'Marah',
+  'Star': 'Bintang',
+  'Fire': 'Api',
+  'Party': 'Pesta',
+  'Positive': 'Positif',
+  'Negative': 'Negatif',
 }
 
 export default id

@@ -273,3 +273,41 @@ describe('get_admin_pricing_view follows Balanced routing', () => {
     expect(Number(byName(rows, 'loss').margin_absolute)).toBe(-0.5)
   })
 })
+
+describe('a provider that cannot pay for the order', () => {
+  const synced = '2026-10-18T00:00:00Z'
+  const center = provider('center', { lastBalanceSync: synced, providerBalance: 3 })
+  const donor = (balance: number) => provider('donor', { lastBalanceSync: synced, providerBalance: balance })
+  const offers = [offer('primary', 'center', { costPer1000: 1 }), offer('cheap', 'donor', { costPer1000: 0.4 })]
+
+  it('the cheap donor with $0 (or too little for THIS order) never takes it from the primary provider that can pay', () => {
+    expect(rankOffers(offers, [center, donor(0)], { quantity: 1000 }).map((o) => o.id)).toEqual(['primary', 'cheap'])
+    // 1000 at $0.40 costs $0.40: $0.30 is not enough, $0.40 is
+    expect(rankOffers(offers, [center, donor(0.3)], { quantity: 1000 }).map((o) => o.id)).toEqual(['primary', 'cheap'])
+    expect(rankOffers(offers, [center, donor(0.4)], { quantity: 1000 }).map((o) => o.id)).toEqual(['cheap', 'primary'])
+  })
+
+  it('when nobody can pay, the order of price stays (the balance may be a minute old: the router still tries)', () => {
+    const broke = provider('center', { lastBalanceSync: synced, providerBalance: 0 })
+    expect(rankOffers(offers, [broke, donor(0)], { quantity: 1000 }).map((o) => o.id)).toEqual(['cheap', 'primary'])
+  })
+
+  it('a balance never read is unknown, not empty; without a quantity nothing is reordered', () => {
+    const unknown = provider('donor', { lastBalanceSync: null, providerBalance: 0 })
+    expect(rankOffers(offers, [center, unknown], { quantity: 1000 }).map((o) => o.id)).toEqual(['cheap', 'primary'])
+    expect(rankOffers(offers, [center, donor(0)]).map((o) => o.id)).toEqual(['cheap', 'primary'])
+  })
+})
+
+describe('the price of a card with a cheaper donor', () => {
+  const po = (id: string, cost: number, over: Partial<PricingOffer> = {}): PricingOffer => ({
+    id, service_id: 's', provider_id: id, provider_service_id: `ps-${id}`, cost_per_1000: cost, min_quantity: 10, max_quantity: 1000,
+    refill_supported: false, is_active: true, provider_service_active: true, provider_active: true, routing_enabled: true, ...over,
+  })
+
+  it('is built on the most expensive offer that can take orders (the primary), so the donor saving is margin and the primary can always cover in profit', () => {
+    expect(serviceCostBasis([po('primary', 1.0), po('donor', 0.4)])?.cost).toBe(1.0)
+    // the primary out of order (its panel dropped the service): only then does the price follow the donor
+    expect(serviceCostBasis([po('primary', 1.0, { provider_service_active: false }), po('donor', 0.4)])?.cost).toBe(0.4)
+  })
+})

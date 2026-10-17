@@ -482,6 +482,18 @@ const ja: Record<string, string> = {
   '{n}/day': '{n}/日',
   'up to {n}': '最大 {n}',
   'Recovery: {time}': '補充：{time}',
+  'Like': 'いいね！',
+  'Love': '超いいね！',
+  'Care': '大切だね',
+  'Haha': 'うけるね',
+  'Wow': 'すごいね',
+  'Sad': '悲しいね',
+  'Angry': 'ひどいね',
+  'Star': 'スター',
+  'Fire': '炎',
+  'Party': 'パーティー',
+  'Positive': 'ポジティブ',
+  'Negative': 'ネガティブ',
 }
 
 export default ja

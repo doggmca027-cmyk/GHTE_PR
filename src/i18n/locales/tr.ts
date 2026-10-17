@@ -482,6 +482,18 @@ const tr: Record<string, string> = {
   '{n}/day': '{n}/gün',
   'up to {n}': '{n}\'e kadar',
   'Recovery: {time}': 'Telafi: {time}',
+  'Like': 'Beğen',
+  'Love': 'Bayıldım',
+  'Care': 'Yanındayım',
+  'Haha': 'Haha',
+  'Wow': 'İnanılmaz',
+  'Sad': 'Üzgün',
+  'Angry': 'Kızgın',
+  'Star': 'Yıldız',
+  'Fire': 'Ateş',
+  'Party': 'Parti',
+  'Positive': 'Olumlu',
+  'Negative': 'Olumsuz',
 }
 
 export default tr

@@ -20,6 +20,8 @@
 //      and a panel checks its min/max against ONE delivery, so the limits are compared with quantity / runs (a total that does
 //      not split into whole deliveries fits no offer). The price stays on the total quantity.
 //   4. a drip-feed order goes only to offers whose provider service the panel lists as drip-feed capable
+//   5. a provider whose KNOWN balance (providers.provider_balance, read every minute) cannot pay for the order is ranked after every
+//      offer that can; it stays last as a fallback (the balance may be a minute old)
 // The caller refuses the order BEFORE charging when nothing qualifies, and tries the next offer when one refuses before sending.
 
 import type { HealthStatus, IProvider, IProviderServiceOffer } from './types.ts'
@@ -82,12 +84,21 @@ export function rankOffers(offers: IProviderServiceOffer[], providers: IProvider
   if (!Number.isInteger(runs) || runs < 1) return []
   const perRun = opts.quantity === undefined ? undefined : opts.quantity / runs
   if (runs > 1 && perRun !== undefined && !Number.isInteger(perRun)) return []
-  return offers
+  const ranked = offers
     .filter((o) => o.isActive && eligible.has(o.providerId))
     .filter((o) => runs === 1 || o.dripfeedSupported === true)
     .filter((o) => perRun === undefined || (perRun >= o.minQuantity && perRun <= o.maxQuantity))
     .filter((o) => opts.maxCostPer1000 === undefined || round4(o.costPer1000) <= round4(opts.maxCostPer1000))
     .sort((a, b) => ec(a, eligible) - ec(b, eligible) || b.routingScore - a.routingScore || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  // 5. a provider whose known balance cannot pay for this order goes behind every offer that can: the cheap donor with $0 must not take
+  //    the order the primary provider can fill. It stays at the end (the balance read may be a minute old), never before a funded one.
+  if (opts.quantity === undefined) return ranked
+  const funded = (o: IProviderServiceOffer) => {
+    const p = eligible.get(o.providerId)
+    if (!p || !p.lastBalanceSync || !Number.isFinite(p.providerBalance)) return true // never read: unknown, not empty
+    return p.providerBalance >= costForQuantity(o.costPer1000, opts.quantity!)
+  }
+  return [...ranked.filter(funded), ...ranked.filter((o) => !funded(o))]
 }
 
 export function selectBestOffer(offers: IProviderServiceOffer[], providers: IProvider[], opts: SelectOptions = {}): IProviderServiceOffer {

@@ -482,6 +482,18 @@ const hi: Record<string, string> = {
   '{n}/day': '{n}/दिन',
   'up to {n}': '{n} तक',
   'Recovery: {time}': 'रीफ़िल: {time}',
+  'Like': 'पसंद',
+  'Love': 'प्यार',
+  'Care': 'केयर',
+  'Haha': 'हाहा',
+  'Wow': 'वाह',
+  'Sad': 'दुखद',
+  'Angry': 'गुस्सा',
+  'Star': 'स्टार',
+  'Fire': 'आग',
+  'Party': 'पार्टी',
+  'Positive': 'सकारात्मक',
+  'Negative': 'नकारात्मक',
 }
 
 export default hi

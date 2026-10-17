@@ -482,6 +482,18 @@ const vi: Record<string, string> = {
   '{n}/day': '{n}/ngày',
   'up to {n}': 'tới {n}',
   'Recovery: {time}': 'Bù hụt: {time}',
+  'Like': 'Thích',
+  'Love': 'Yêu thích',
+  'Care': 'Thương thương',
+  'Haha': 'Haha',
+  'Wow': 'Wow',
+  'Sad': 'Buồn',
+  'Angry': 'Phẫn nộ',
+  'Star': 'Ngôi sao',
+  'Fire': 'Lửa',
+  'Party': 'Tiệc',
+  'Positive': 'Tích cực',
+  'Negative': 'Tiêu cực',
 }
 
 export default vi

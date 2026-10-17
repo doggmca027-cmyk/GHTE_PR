@@ -2,6 +2,7 @@
 // apart from the others of its group (the guarantee, the quality, the speed...), never a made-up grade like "Economy" or "Premium".
 import { t } from '@/i18n'
 import type { ICatalogService } from '@/types/catalog'
+import { reactionOf } from './reactions'
 import { localizedName } from './service-view'
 
 /** Tags that only say which of the panel's servers delivers ("[server 2]", "[s3]", "[backup server]"): nothing the customer chooses. */
@@ -19,7 +20,8 @@ export function collapseTechnicalDuplicates(variants: readonly ICatalogService[]
   const best = new Map<string, ICatalogService>()
   const order: string[] = []
   for (const v of variants) {
-    const key = `${withoutTechnicalTags(v.name)}|${v.ratePer1000}`
+    // the original name too: a translation may have lost what tells two services apart ("[Ха-ха]" / "[Сочувствую]")
+    const key = `${withoutTechnicalTags(v.name)}|${withoutTechnicalTags(v.nameI18n?.ru ?? '')}|${v.ratePer1000}`
     const kept = best.get(key)
     if (!kept) {
       best.set(key, v)
@@ -61,6 +63,11 @@ interface Ctx {
 type Feature = (v: ICatalogService, ctx: Ctx) => string | null
 
 const FEATURES: Feature[] = [
+  // the reaction it delivers ("😆 Haha" / "😡 Angry"): the very thing a reaction group is about
+  (v) => {
+    const r = reactionOf(v.name, v.nameI18n)
+    return r ? `${r.emoji} ${t(r.label)}` : null
+  },
   // the guarantee
   (v, { locale }) => {
     const r = v.attributes?.refill

@@ -482,6 +482,18 @@ const fr: Record<string, string> = {
   '{n}/day': '{n}/jour',
   'up to {n}': 'jusqu\'à {n}',
   'Recovery: {time}': 'Recharge : {time}',
+  'Like': 'J\'aime',
+  'Love': 'J\'adore',
+  'Care': 'Solidaire',
+  'Haha': 'Haha',
+  'Wow': 'Wouah',
+  'Sad': 'Triste',
+  'Angry': 'Grrr',
+  'Star': 'Étoile',
+  'Fire': 'Feu',
+  'Party': 'Fête',
+  'Positive': 'Positives',
+  'Negative': 'Négatives',
 }
 
 export default fr

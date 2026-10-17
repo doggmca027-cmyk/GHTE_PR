@@ -482,6 +482,18 @@ const ar: Record<string, string> = {
   '{n}/day': '{n}/يوم',
   'up to {n}': 'حتى {n}',
   'Recovery: {time}': 'التعويض: {time}',
+  'Like': 'أعجبني',
+  'Love': 'أحببته',
+  'Care': 'أدعمك',
+  'Haha': 'هاها',
+  'Wow': 'واو',
+  'Sad': 'أحزنني',
+  'Angry': 'أغضبني',
+  'Star': 'نجمة',
+  'Fire': 'نار',
+  'Party': 'احتفال',
+  'Positive': 'إيجابية',
+  'Negative': 'سلبية',
 }
 
 export default ar

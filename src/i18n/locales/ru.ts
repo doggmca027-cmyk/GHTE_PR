@@ -482,6 +482,18 @@ const ru: Record<string, string> = {
   '{n}/day': '{n}/день',
   'up to {n}': 'до {n}',
   'Recovery: {time}': 'Восстановление: {time}',
+  'Like': 'Нравится',
+  'Love': 'Супер',
+  'Care': 'Мы вместе',
+  'Haha': 'Ха-ха',
+  'Wow': 'Ух ты!',
+  'Sad': 'Сочувствую',
+  'Angry': 'Возмутительно',
+  'Star': 'Звезда',
+  'Fire': 'Огонь',
+  'Party': 'Праздник',
+  'Positive': 'Позитивные',
+  'Negative': 'Негативные',
 }
 
 export default ru
