@@ -7,10 +7,12 @@ import type { ICategory } from '@/types/catalog'
 interface Props {
   categories: ICategory[]
   onSelect: (categoryId: string) => void
+  /** The finger (or mouse) is on a row: its services can start loading before the tap ends. */
+  onIntent?: (categoryId: string) => void
 }
 
 /** The categories of a platform as a list (a platform can have dozens): name in the customer's language and how many services it holds. */
-export function CategoryRows({ categories, onSelect }: Props) {
+export function CategoryRows({ categories, onSelect, onIntent }: Props) {
   const t = useT()
   const { lang } = useLanguage()
   return (
@@ -20,6 +22,8 @@ export function CategoryRows({ categories, onSelect }: Props) {
           <button
             type="button"
             onClick={() => { haptic.tap(); onSelect(c.id) }}
+            onPointerDown={() => onIntent?.(c.id)}
+            onMouseEnter={() => onIntent?.(c.id)}
             className="flex w-full items-center gap-3 rounded-3xl border border-blue-100/70 bg-surface px-4 py-3.5 text-start shadow-sm transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
           >
             <span className="min-w-0 flex-1">

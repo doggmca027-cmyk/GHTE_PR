@@ -396,6 +396,11 @@ const ru: Record<string, string> = {
   'or': 'или',
   'By continuing you accept our terms.': 'Продолжая, вы принимаете наши условия.',
   'Sign out': 'Выйти',
+  'Sign in with Telegram': 'Вход через Telegram',
+  'One tap with your Telegram account: no password. The first sign-in creates your account.': 'Одно нажатие через ваш аккаунт Telegram — без пароля. При первом входе аккаунт создаётся автоматически.',
+  'Signing you in…': 'Выполняем вход…',
+  'Prefer the app?': 'Удобнее в приложении?',
+  'Open in Telegram': 'Открыть в Telegram',
 }
 
 export default ru

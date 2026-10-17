@@ -396,6 +396,11 @@ const fr: Record<string, string> = {
   'or': 'ou',
   'By continuing you accept our terms.': 'En continuant, vous acceptez nos conditions.',
   'Sign out': 'Se déconnecter',
+  'Sign in with Telegram': 'Se connecter avec Telegram',
+  'One tap with your Telegram account: no password. The first sign-in creates your account.': 'Un seul geste avec votre compte Telegram, sans mot de passe. La première connexion crée votre compte.',
+  'Signing you in…': 'Connexion en cours…',
+  'Prefer the app?': 'Vous préférez l\'appli ?',
+  'Open in Telegram': 'Ouvrir dans Telegram',
 }
 
 export default fr

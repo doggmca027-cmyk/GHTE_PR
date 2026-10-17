@@ -396,6 +396,11 @@ const id: Record<string, string> = {
   'or': 'atau',
   'By continuing you accept our terms.': 'Dengan melanjutkan, Anda menyetujui ketentuan kami.',
   'Sign out': 'Keluar',
+  'Sign in with Telegram': 'Masuk dengan Telegram',
+  'One tap with your Telegram account: no password. The first sign-in creates your account.': 'Satu ketukan dengan akun Telegram Anda, tanpa kata sandi. Masuk pertama kali akan membuat akun Anda.',
+  'Signing you in…': 'Sedang masuk…',
+  'Prefer the app?': 'Lebih suka aplikasinya?',
+  'Open in Telegram': 'Buka di Telegram',
 }
 
 export default id

@@ -74,7 +74,41 @@ describe('signed out outside Telegram', () => {
   })
 })
 
+describe('Telegram only (e-mail sign-in switched off, the default)', () => {
+  it('no e-mail field at all: one Telegram button, a link to the bot, the legal links', async () => {
+    vi.stubEnv('VITE_TWA_RETURN_URL', 'https://t.me/GHTE_PR_BOT/app')
+    const { emailAuthEnabled } = await import('../src/components/auth/WebSignIn')
+    expect(emailAuthEnabled({})).toBe(false)
+    expect(emailAuthEnabled({ VITE_ENABLE_EMAIL_AUTH: 'true' })).toBe(true)
+    await mount()
+    expect(host.querySelectorAll('input')).toHaveLength(0)
+    expect(host.querySelector('h1')?.textContent).toBe('Sign in with Telegram')
+    expect(host.querySelector('[data-testid="telegram-login-widget"] script')?.getAttribute('data-telegram-login')).toBe('GHTE_PR_BOT')
+    expect(host.querySelector('a[href="https://t.me/GHTE_PR_BOT"]')?.textContent).toBe('Open in Telegram')
+    expect([...host.querySelectorAll('footer a')].map((a) => a.getAttribute('href'))).toEqual(['/terms', '/privacy', '/terms#orders'])
+  })
+
+  it('a refusal of the widget sign-in reads as a sentence', async () => {
+    vi.stubEnv('VITE_TWA_RETURN_URL', 'https://t.me/GHTE_PR_BOT')
+    const { WebAuthError } = await import('../src/services/api/web-auth')
+    api.loginWithTelegramWidget.mockRejectedValue(new WebAuthError('telegram_invalid', 'x'))
+    const onSignedIn = await mount()
+    await act(async () => { (window as unknown as Record<string, (u: unknown) => void>).__gramHubTelegramAuth({ id: 1, auth_date: 1, hash: 'h'.repeat(64) }) })
+    await flush()
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('Telegram sign-in failed. Please try again.')
+    expect(onSignedIn).not.toHaveBeenCalled()
+  })
+
+  it('no bot known: says so instead of an empty box', async () => {
+    vi.stubEnv('VITE_TWA_RETURN_URL', '')
+    await mount()
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('Telegram sign-in is not available right now.')
+  })
+})
+
 describe('the sign-in form', () => {
+  beforeEach(() => { vi.stubEnv('VITE_ENABLE_EMAIL_AUTH', 'true') })
+
   it('e-mail + password signs in', async () => {
     api.loginWithPassword.mockResolvedValue(SESSION)
     const onSignedIn = await mount()
@@ -148,6 +182,8 @@ describe('the sign-in form', () => {
 })
 
 describe('the Telegram widget', () => {
+  beforeEach(() => { vi.stubEnv('VITE_ENABLE_EMAIL_AUTH', 'true') })
+
   it('loads Telegram\'s widget for the bot and signs in with what it hands back', async () => {
     vi.stubEnv('VITE_TWA_RETURN_URL', 'https://t.me/GHTE_PR_BOT')
     api.loginWithTelegramWidget.mockResolvedValue(SESSION)

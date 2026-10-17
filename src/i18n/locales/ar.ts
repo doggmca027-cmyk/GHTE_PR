@@ -396,6 +396,11 @@ const ar: Record<string, string> = {
   'or': 'أو',
   'By continuing you accept our terms.': 'بالمتابعة، فإنك توافق على شروطنا.',
   'Sign out': 'تسجيل الخروج',
+  'Sign in with Telegram': 'تسجيل الدخول عبر Telegram',
+  'One tap with your Telegram account: no password. The first sign-in creates your account.': 'نقرة واحدة بحساب Telegram دون كلمة مرور. يُنشأ حسابك عند أول تسجيل دخول.',
+  'Signing you in…': 'جارٍ تسجيل الدخول…',
+  'Prefer the app?': 'تفضّل التطبيق؟',
+  'Open in Telegram': 'افتح في Telegram',
 }
 
 export default ar

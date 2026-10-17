@@ -396,6 +396,11 @@ const ja: Record<string, string> = {
   'or': 'または',
   'By continuing you accept our terms.': '続行すると利用規約に同意したことになります。',
   'Sign out': 'ログアウト',
+  'Sign in with Telegram': 'Telegramでログイン',
+  'One tap with your Telegram account: no password. The first sign-in creates your account.': 'Telegramアカウントでワンタップ、パスワード不要。初回ログインでアカウントが作成されます。',
+  'Signing you in…': 'ログインしています…',
+  'Prefer the app?': 'アプリの方がお好みですか？',
+  'Open in Telegram': 'Telegramで開く',
 }
 
 export default ja

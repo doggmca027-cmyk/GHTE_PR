@@ -396,6 +396,11 @@ const tr: Record<string, string> = {
   'or': 'veya',
   'By continuing you accept our terms.': 'Devam ederek şartlarımızı kabul edersiniz.',
   'Sign out': 'Çıkış yap',
+  'Sign in with Telegram': 'Telegram ile giriş yap',
+  'One tap with your Telegram account: no password. The first sign-in creates your account.': 'Telegram hesabınızla tek dokunuş, şifre yok. İlk girişte hesabınız oluşturulur.',
+  'Signing you in…': 'Giriş yapılıyor…',
+  'Prefer the app?': 'Uygulamayı mı tercih edersiniz?',
+  'Open in Telegram': 'Telegram\'da aç',
 }
 
 export default tr

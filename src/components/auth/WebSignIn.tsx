@@ -13,6 +13,7 @@ import {
   requestEmailCode,
   resetPassword,
   verifyEmailCode,
+  type TelegramWidgetUser,
   type WebAuthErrorCode,
 } from '@/services/api/web-auth'
 import { TelegramLoginWidget } from './TelegramLoginWidget'
@@ -57,6 +58,88 @@ const inputClass =
  * password, sign-up with a confirmed e-mail, a password reset, and the Telegram Login Widget. Every way ends with the same session.
  */
 export function WebSignIn({ onSignedIn }: { onSignedIn: (session: AuthSession) => void }) {
+  return emailAuthEnabled() ? <EmailSignIn onSignedIn={onSignedIn} /> : <TelegramSignIn onSignedIn={onSignedIn} />
+}
+
+/**
+ * E-mail sign-in is off until the e-mails can be sent (Resend secrets on the server): VITE_ENABLE_EMAIL_AUTH=true turns the forms on.
+ * Until then the website signs in with Telegram only, so no field is shown that cannot work.
+ */
+export const emailAuthEnabled = (env: Record<string, unknown> = import.meta.env): boolean => env.VITE_ENABLE_EMAIL_AUTH === 'true'
+
+function Brand() {
+  const t = useT()
+  return (
+    <header className="text-center">
+      <p className="text-2xl font-extrabold tracking-tight text-content-primary">GRAM Hub</p>
+      <p className="mt-1 text-sm text-content-secondary">{t('Promotion for Telegram, Instagram, YouTube, TikTok and more, paid with TON.')}</p>
+    </header>
+  )
+}
+
+function LegalFooter() {
+  const t = useT()
+  const { lang } = useLanguage()
+  return (
+    <footer className="space-y-1 text-center text-[12px] text-content-secondary">
+      <p>{t('By continuing you accept our terms.')}</p>
+      <p className="space-x-3 font-semibold">
+        <a className="text-brand" href={legalDocPath('terms', lang)}>{t('Terms of Service')}</a>
+        <a className="text-brand" href={legalDocPath('privacy', lang)}>{t('Privacy Policy')}</a>
+        <a className="text-brand" href={`${legalDocPath('terms', lang)}#orders`}>{t('Refunds')}</a>
+      </p>
+    </footer>
+  )
+}
+
+/** The website's sign-in while e-mail is off: one Telegram button, nothing else to fill in. Signing in the first time creates the account. */
+function TelegramSignIn({ onSignedIn }: { onSignedIn: (session: AuthSession) => void }) {
+  const t = useT()
+  const bot = telegramBotUsername()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function signIn(user: TelegramWidgetUser) {
+    setBusy(true); setError(null)
+    try {
+      onSignedIn(await loginWithTelegramWidget(user))
+    } catch (e) {
+      setError(t(ERRORS[e instanceof WebAuthError ? e.code : 'server']))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-b from-screen to-screen-end px-4 py-8">
+      <main className="w-full max-w-sm space-y-5">
+        <Brand />
+        <section className="space-y-4 rounded-3xl bg-surface p-6 text-center shadow-card" aria-labelledby="signin-title">
+          <div className="space-y-1.5">
+            <h1 id="signin-title" className="text-lg font-extrabold text-content-primary">{t('Sign in with Telegram')}</h1>
+            <p className="text-[13px] text-content-secondary">{t('One tap with your Telegram account: no password. The first sign-in creates your account.')}</p>
+          </div>
+          {bot ? (
+            <TelegramLoginWidget bot={bot} onAuth={(user) => void signIn(user)} />
+          ) : (
+            <p role="status" className="rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-medium text-amber-800">{t('Telegram sign-in is not available right now.')}</p>
+          )}
+          {busy && <p className="flex items-center justify-center gap-2 text-[13px] text-content-secondary"><Loader2 size={16} className="animate-spin" /> {t('Signing you in…')}</p>}
+          {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-[13px] font-medium text-rose-700">{error}</p>}
+          {bot && (
+            <p className="text-[12px] text-content-muted">
+              {t('Prefer the app?')} <a className="font-semibold text-brand" href={`https://t.me/${bot}`}>{t('Open in Telegram')}</a>
+            </p>
+          )}
+        </section>
+        <LegalFooter />
+      </main>
+    </div>
+  )
+}
+
+/** E-mail + password / code / reset, plus the Telegram widget (shown when VITE_ENABLE_EMAIL_AUTH=true). */
+function EmailSignIn({ onSignedIn }: { onSignedIn: (session: AuthSession) => void }) {
   const t = useT()
   const { lang } = useLanguage()
   const bot = telegramBotUsername()
@@ -143,10 +226,7 @@ export function WebSignIn({ onSignedIn }: { onSignedIn: (session: AuthSession) =
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-b from-screen to-screen-end px-4 py-8">
       <main className="w-full max-w-sm space-y-5">
-        <header className="text-center">
-          <p className="text-2xl font-extrabold tracking-tight text-content-primary">GRAM Hub</p>
-          <p className="mt-1 text-sm text-content-secondary">{t('Promotion for Telegram, Instagram, YouTube, TikTok and more, paid with TON.')}</p>
-        </header>
+        <Brand />
 
         <section className="space-y-4 rounded-3xl bg-surface p-5 shadow-card" aria-labelledby="signin-title">
           <div className="flex items-center gap-2">
@@ -217,14 +297,7 @@ export function WebSignIn({ onSignedIn }: { onSignedIn: (session: AuthSession) =
           )}
         </section>
 
-        <footer className="space-y-1 text-center text-[12px] text-content-secondary">
-          <p>{t('By continuing you accept our terms.')}</p>
-          <p className="space-x-3 font-semibold">
-            <a className="text-brand" href={legalDocPath('terms', lang)}>{t('Terms of Service')}</a>
-            <a className="text-brand" href={legalDocPath('privacy', lang)}>{t('Privacy Policy')}</a>
-            <a className="text-brand" href={`${legalDocPath('terms', lang)}#orders`}>{t('Refunds')}</a>
-          </p>
-        </footer>
+        <LegalFooter />
       </main>
     </div>
   )

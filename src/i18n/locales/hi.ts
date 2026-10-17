@@ -396,6 +396,11 @@ const hi: Record<string, string> = {
   'or': 'या',
   'By continuing you accept our terms.': 'जारी रखकर आप हमारी शर्तें स्वीकार करते हैं।',
   'Sign out': 'साइन आउट',
+  'Sign in with Telegram': 'Telegram से साइन इन करें',
+  'One tap with your Telegram account: no password. The first sign-in creates your account.': 'अपने Telegram खाते से एक टैप, कोई पासवर्ड नहीं। पहली बार साइन इन करने पर आपका खाता बन जाता है।',
+  'Signing you in…': 'साइन इन हो रहा है…',
+  'Prefer the app?': 'ऐप पसंद है?',
+  'Open in Telegram': 'Telegram में खोलें',
 }
 
 export default hi

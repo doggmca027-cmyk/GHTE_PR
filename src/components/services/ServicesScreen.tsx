@@ -10,6 +10,7 @@ import { track } from '@/lib/analytics-client'
 import { haptic } from '@/lib/haptics'
 import { localizedName } from '@/lib/service-view'
 import { SERVICES_PAGE, fetchCategories, fetchCategoryServices, fetchPlatforms } from '@/services/api/services'
+import { cachedLoad, isFresh, peekCached } from '@/lib/catalog-cache'
 import type { AuthSession } from '@/services/api/auth'
 import type { ICatalogService, ICategory, Platform } from '@/types/catalog'
 import { CategoryRows } from './CategoryRows'
@@ -72,11 +73,17 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
   const [serviceQuery, setServiceQuery] = useState('')
   const request = useRef(0)
 
+  // The catalogue is kept in memory for a few minutes (lib/catalog-cache.ts): reopening the tab shows it at once and refreshes it quietly.
+  const who = session.isMock ? 'mock' : session.user.id
   const load = useCallback(() => {
-    setState({ status: 'loading' })
-    Promise.all([fetchCategories(session), fetchPlatforms(session).catch(() => null)]).then(
-      ([categories, registry]) => setState({ status: 'ready', categories, platforms: mergePlatforms(registry, categories) }),
-      () => setState({ status: 'error' }),
+    const key = `overview:${who}`
+    const hit = peekCached<{ categories: ICategory[]; platforms: PlatformInfo[] }>(key)
+    setState(hit ? { status: 'ready', ...hit } : { status: 'loading' })
+    if (hit && isFresh(key)) return
+    cachedLoad(key, () => Promise.all([fetchCategories(session), fetchPlatforms(session).catch(() => null)])
+      .then(([categories, registry]) => ({ categories, platforms: mergePlatforms(registry, categories) }))).then(
+      (v) => setState({ status: 'ready', ...v }),
+      () => { if (!hit) setState({ status: 'error' }) },
     )
   }, [session.token, session.isMock]) // reload only when the identity changes, not on balance refresh
 
@@ -96,15 +103,25 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
   const search = useServiceSearch(session, searchScope, platform ? serviceQuery : '')
 
   // The first page of a category's services, when the category is opened.
+  // (from memory first when it was opened or touched a moment ago, see prefetch below)
+  const firstPageKey = (id: string) => `category:${who}:${id}`
+  const loadFirstPage = (id: string) => cachedLoad(firstPageKey(id), () => fetchCategoryServices(session, id, 0, SERVICES_PAGE))
   useEffect(() => {
     if (!categoryId) { setPage(null); return }
     const mine = ++request.current
-    setPage({ categoryId, items: [], status: 'loading', more: false, loadingMore: false })
-    fetchCategoryServices(session, categoryId, 0, SERVICES_PAGE).then(
+    const key = firstPageKey(categoryId)
+    const hit = peekCached<ICatalogService[]>(key)
+    setPage(hit
+      ? { categoryId, items: hit, status: 'ready', more: hit.length === SERVICES_PAGE, loadingMore: false }
+      : { categoryId, items: [], status: 'loading', more: false, loadingMore: false })
+    if (hit && isFresh(key)) return
+    loadFirstPage(categoryId).then(
       (items) => { if (request.current === mine) setPage({ categoryId, items, status: 'ready', more: items.length === SERVICES_PAGE, loadingMore: false }) },
-      () => { if (request.current === mine) setPage({ categoryId, items: [], status: 'error', more: false, loadingMore: false }) },
+      () => { if (request.current === mine && !hit) setPage({ categoryId, items: [], status: 'error', more: false, loadingMore: false }) },
     )
   }, [categoryId, session.token, session.isMock]) // eslint-disable-line react-hooks/exhaustive-deps
+  /** A category row is being pressed: its first page starts loading now (errors are ignored here; opening shows them). */
+  const prefetch = (id: string) => { if (!isFresh(firstPageKey(id))) loadFirstPage(id).catch(() => undefined) }
 
   const loadMore = () => {
     if (!page || page.status !== 'ready' || page.loadingMore || !page.more) return
@@ -225,7 +242,7 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
             <p className="text-xs text-content-secondary">{t('Try another platform or category.')}</p>
           </Card>
         ) : (
-          <CategoryRows categories={platformCategories} onSelect={setCategoryId} />
+          <CategoryRows categories={platformCategories} onSelect={setCategoryId} onIntent={prefetch} />
         )
       )}
 

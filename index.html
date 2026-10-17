@@ -19,8 +19,9 @@
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="GRAM Hub — social media promotion paid with TON" />
     <meta name="twitter:description" content="Followers, views, likes and members for Telegram, Instagram, YouTube, TikTok and more. Pay with TON." />
-    <!-- Defines window.Telegram.WebApp (initData etc.). Must load before the app bundle; see src/lib/webapp.ts. -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Defines window.Telegram.WebApp (initData etc.). Must run before the app bundle (src/lib/webapp.ts): "defer" keeps that order (deferred
+         and module scripts run in document order, after parsing) without blocking the page while it downloads. -->
+    <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />

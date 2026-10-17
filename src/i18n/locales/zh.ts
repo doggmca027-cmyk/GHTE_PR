@@ -396,6 +396,11 @@ const zh: Record<string, string> = {
   'or': '或',
   'By continuing you accept our terms.': '继续即表示您接受我们的条款。',
   'Sign out': '退出登录',
+  'Sign in with Telegram': '使用 Telegram 登录',
+  'One tap with your Telegram account: no password. The first sign-in creates your account.': '使用 Telegram 账户一键登录，无需密码。首次登录即自动创建账户。',
+  'Signing you in…': '正在登录…',
+  'Prefer the app?': '更喜欢用应用？',
+  'Open in Telegram': '在 Telegram 中打开',
 }
 
 export default zh

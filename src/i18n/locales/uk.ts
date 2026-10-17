@@ -396,6 +396,11 @@ const uk: Record<string, string> = {
   'or': 'або',
   'By continuing you accept our terms.': 'Продовжуючи, ви приймаєте наші умови.',
   'Sign out': 'Вийти',
+  'Sign in with Telegram': 'Вхід через Telegram',
+  'One tap with your Telegram account: no password. The first sign-in creates your account.': 'Одне натискання через ваш акаунт Telegram — без пароля. Під час першого входу акаунт створюється автоматично.',
+  'Signing you in…': 'Виконуємо вхід…',
+  'Prefer the app?': 'Зручніше в застосунку?',
+  'Open in Telegram': 'Відкрити в Telegram',
 }
 
 export default uk

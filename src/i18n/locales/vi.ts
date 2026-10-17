@@ -396,6 +396,11 @@ const vi: Record<string, string> = {
   'or': 'hoặc',
   'By continuing you accept our terms.': 'Tiếp tục nghĩa là bạn đồng ý với điều khoản của chúng tôi.',
   'Sign out': 'Đăng xuất',
+  'Sign in with Telegram': 'Đăng nhập bằng Telegram',
+  'One tap with your Telegram account: no password. The first sign-in creates your account.': 'Một chạm bằng tài khoản Telegram, không cần mật khẩu. Lần đăng nhập đầu tiên sẽ tạo tài khoản.',
+  'Signing you in…': 'Đang đăng nhập…',
+  'Prefer the app?': 'Thích dùng ứng dụng hơn?',
+  'Open in Telegram': 'Mở trong Telegram',
 }
 
 export default vi
