@@ -346,6 +346,13 @@ const ar: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': 'يجب أن تقبل الكمية القسمة على عدد الدفعات دون باقٍ.',
   'Gradual delivery is not available for this service right now. You were not charged.': 'التسليم التدريجي غير متاح لهذه الخدمة حاليًا. لم يتم خصم أي مبلغ.',
   'Invalid delivery schedule.': 'جدول الدفعات غير صالح.',
+  'Basic': 'أساسي',
+  'Optimal': 'مثالي',
+  'Advanced': 'متقدم',
+  'Pro': 'برو',
+  'Ultra': 'ألترا',
+  'Elite': 'النخبة',
+  'Max': 'ماكس',
 }
 
 export default ar

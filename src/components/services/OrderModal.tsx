@@ -23,7 +23,7 @@ import {
   validateTargetUrl,
 } from '@/lib/order-calc'
 import { useQuote } from '@/hooks/useQuote'
-import { DEFAULT_DRIP_INTERVAL_MINUTES, DEFAULT_DRIP_RUNS, orderShape, validateDripSchedule } from '@/lib/drip-feed'
+import { DEFAULT_DRIP_INTERVAL_MINUTES, DEFAULT_DRIP_RUNS, MAX_DRIP_RUNS, orderShape, validateDripSchedule } from '@/lib/drip-feed'
 import { cn } from '@/lib/utils'
 import { OrderApiError } from '@/services/api/order-errors'
 import { createOrder } from '@/services/api/orders'
@@ -305,6 +305,8 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
             {/* Price + balance */}
             <PriceSummary
               quantity={shape ? shape.quantity : null}
+              // a drip-feed order may total the per-run maximum times the runs
+              maxQuantity={service.dripfeedAvailable === true ? service.maxQuantity * MAX_DRIP_RUNS : service.maxQuantity}
               ratePer1000={service.ratePer1000}
               estimateUnits={estimateUnits}
               state={quoteState}

@@ -346,6 +346,13 @@ const ja: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': '数量は回数で割り切れる必要があります。',
   'Gradual delivery is not available for this service right now. You were not charged.': 'このサービスでは現在、段階的な配信をご利用いただけません。料金は請求されていません。',
   'Invalid delivery schedule.': '配信スケジュールが無効です。',
+  'Basic': 'ベーシック',
+  'Optimal': 'オプティマル',
+  'Advanced': 'アドバンス',
+  'Pro': 'プロ',
+  'Ultra': 'ウルトラ',
+  'Elite': 'エリート',
+  'Max': 'マックス',
 }
 
 export default ja

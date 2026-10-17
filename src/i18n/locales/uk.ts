@@ -346,6 +346,13 @@ const uk: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': 'Кількість має ділитися на кількість запусків без залишку.',
   'Gradual delivery is not available for this service right now. You were not charged.': 'Поступова накрутка для цієї послуги зараз недоступна. Кошти не списано.',
   'Invalid delivery schedule.': 'Неправильний розклад запусків.',
+  'Basic': 'Базовий',
+  'Optimal': 'Оптимальний',
+  'Advanced': 'Просунутий',
+  'Pro': 'Про',
+  'Ultra': 'Ультра',
+  'Elite': 'Еліт',
+  'Max': 'Макс',
 }
 
 export default uk

@@ -346,6 +346,13 @@ const vi: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': 'Số lượng phải chia hết cho số lần.',
   'Gradual delivery is not available for this service right now. You were not charged.': 'Hiện không thể giao dần cho dịch vụ này. Bạn chưa bị trừ tiền.',
   'Invalid delivery schedule.': 'Lịch giao không hợp lệ.',
+  'Basic': 'Cơ bản',
+  'Optimal': 'Tối ưu',
+  'Advanced': 'Nâng cao',
+  'Pro': 'Pro',
+  'Ultra': 'Ultra',
+  'Elite': 'Elite',
+  'Max': 'Max',
 }
 
 export default vi

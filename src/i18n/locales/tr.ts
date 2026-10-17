@@ -346,6 +346,13 @@ const tr: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': 'Miktar, teslimat sayısına tam bölünmelidir.',
   'Gradual delivery is not available for this service right now. You were not charged.': 'Bu hizmet için kademeli teslimat şu anda kullanılamıyor. Ücret alınmadı.',
   'Invalid delivery schedule.': 'Geçersiz teslimat planı.',
+  'Basic': 'Temel',
+  'Optimal': 'Optimal',
+  'Advanced': 'Gelişmiş',
+  'Pro': 'Pro',
+  'Ultra': 'Ultra',
+  'Elite': 'Elit',
+  'Max': 'Maks',
 }
 
 export default tr

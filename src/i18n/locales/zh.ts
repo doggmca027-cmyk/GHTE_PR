@@ -346,6 +346,13 @@ const zh: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': '数量必须能被次数整除。',
   'Gradual delivery is not available for this service right now. You were not charged.': '该服务目前不支持分批交付。未扣除任何费用。',
   'Invalid delivery schedule.': '交付计划无效。',
+  'Basic': '基础',
+  'Optimal': '优选',
+  'Advanced': '进阶',
+  'Pro': '专业',
+  'Ultra': '超级',
+  'Elite': '精英',
+  'Max': '至尊',
 }
 
 export default zh

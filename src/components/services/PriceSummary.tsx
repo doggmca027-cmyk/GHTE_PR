@@ -20,10 +20,12 @@ interface Props {
   balance: number
   sufficient: boolean
   shortfallUnits: number
+  /** The largest order this service can take: volume steps above it are not shown. */
+  maxQuantity?: number
 }
 
 /** The price block of the order form: list price, the tier and promo discounts, the final price, and the balance check. */
-export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, balance, sufficient, shortfallUnits }: Props) {
+export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, balance, sufficient, shortfallUnits, maxQuantity }: Props) {
   const t = useT()
   const { units } = displayedTotalUnits(state, estimateUnits)
   const quote: Quote | null = state.kind === 'ready' ? state.quote : state.kind === 'loading' ? state.previous : null
@@ -37,7 +39,7 @@ export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, bala
           <p className="mt-1 text-[13px] font-medium text-content-secondary">
             {formatInt(quantity)} × ({formatMoneyAmount(quote?.ratePer1000 ?? ratePer1000)} / 1,000)
           </p>
-          {quote?.volumeRates && quote.volumeRates.length > 1 && <VolumeRates steps={quote.volumeRates} quantity={quantity} />}
+          {quote?.volumeRates && reachableSteps(quote.volumeRates, maxQuantity).length > 1 && <VolumeRates steps={reachableSteps(quote.volumeRates, maxQuantity)} quantity={quantity} />}
 
           {quote && quote.totalDiscount > 0 && (
             <dl className="mt-2 space-y-1 text-[13px]">
@@ -97,6 +99,11 @@ export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, bala
 }
 
 /** The bulk price list of a service (volume pricing): from N units, this rate per 1000; the step this quantity falls in is marked. */
+/** The volume steps an order can reach: a step that starts above the largest possible order is never shown. */
+export function reachableSteps<T extends { minQuantity: number }>(steps: readonly T[], maxQuantity?: number): T[] {
+  return maxQuantity === undefined ? [...steps] : steps.filter((s) => s.minQuantity <= maxQuantity)
+}
+
 export function VolumeRates({ steps, quantity }: { steps: { minQuantity: number; ratePer1000: number }[]; quantity: number }) {
   const t = useT()
   const current = [...steps].reverse().find((s) => quantity >= s.minQuantity)?.minQuantity

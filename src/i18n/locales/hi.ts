@@ -346,6 +346,13 @@ const hi: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': 'मात्रा रन की संख्या से पूरी तरह विभाज्य होनी चाहिए।',
   'Gradual delivery is not available for this service right now. You were not charged.': 'इस सेवा के लिए अभी धीरे-धीरे डिलीवरी उपलब्ध नहीं है। आपसे शुल्क नहीं लिया गया।',
   'Invalid delivery schedule.': 'डिलीवरी शेड्यूल अमान्य है।',
+  'Basic': 'बेसिक',
+  'Optimal': 'इष्टतम',
+  'Advanced': 'उन्नत',
+  'Pro': 'प्रो',
+  'Ultra': 'अल्ट्रा',
+  'Elite': 'एलीट',
+  'Max': 'मैक्स',
 }
 
 export default hi

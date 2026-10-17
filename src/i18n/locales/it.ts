@@ -346,6 +346,13 @@ const it: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': 'La quantità deve essere divisibile per il numero di invii.',
   'Gradual delivery is not available for this service right now. You were not charged.': 'La consegna graduale non è disponibile per questo servizio al momento. Non ti è stato addebitato nulla.',
   'Invalid delivery schedule.': 'Programma di invio non valido.',
+  'Basic': 'Base',
+  'Optimal': 'Ottimale',
+  'Advanced': 'Avanzato',
+  'Pro': 'Pro',
+  'Ultra': 'Ultra',
+  'Elite': 'Elite',
+  'Max': 'Max',
 }
 
 export default it

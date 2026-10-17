@@ -102,10 +102,15 @@ describe('catalogue and card', () => {
     expect(serviceFromRow({ ...row('solo', 1), variants: [] })).not.toHaveProperty('variants')
   })
 
-  it('labels: Economy / Standard / Premium', () => {
-    expect(variantLabels(2)).toEqual([['Economy', null], ['Premium', null]])
-    expect(variantLabels(3)).toEqual([['Economy', null], ['Standard', null], ['Premium', null]])
-    expect(variantLabels(4)).toEqual([['Economy', null], ['Standard', 1], ['Standard', 2], ['Premium', null]])
+  it('labels: Economy / Standard / Premium, and named steps (never numbers) in larger groups', () => {
+    expect(variantLabels(2)).toEqual(['Economy', 'Premium'])
+    expect(variantLabels(3)).toEqual(['Economy', 'Standard', 'Premium'])
+    expect(variantLabels(4)).toEqual(['Economy', 'Basic', 'Standard', 'Premium'])
+    expect(variantLabels(10)).toEqual(['Economy', 'Basic', 'Standard', 'Optimal', 'Advanced', 'Pro', 'Ultra', 'Elite', 'Max', 'Premium'])
+    for (let n = 2; n <= 10; n++) {
+      expect(new Set(variantLabels(n)).size).toBe(n)
+      expect(variantLabels(n).join(' ')).not.toMatch(/\d/)
+    }
   })
 
   it('the switches change the shown variant, and ordering opens the chosen one', async () => {

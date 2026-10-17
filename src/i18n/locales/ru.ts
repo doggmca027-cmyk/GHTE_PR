@@ -346,6 +346,13 @@ const ru: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': 'Количество должно делиться на число запусков без остатка.',
   'Gradual delivery is not available for this service right now. You were not charged.': 'Постепенная накрутка для этой услуги сейчас недоступна. Деньги не списаны.',
   'Invalid delivery schedule.': 'Неверное расписание запусков.',
+  'Basic': 'Базовый',
+  'Optimal': 'Оптимальный',
+  'Advanced': 'Продвинутый',
+  'Pro': 'Про',
+  'Ultra': 'Ультра',
+  'Elite': 'Элит',
+  'Max': 'Макс',
 }
 
 export default ru

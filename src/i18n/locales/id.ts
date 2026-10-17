@@ -346,6 +346,13 @@ const id: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': 'Jumlah harus habis dibagi jumlah pengiriman.',
   'Gradual delivery is not available for this service right now. You were not charged.': 'Pengiriman bertahap tidak tersedia untuk layanan ini saat ini. Anda tidak dikenai biaya.',
   'Invalid delivery schedule.': 'Jadwal pengiriman tidak valid.',
+  'Basic': 'Dasar',
+  'Optimal': 'Optimal',
+  'Advanced': 'Lanjutan',
+  'Pro': 'Pro',
+  'Ultra': 'Ultra',
+  'Elite': 'Elite',
+  'Max': 'Maks',
 }
 
 export default id

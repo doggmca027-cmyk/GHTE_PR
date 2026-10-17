@@ -346,6 +346,13 @@ const pt: Record<string, string> = {
   'The quantity must divide evenly by the number of deliveries.': 'A quantidade deve ser divisível pelo número de entregas.',
   'Gradual delivery is not available for this service right now. You were not charged.': 'A entrega gradual não está disponível para este serviço agora. Você não foi cobrado.',
   'Invalid delivery schedule.': 'Cronograma de entregas inválido.',
+  'Basic': 'Básico',
+  'Optimal': 'Ideal',
+  'Advanced': 'Avançado',
+  'Pro': 'Pro',
+  'Ultra': 'Ultra',
+  'Elite': 'Elite',
+  'Max': 'Máx',
 }
 
 export default pt
