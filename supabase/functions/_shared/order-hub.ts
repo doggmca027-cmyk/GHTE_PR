@@ -52,27 +52,31 @@ export function hubMessage(p: HubPayload): HubMessage {
   const charge = num(p.charge)
   const cost = num(p.cost)
   if (p.event === 'waiting') {
+    // what all the waiting orders of this provider need, and the top-up that covers them on top of what the panel already has
+    const needed = num(p.needed ?? cost)
+    const topUp = Math.max(needed - num(p.balance), 0)
+    const waiting = num(p.waiting ?? 1)
     return {
       text: [
-        `⏳ <b>Заказ #${shortId(p.order_id)} в Хабе — ждёт пополнения провайдера</b>`,
+        `⏳ <b>Заказ #${shortId(p.order_id)} в Хабе (ждёт баланса провайдера)</b>`,
         `🏢 Провайдер: <b>${provider}</b>`,
         `📦 Услуга: ${service} (Кол-во: ${num(p.quantity).toLocaleString('en-US')})`,
-        `💵 Оплатил клиент: ${usd(charge)} | Себестоимость: ${usd(cost)} | Прибыль: ${signed(charge - cost)}`,
-        `🏦 Баланс на ${provider}: ${usd(p.balance)} (Нужно для всех заказов в очереди этого провайдера: <b>${usd(p.needed ?? cost)}</b>)`,
+        `💵 Оплатил клиент: ${usd(charge)} | Закуп: ${usd(cost)} | Чистая прибыль: ${signed(charge - cost)}`,
+        `🏦 Баланс ${provider}: ${usd(p.balance)} (Нужно пополнить минимум на: <b>${usd(topUp)}</b> для всех ждущих заказов этого провайдера: ${waiting} на ${usd(needed)})`,
       ].join('\n'),
       replyMarkup: {
         inline_keyboard: [
-          [{ text: '🚀 Проверить баланс и запустить', callback_data: `${HUB_RETRY}:${p.provider_id}` }],
-          [{ text: '🔀 Отправить через другого провайдера', callback_data: `${HUB_FALLBACK}:${p.order_id}` }],
+          [{ text: '🚀 Я пополнил — запустить очередь', callback_data: `${HUB_RETRY}:${p.provider_id}` }],
+          [{ text: '🔀 Отправить через другой оффер', callback_data: `${HUB_FALLBACK}:${p.order_id}` }],
         ],
       },
     }
   }
   return {
     text: [
-      p.from_hub ? `✅ <b>Заказ #${shortId(p.order_id)} из Хаба запущен в ${provider}</b>` : `✅ <b>Заказ #${shortId(p.order_id)} отправлен в ${provider}</b>`,
-      `📦 ${service} × ${num(p.quantity).toLocaleString('en-US')}`,
-      `💵 Клиент: ${usd(charge)} → Закуп: ${usd(cost)} (Маржа: ${signed(charge - cost)}) | Остаток на ${provider}: ${usd(p.balance)}`,
+      `✅ <b>Заказ #${shortId(p.order_id)} отправлен в ${provider}</b>${p.from_hub ? ' (из Хаба)' : ''}`,
+      `📦 ${service} × ${num(p.quantity).toLocaleString('en-US')} | Клиент: ${usd(charge)} → Закуп: ${usd(cost)} (Маржа: ${signed(charge - cost)})`,
+      `🏦 Остаток на ${provider}: ${usd(p.balance)}`,
     ].join('\n'),
   }
 }
@@ -100,7 +104,7 @@ export interface HubRunResult {
   needed: number
 }
 
-/** The bot's answer after "🚀 Проверить баланс и запустить". */
+/** The bot's answer after "🚀 Я пополнил — запустить очередь". */
 export function hubRunReply(r: HubRunResult): string {
   const lines = [`🏦 <b>${esc(r.provider)}</b>: баланс ${r.balance === null ? 'не удалось прочитать' : usd(r.balance)}`]
   if (r.submitted > 0) lines.push(`🚀 Отправлено в работу: <b>${r.submitted}</b>`)

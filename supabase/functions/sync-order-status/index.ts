@@ -151,7 +151,7 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
   // every-minute run), but one hub run per provider at a time.
   const hubProviderId = await req.clone().json().then((b) => (typeof b?.hubProviderId === 'string' ? b.hubProviderId : null), () => null)
   if (hubProviderId) {
-    const hub = await withWorkerLock(db, `order-hub:${hubProviderId}`, () => runHub(hubProviderId))
+    const hub = await withWorkerLock(db, `order-hub-${hubProviderId.toLowerCase()}`, () => runHub(hubProviderId))
     if (!hub.acquired) return json({ success: true, skipped: 'hub_run_in_progress' })
     return hub.value
   }
