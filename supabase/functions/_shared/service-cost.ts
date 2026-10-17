@@ -1,9 +1,10 @@
 // What a storefront service costs us and what it can deliver, derived from its provider offers. Pure, no I/O.
 //
 // This is the single basis for pricing (sync-catalog, admin-pricing and the bundle editor all call it): the base cost of a service is the
-// MOST EXPENSIVE offer that can actually receive an order. The storefront price then covers every provider of the bundle, so when the
-// router fails over to a pricier provider (the cheap one is out of balance) the order is still sold above its cost; and the router itself
-// always sends to the cheapest eligible provider, so a cheaper offer linked to a service raises our margin instead of lowering the price.
+// CHEAPEST offer that can actually receive an order, whichever provider it belongs to (every provider is an equal partner, there is no
+// primary one). The router sends an order to that same cheapest offer, and when its provider has no money yet the order waits for the
+// top-up in the order hub instead of going to a dearer provider (migration 20261218000000). A dearer offer is only used for a quantity the
+// cheapest cannot take, and never when it costs more than the customer pays (routing.ts maxCostPer1000, hub_reroute_order).
 
 /** One offer of a service together with the three facts that decide whether it can receive an order. */
 export interface PricingOffer {
@@ -33,7 +34,7 @@ export const isPriceableOffer = (o: Pick<PricingOffer, 'is_active' | 'provider_s
   o.is_active && o.provider_service_active && o.provider_active && o.routing_enabled
 
 export interface CostBasis {
-  /** The HIGHEST cost_per_1000 among the priceable offers: the number the markup is applied to (covers any failover target). */
+  /** The LOWEST cost_per_1000 among the priceable offers: the number the markup is applied to (the offer the router picks). */
   cost: number
   /** The smallest min and the largest max among the priceable offers: the widest range any of them can take. */
   minQuantity: number
@@ -51,7 +52,7 @@ export function serviceCostBasis(offers: PricingOffer[]): CostBasis | null {
   const usable = offers.filter(isPriceableOffer)
   if (usable.length === 0) return null
   return {
-    cost: Math.max(...usable.map((o) => Number(o.cost_per_1000))),
+    cost: Math.min(...usable.map((o) => Number(o.cost_per_1000))),
     minQuantity: Math.min(...usable.map((o) => o.min_quantity)),
     maxQuantity: Math.max(...usable.map((o) => o.max_quantity)),
     refillSupported: usable.every((o) => o.refill_supported),

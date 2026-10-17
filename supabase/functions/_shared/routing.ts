@@ -1,21 +1,21 @@
 // Provider routing: pick which provider offer fulfils an order. Pure functions, no I/O.
 //
-// Mode BALANCED (Phase 7). Offers are ranked by
+// Mode BALANCED (Phase 7). Every provider is an equal partner (there is no primary provider and no donors): offers are ranked by
 //
-//   effective_cost = cost_per_1000 x reliability_penalty x (1 - min(routing_score, 1000) / 10000)
+//   effective_cost = cost_per_1000 x reliability_penalty
 //
 //   * cost_per_1000        what the provider charges us (the price of the offer)
 //   * reliability_penalty  >= 1, set by the provider health monitor: a flaky provider must be that much cheaper to win
-//   * routing_score        the operator's preference, worth 0.01 % of the price per point: score 100 = a 1 % edge, the cap (1000) = 10 %
-//   The score is a relative bonus, so it means the same for a 0.05 and a 5.00 service (a flat "cost - score x k" would let a
-//   high score outweigh any price difference below k). Equal effective cost: the higher routingScore wins; still equal: the
-//   lowest offer id, so the choice is deterministic.
+//   routing_score only breaks a tie: it used to be worth 0.01 % of the price per point, and since the offer a card was published from
+//   carries 100 by default that gave the publishing provider a 1 % edge over every linked one. Equal effective cost: the higher
+//   routingScore wins; still equal: the lowest offer id, so the choice is deterministic.
 //
 // Who may be chosen at all:
 //   1. only active offers whose provider is active, routing-enabled and healthy (degraded / unavailable / disabled providers never
 //      receive new orders)
 //   2. when the caller knows the price (maxCostPer1000 = services.customer_rate_per_1000), never an offer that costs more than the
-//      customer pays: the price is built on the CHEAPEST offer, so a pricier one reached through a score bonus must not sell at a loss
+//      customer pays: the price is built on the CHEAPEST offer, so a pricier one (taken for a quantity the cheapest cannot deliver) must
+//      not sell at a loss
 //   3. only offers whose own limits take the quantity. A drip-feed order (runs > 1) is `runs` deliveries of quantity / runs each,
 //      and a panel checks its min/max against ONE delivery, so the limits are compared with quantity / runs (a total that does
 //      not split into whole deliveries fits no offer). The price stays on the total quantity.
@@ -35,24 +35,13 @@ export class ServiceUnavailableError extends Error {
 
 export const ROUTING_MODE = 'BALANCED'
 
-/** routing_score above this counts as this. */
-export const MAX_SCORE_BONUS_POINTS = 1000
-/** Share of the price each score point is worth. */
-export const SCORE_BONUS_PER_POINT = 0.0001
-
-/** 1 for score 0 down to 0.9 for score 1000. Non-numbers and negatives count as 0. */
-export function scoreFactor(routingScore: number | undefined): number {
-  const points = Number.isFinite(routingScore) ? Math.min(Math.max(routingScore as number, 0), MAX_SCORE_BONUS_POINTS) : 0
-  return 1 - points * SCORE_BONUS_PER_POINT
-}
-
-/** What an offer really costs us once reliability and the operator's preference are priced in. Ranking only: never charged or recorded. */
+/** What an offer really costs us once reliability is priced in. Ranking only: never charged or recorded. */
 export function effectiveCost(
-  offer: Pick<IProviderServiceOffer, 'costPer1000'> & { routingScore?: number },
+  offer: Pick<IProviderServiceOffer, 'costPer1000'>,
   provider?: Pick<IProvider, 'reliabilityPenalty'>,
 ): number {
   const penalty = provider?.reliabilityPenalty ?? 1
-  return offer.costPer1000 * (Number.isFinite(penalty) && penalty >= 1 ? penalty : 1) * scoreFactor(offer.routingScore)
+  return offer.costPer1000 * (Number.isFinite(penalty) && penalty >= 1 ? penalty : 1)
 }
 
 // compared at 1e-8 so float noise (0.1 * 3) never decides between two offers

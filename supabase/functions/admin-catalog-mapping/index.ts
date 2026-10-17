@@ -17,8 +17,8 @@
 //          Creates the storefront service (primary = the panel service) and its offer in ONE database transaction.
 //          Without customerRatePer1000 the price comes from the price rules; a price below the panel cost is refused.
 //
-// Bundles: one storefront service sold through several providers. Orders go to the cheapest eligible offer (routing.ts); the price is
-// built on the MOST EXPENSIVE usable offer (service-cost.ts), so the cheaper providers are margin and a failover never sells at a loss.
+// Bundles: one storefront service sold through several providers, all equal. Orders go to the cheapest eligible offer (routing.ts) and
+// the price is built on the cheapest usable offer (service-cost.ts); a dearer offer never takes an order it would sell at a loss.
 //   { action: "SEARCH_SERVICES", search, limit? }          -> { services: [{ id, name, platform, customerRatePer1000, offers }] }
 //   { action: "LIST_SERVICE_OFFERS", serviceId }           -> { service, price, offers: [... in routing order, with why one is blocked] }
 //   { action: "LINK_BY_EXTERNAL_ID", serviceId, providerId, externalServiceId, routingScore? }

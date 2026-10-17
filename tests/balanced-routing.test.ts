@@ -4,7 +4,7 @@ import path from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { repriceServices, type RepriceService } from '../supabase/functions/_shared/admin-pricing.ts'
-import { ROUTING_MODE, buildCandidates, effectiveCost, rankOffers, scoreFactor, selectBestOffer, ServiceUnavailableError, type OfferRow } from '../supabase/functions/_shared/routing.ts'
+import { ROUTING_MODE, buildCandidates, effectiveCost, rankOffers, selectBestOffer, ServiceUnavailableError, type OfferRow } from '../supabase/functions/_shared/routing.ts'
 import { groupByService, isPriceableOffer, serviceCostBasis, toPricingOffer, type PricingOffer } from '../supabase/functions/_shared/service-cost.ts'
 import type { IProvider, IProviderServiceOffer, PriceRule } from '../supabase/functions/_shared/types.ts'
 
@@ -18,18 +18,12 @@ const offer = (id: string, providerId: string, over: Partial<IProviderServiceOff
 })
 const P = [provider('pa'), provider('pb'), provider('pc')]
 
-describe('Balanced routing: effective_cost = cost x penalty x (1 - min(score, 1000) / 10000)', () => {
+describe('Balanced routing: effective_cost = cost x penalty (every provider equal; the score only breaks a tie)', () => {
   it('is the BALANCED mode', () => expect(ROUTING_MODE).toBe('BALANCED'))
 
-  it('the score is a bonus worth 0.01% of the price per point, capped at 10%', () => {
-    expect(scoreFactor(0)).toBe(1)
-    expect(scoreFactor(100)).toBeCloseTo(0.99, 12)
-    expect(scoreFactor(1000)).toBeCloseTo(0.9, 12)
-    expect(scoreFactor(50_000)).toBeCloseTo(0.9, 12) // capped
-    expect(scoreFactor(-5)).toBe(1)
-    expect(scoreFactor(undefined)).toBe(1)
-    expect(scoreFactor(Number.NaN)).toBe(1)
-    expect(effectiveCost({ costPer1000: 2, routingScore: 100 }, { reliabilityPenalty: 1.5 })).toBeCloseTo(2 * 1.5 * 0.99, 12)
+  it('the score is no bonus on the price: effective cost is the cost times the reliability penalty', () => {
+    expect(effectiveCost({ costPer1000: 2 }, { reliabilityPenalty: 1.5 })).toBeCloseTo(3, 12)
+    expect(effectiveCost({ costPer1000: 2 }, { reliabilityPenalty: 0.5 })).toBe(2) // a penalty below 1 never makes an offer cheaper
   })
 
   it('REQUIRED: at equal price the score-100 offer beats the score-0 offer', () => {
@@ -37,23 +31,17 @@ describe('Balanced routing: effective_cost = cost x penalty x (1 - min(score, 10
     expect(best.id).toBe('hundred')
   })
 
-  it('a score outweighs a small price gap but never a large one', () => {
-    // 0.5% dearer with score 100 (1% off) wins; 5% dearer with score 100 loses
-    expect(selectBestOffer([offer('plain', 'pa', { costPer1000: 1 }), offer('pref', 'pb', { costPer1000: 1.005, routingScore: 100 })], P).id).toBe('pref')
-    expect(selectBestOffer([offer('plain', 'pa', { costPer1000: 1 }), offer('pref', 'pb', { costPer1000: 1.05, routingScore: 100 })], P).id).toBe('plain')
-    // even the maximum score (10%) cannot make a 15% dearer offer win
-    expect(selectBestOffer([offer('plain', 'pa', { costPer1000: 1 }), offer('pref', 'pb', { costPer1000: 1.15, routingScore: 1000 })], P).id).toBe('plain')
-  })
-
-  it('means the same for a cheap and an expensive service (relative, not a flat "cost - score x k")', () => {
+  it('REQUIRED: the cheapest offer wins whatever the score: the provider a card was published from (score 100) has no edge', () => {
+    expect(selectBestOffer([offer('linked', 'pa', { costPer1000: 1 }), offer('published', 'pb', { costPer1000: 1.005, routingScore: 100 })], P).id).toBe('linked')
+    expect(selectBestOffer([offer('linked', 'pa', { costPer1000: 1 }), offer('published', 'pb', { costPer1000: 1.0001, routingScore: 1000 })], P).id).toBe('linked')
     for (const base of [0.05, 5, 500]) {
-      const ids = rankOffers([offer('plain', 'pa', { costPer1000: base }), offer('pref', 'pb', { costPer1000: base * 1.005, routingScore: 100 })], P).map((o) => o.id)
-      expect(ids).toEqual(['pref', 'plain'])
+      const ids = rankOffers([offer('linked', 'pa', { costPer1000: base }), offer('published', 'pb', { costPer1000: base * 1.005, routingScore: 100 })], P).map((o) => o.id)
+      expect(ids).toEqual(['linked', 'published'])
     }
   })
 
   it('combines with the reliability penalty', () => {
-    // flaky 1.00 x 1.3 = 1.3 ; solid 1.2 x 1 x 0.99 = 1.188
+    // flaky 1.00 x 1.3 = 1.3 ; solid 1.2 x 1 = 1.2
     const best = selectBestOffer(
       [offer('flaky', 'pa', { costPer1000: 1 }), offer('solid', 'pb', { costPer1000: 1.2, routingScore: 100 })],
       [provider('pa', { reliabilityPenalty: 1.3 }), provider('pb')],
@@ -111,19 +99,19 @@ describe('Balanced routing: effective_cost = cost x penalty x (1 - min(score, 10
     })
     const c = buildCandidates([row('o1', 'pa', 0.1, 100), row('o2', 'pb', 0.0995, 0), row('o3', 'pc', 0.2, 1000)])
     const ranked = rankOffers(c.offers, c.providers, { quantity: 500, maxCostPer1000: 0.5 })
-    expect(ranked.map((o) => o.id)).toEqual(['o1', 'o2', 'o3']) // 0.099 < 0.0995 < 0.18
-    expect(c.details.get(ranked[0].id)!.externalServiceId).toBe('o1')
+    expect(ranked.map((o) => o.id)).toEqual(['o2', 'o1', 'o3']) // 0.0995 < 0.1 < 0.2: the scores do not count
+    expect(c.details.get(ranked[0].id)!.externalServiceId).toBe('o2')
   })
 })
 
-describe('service cost basis (the most expensive offer that can receive an order: the price covers every failover)', () => {
+describe('service cost basis (the cheapest offer that can receive an order, whichever provider serves it)', () => {
   const po = (id: string, over: Partial<PricingOffer> = {}): PricingOffer => ({
     id, service_id: 's1', provider_id: 'p', provider_service_id: `ps-${id}`, cost_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: true,
     is_active: true, provider_service_active: true, provider_active: true, routing_enabled: true, ...over,
   })
 
-  it('is the maximum cost over the priceable offers, not the first or the primary', () => {
-    expect(serviceCostBasis([po('a', { cost_per_1000: 2 }), po('b', { cost_per_1000: 0.7 }), po('c', { cost_per_1000: 1.1 })])?.cost).toBe(2)
+  it('is the minimum cost over the priceable offers, not the first or the primary', () => {
+    expect(serviceCostBasis([po('a', { cost_per_1000: 2 }), po('b', { cost_per_1000: 0.7 }), po('c', { cost_per_1000: 1.1 })])?.cost).toBe(0.7)
   })
 
   it('limits are the smallest min and the largest max', () => {
@@ -138,7 +126,7 @@ describe('service cost basis (the most expensive offer that can receive an order
     ['provider not routing-enabled', { routing_enabled: false }],
   ] as [string, Partial<PricingOffer>][])('ignores an offer that cannot receive orders: %s', (_name, over) => {
     expect(isPriceableOffer(po('x', over))).toBe(false)
-    expect(serviceCostBasis([po('dead', { ...over, cost_per_1000: 99 }), po('ok', { cost_per_1000: 2 })])?.cost).toBe(2)
+    expect(serviceCostBasis([po('dead', { ...over, cost_per_1000: 0.01 }), po('ok', { cost_per_1000: 2 })])?.cost).toBe(2)
   })
 
   it('has no basis when nothing can receive an order', () => {
@@ -164,7 +152,7 @@ describe('service cost basis (the most expensive offer that can receive an order
     expect(serviceCostBasis(g.get('s2')!)).toBeNull()
   })
 
-  it('REQUIRED: a cheaper linked offer keeps the price (it is margin); a dearer usable one lifts it to cover the failover', () => {
+  it('REQUIRED: a cheaper linked offer lowers the price to its own cost x markup; a dearer one does not move it', () => {
     const rules: PriceRule[] = [{ id: 'g', type: 'percentage', value: 150, priority: 0, is_active: true }]
     const price = (offers: PricingOffer[]): number => {
       const basis = serviceCostBasis(offers)!
@@ -173,9 +161,9 @@ describe('service cost basis (the most expensive offer that can receive an order
     }
     const first = po('a', { cost_per_1000: 1 })
     expect(price([first])).toBe(2.5)
-    expect(price([first, po('b', { cost_per_1000: 0.6 })])).toBe(2.5) // a cheaper offer was linked: same price, more margin
-    expect(price([first, po('b', { cost_per_1000: 3, is_active: false })])).toBe(2.5) // a suspended one does not count
-    expect(price([first, po('b', { cost_per_1000: 3 })])).toBe(7.5) // a dearer usable one: the price covers it
+    expect(price([first, po('b', { cost_per_1000: 0.6 })])).toBe(1.5) // a cheaper offer was linked: the price follows it
+    expect(price([first, po('b', { cost_per_1000: 0.6, is_active: false })])).toBe(2.5) // a suspended one does not count
+    expect(price([first, po('b', { cost_per_1000: 3 })])).toBe(2.5) // a dearer one: the price stays on the cheapest
   })
 })
 
@@ -219,7 +207,7 @@ describe('get_admin_pricing_view follows Balanced routing', () => {
          values ($1, $2, $3, $4, 1, 1000, $5) on conflict (service_id, provider_id, provider_service_id) do update set cost_per_1000 = $4, routing_score = $5`,
         [service, prov, psId, cost, score])
 
-    // 'edge': A costs 1.000 score 0, B costs 1.005 score 100 -> B wins by the score bonus (1.005 x 0.99 = 0.99495)
+    // 'edge': A costs 1.000 score 0, B costs 1.005 score 100 -> A wins: the score gives no edge
     const a1 = await ps(pA, '1', 1), b1 = await ps(pB, '1', 1.005)
     const edge = await svc('edge', a1, 5)
     await offer(edge, pA, a1, 1, 0); await offer(edge, pB, b1, 1.005, 100)
@@ -252,10 +240,10 @@ describe('get_admin_pricing_view follows Balanced routing', () => {
     return rows
   }
 
-  it('picks the best offer with the router\'s formula (score bonus, capped)', async () => {
+  it('picks the best offer with the router\'s formula (cost x penalty, no score bonus)', async () => {
     const rows = await view()
-    expect(Number(byName(rows, 'edge').best_offer_cost)).toBe(1.005)
-    expect(Number(byName(rows, 'edge').best_offer_effective_cost)).toBe(0.9950) // round(1.005 x 0.99, 4)
+    expect(Number(byName(rows, 'edge').best_offer_cost)).toBe(1)
+    expect(Number(byName(rows, 'edge').best_offer_effective_cost)).toBe(1)
     expect(Number(byName(rows, 'far').best_offer_cost)).toBe(1)
   })
 
@@ -286,15 +274,15 @@ describe('the balance of a provider is not part of the choice', () => {
   })
 })
 
-describe('the price of a card with a cheaper donor', () => {
+describe('the price of a card served by several providers', () => {
   const po = (id: string, cost: number, over: Partial<PricingOffer> = {}): PricingOffer => ({
     id, service_id: 's', provider_id: id, provider_service_id: `ps-${id}`, cost_per_1000: cost, min_quantity: 10, max_quantity: 1000,
     refill_supported: false, is_active: true, provider_service_active: true, provider_active: true, routing_enabled: true, ...over,
   })
 
-  it('is built on the most expensive offer that can take orders (the primary), so the donor saving is margin and the primary can always cover in profit', () => {
-    expect(serviceCostBasis([po('primary', 1.0), po('donor', 0.4)])?.cost).toBe(1.0)
-    // the primary out of order (its panel dropped the service): only then does the price follow the donor
-    expect(serviceCostBasis([po('primary', 1.0, { provider_service_active: false }), po('donor', 0.4)])?.cost).toBe(0.4)
+  it('is built on the cheapest offer that can take orders, whoever serves it (SMM Center has no special place)', () => {
+    expect(serviceCostBasis([po('smm-center', 1.0), po('jap', 0.4)])?.cost).toBe(0.4)
+    // the cheap one out of order (its panel dropped the service): the price follows the next cheapest
+    expect(serviceCostBasis([po('smm-center', 1.0), po('jap', 0.4, { provider_service_active: false })])?.cost).toBe(1.0)
   })
 })

@@ -134,7 +134,7 @@ export interface BundleOffer {
 }
 
 export interface BundlePrice {
-  /** The most expensive usable offer: what the storefront price is built on. */
+  /** The cheapest usable offer: what the storefront price is built on. */
   basisCost: number | null
   currentRate: number
   newRate: number

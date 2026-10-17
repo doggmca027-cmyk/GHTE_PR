@@ -2,8 +2,8 @@
 // admin-catalog-mapping Edge Function stays thin and every rule here is unit-testable.
 //
 //   * the ORDER the router will use (same rules as routing.ts rankOffers: eligible offers by effective cost, then the rest, with why)
-//   * the PRICE of the bundle: priced on its MOST EXPENSIVE usable offer (service-cost.ts), so a failover never sells under cost and a
-//     cheaper offer raises the margin instead of lowering the price
+//   * the PRICE of the bundle: priced on its CHEAPEST usable offer (service-cost.ts), the one the router sends to; a dearer offer only
+//     takes an order while it still costs less than the customer pays
 //   * LINK_BY_EXTERNAL_ID: "link panel service #881 of provider P to my service X" with the panel's CURRENT cost and limits
 
 import { priceForBasis } from './catalog-sync.ts'
@@ -91,7 +91,7 @@ export function bundleOffers(rows: BundleOfferRow[], customerRate: number): Bund
       minQuantity: r.min_quantity,
       maxQuantity: r.max_quantity,
       routingScore: r.routing_score,
-      effectiveCost: r4(effectiveCost({ costPer1000: cost, routingScore: r.routing_score }, { reliabilityPenalty: penalty })),
+      effectiveCost: r4(effectiveCost({ costPer1000: cost }, { reliabilityPenalty: penalty })),
       providerBalance: Number(r.provider?.provider_balance ?? 0),
       blockedBy: blockOf(r, customerRate),
       rank: null,
@@ -114,7 +114,7 @@ export interface BundleServiceRow {
 }
 
 export interface BundlePrice {
-  /** The cost the price is built on: the most expensive usable offer (null: no offer can take an order, the price is left alone). */
+  /** The cost the price is built on: the cheapest usable offer (null: no offer can take an order, the price is left alone). */
   basisCost: number | null
   currentRate: number
   newRate: number

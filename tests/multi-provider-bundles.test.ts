@@ -1,4 +1,4 @@
-// Curated multi-provider routing: catalog_mode (publish / linked_only), the bundle price built on the MOST EXPENSIVE usable offer,
+// Curated multi-provider routing: catalog_mode (publish / linked_only), the bundle price built on the CHEAPEST usable offer,
 // the routing order of a bundle, and LINK_BY_EXTERNAL_ID.
 import fs from 'node:fs'
 import path from 'node:path'
@@ -29,46 +29,48 @@ const offerRow = (id: string, cost: number, o: Partial<BundleOfferRow> = {}, p: 
 })
 
 // ---------------------------------------------------------------------------
-// 1. The price of a bundle covers its most expensive usable offer; orders still go to the cheapest
+// 1. The price of a bundle is built on its cheapest usable offer, the one orders go to
 // ---------------------------------------------------------------------------
-describe('bundle price: the most expensive usable offer is the basis', () => {
+describe('bundle price: the cheapest usable offer is the basis', () => {
   const po = (id: string, cost: number, o: Partial<PricingOffer> = {}): PricingOffer => ({
     id, service_id: 's', provider_id: `p-${id}`, provider_service_id: `ps-${id}`, cost_per_1000: cost, min_quantity: 10, max_quantity: 1000,
     refill_supported: true, is_active: true, provider_service_active: true, provider_active: true, routing_enabled: true, ...o,
   })
 
-  it('takes the highest cost among offers that can receive an order, ignoring the ones that cannot', () => {
-    expect(serviceCostBasis([po('a', 0.5), po('b', 0.8), po('c', 0.6)])?.cost).toBe(0.8)
-    expect(serviceCostBasis([po('a', 0.5), po('dead', 9, { is_active: false }), po('off', 7, { routing_enabled: false }), po('gone', 8, { provider_service_active: false })])?.cost).toBe(0.5)
+  it('takes the lowest cost among offers that can receive an order, ignoring the ones that cannot', () => {
+    expect(serviceCostBasis([po('a', 0.5), po('b', 0.8), po('c', 0.6)])?.cost).toBe(0.5)
+    expect(serviceCostBasis([po('a', 0.5), po('dead', 0.1, { is_active: false }), po('off', 0.2, { routing_enabled: false }), po('gone', 0.3, { provider_service_active: false })])?.cost).toBe(0.5)
   })
 
-  it('a cheaper provider raises the margin: the price stays, the router picks the cheapest', () => {
+  it('a cheaper provider lowers the price; the router picks it, and the dearer one cannot take an order at that price', () => {
     const rules: PriceRule[] = [{ id: 'r', type: 'percentage', value: 100, platform: null, category_id: null, service_id: null, min_rate: null, max_rate: null, name_all: null, name_any: null, priority: 0, is_active: true } as unknown as PriceRule]
     const service: BundleServiceRow = { id: 'svc', name: 'Telegram views', category_id: 'cat', platform: 'telegram', customer_rate_per_1000: 2 }
     const alone = bundlePrice(service, [offerRow('a', 1)], rules)
     const withCheaper = bundlePrice(service, [offerRow('a', 1), offerRow('b', 0.4)], rules)
     expect(alone.newRate).toBe(2) // x2 on 1.00
-    expect(withCheaper.basisCost).toBe(1) // the dearer offer still sets the price
-    expect(withCheaper.newRate).toBe(2)
-    const order = bundleOffers([offerRow('a', 1), offerRow('b', 0.4)], 2)
+    expect(withCheaper.basisCost).toBe(0.4) // the cheaper offer sets the price
+    expect(withCheaper.newRate).toBe(0.8)
+    const order = bundleOffers([offerRow('a', 1), offerRow('b', 0.4)], withCheaper.newRate)
     expect(order[0]).toMatchObject({ offerId: 'b', rank: 1 })
-    expect(order[1]).toMatchObject({ offerId: 'a', rank: 2 })
+    expect(order[1]).toMatchObject({ offerId: 'a', rank: null, blockedBy: 'above_price' })
   })
 
-  it('a failover never sells under cost: every usable offer is at or below the bundle price', () => {
+  it('never sells under cost: an offer dearer than the price is blocked, the price only covers the cheapest', () => {
     const rows = [offerRow('a', 0.4), offerRow('b', 1.2), offerRow('c', 0.9)]
     const price = bundlePrice({ id: 'svc', name: 'x', category_id: 'c', platform: 'telegram', customer_rate_per_1000: 1 }, rows, [])
-    expect(price.newRate).toBeGreaterThanOrEqual(1.2 + 0.02) // lifted to the floor of the dearest offer
-    expect(bundleOffers(rows, price.newRate).every((o) => o.blockedBy === null)).toBe(true)
+    expect(price.newRate).toBe(1) // no rule applies: the price stays, it is above the floor of the cheapest (0.42)
+    const out = bundleOffers(rows, price.newRate)
+    expect(out.filter((o) => o.rank !== null).map((o) => o.offerId)).toEqual(['a', 'c'])
+    expect(out.find((o) => o.offerId === 'b')).toMatchObject({ rank: null, blockedBy: 'above_price' })
   })
 })
 
 describe('bundle routing order mirrors rankOffers', () => {
-  it('ranks routable offers by effective cost (penalty, score), and explains every blocked one', () => {
+  it('ranks routable offers by effective cost (penalty; the score only breaks a tie), and explains every blocked one', () => {
     const rows = [
       offerRow('cheap-flaky', 0.5, {}, { reliability_penalty_multiplier: 3 }), // effective 1.5
       offerRow('mid', 0.8), // effective 0.8
-      offerRow('scored', 0.82, { routing_score: 1000 }), // effective 0.738
+      offerRow('scored', 0.82, { routing_score: 1000 }), // effective 0.82: the score is no discount
       offerRow('off', 0.1, {}, { routing_enabled: false }),
       offerRow('down', 0.1, {}, { health_status: 'unavailable' }),
       offerRow('frozen', 0.1, { anomaly_detected: true, is_active: false }),
@@ -76,7 +78,7 @@ describe('bundle routing order mirrors rankOffers', () => {
       offerRow('dear', 5),
     ]
     const out = bundleOffers(rows, 2)
-    expect(out.filter((o) => o.rank !== null).map((o) => o.offerId)).toEqual(['scored', 'mid', 'cheap-flaky'])
+    expect(out.filter((o) => o.rank !== null).map((o) => o.offerId)).toEqual(['mid', 'scored', 'cheap-flaky'])
     expect(Object.fromEntries(out.filter((o) => o.blockedBy).map((o) => [o.offerId, o.blockedBy]))).toEqual({
       off: 'routing_off', down: 'unhealthy', frozen: 'anomaly', gone: 'panel_removed', dear: 'above_price',
     })
@@ -90,7 +92,7 @@ describe('bundle routing order mirrors rankOffers', () => {
       healthStatus: r.provider!.health_status as 'healthy', lastHealthCheck: null, lastBalanceSync: null, providerBalance: 50, currency: 'USD', priority: 0,
       reliabilityPenalty: Number(r.provider!.reliability_penalty_multiplier),
     }))
-    expect(rankOffers(domain, providers, { maxCostPer1000: 2 }).map((o) => o.id)).toEqual(['scored', 'mid', 'cheap-flaky'])
+    expect(rankOffers(domain, providers, { maxCostPer1000: 2 }).map((o) => o.id)).toEqual(['mid', 'scored', 'cheap-flaky'])
   })
 })
 
