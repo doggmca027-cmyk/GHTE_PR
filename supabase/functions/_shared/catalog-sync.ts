@@ -552,7 +552,7 @@ export interface ProviderSyncReport {
   /** What putting this provider's services on the storefront did in this run (absent when the store cannot publish). */
   published?: { created: number; updated: number; categories: number; skipped: number; untranslatedServices: number; untranslatedCategories: number; /** Services still waiting for a later run (a run translates a bounded number). */ backlog: number }
   /** A donor with fill_gaps: what it put into the storefront's empty places. */
-  filled?: { chosen: number; created: number; updated: number; linked: number; twins: number; reactivated: number }
+  filled?: { chosen: number; created: number; updated: number; linked: number; twins: number; reactivated: number; /** Chosen services left for later runs. */ backlog: number }
 }
 
 export interface SyncReport {

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   FILL_PER_CELL, canonicalPlace, chooseGapFillers, isGap, isLinkAndQuantity, isPublishable, nichePlatform, referenceCells, type PublishCandidate,
 } from '../supabase/functions/_shared/catalog-publish.ts'
-import { syncProviderCatalog, type CatalogStore } from '../supabase/functions/_shared/catalog-sync-run.ts'
+import { FILL_BUDGET, syncProviderCatalog, type CatalogStore } from '../supabase/functions/_shared/catalog-sync-run.ts'
 import { silentLogger } from '../supabase/functions/_shared/logger.ts'
 
 const SLUGS = new Set(['telegram', 'instagram', 'twitter', 'youtube', 'twitch', 'kick', 'website', 'roblox', 'w-tv', 'tripadvisor', 'trustpilot', 'yandex-music', 'yandex-maps', 'fiverr', 'periscope', 'other'])
@@ -207,6 +207,20 @@ describe('the sync step', () => {
     expect((calls.fill[0] as { ps: string; platform: string }[]).map((r) => [r.ps, r.platform])).toEqual([['ps-1', 'roblox'], ['ps-3', 'twitter']])
     expect(report.filled).toMatchObject({ chosen: 2, created: 2 })
     expect(calls.regroup).toBe(1)
+  })
+
+  it('what already sells through the provider is not written again, and a run writes at most FILL_BUDGET', async () => {
+    const { store, calls } = makeStore()
+    ;(store as unknown as { loadOffers: () => Promise<unknown[]> }).loadOffers = async () => [{ id: 'o', service_id: 's', provider_id: 'p', provider_service_id: 'ps-3', cost_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: false, cancel_supported: false, source: { rate_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: false, cancel_supported: false } }]
+    const report = await syncProviderCatalog({ provider: { id: 'p', name: 'RootPanel', routing_enabled: true, catalog_mode: 'linked_only', fill_gaps: true }, adapter, store, rules: [], log: silentLogger })
+    expect((calls.fill[0] as { ps: string }[]).map((r) => r.ps)).toEqual(['ps-1'])
+    expect(report.filled).toMatchObject({ chosen: 2, created: 1, backlog: 0 })
+
+    const big = { getServices: async () => Array.from({ length: 40 }, (_, i) => svc(String(100 + i), `Roblox Followers ${i % 20}`, `Roblox Followers ${i}`, i < 20 ? 'Followers' : 'Likes')), getBalance: adapter.getBalance }
+    const many = makeStore()
+    const r2 = await syncProviderCatalog({ provider: { id: 'p', name: 'RootPanel', routing_enabled: true, catalog_mode: 'linked_only', fill_gaps: true }, adapter: big, store: many.store, rules: [], log: silentLogger })
+    expect(r2.filled!.chosen).toBe(20) // 10 followers + 10 likes
+    expect((many.calls.fill.flat() as unknown[]).length).toBeLessThanOrEqual(FILL_BUDGET)
   })
 
   it('a donor without fill_gaps fills nothing', async () => {

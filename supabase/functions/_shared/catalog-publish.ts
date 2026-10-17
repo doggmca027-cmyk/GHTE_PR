@@ -459,7 +459,22 @@ export function chooseGapFillers<C extends PublishCandidate & { fingerprint?: st
   candidates: readonly C[], knownSlugs: ReadonlySet<string>, ref: ReferenceCells, perCell = FILL_PER_CELL,
 ): C[] {
   const byCell = new Map<string, C[]>()
+  // A big panel lists tens of thousands of services in a few thousand categories. The category (with an action type) usually settles the
+  // place already: when that place is covered the service is out without running the rules on its name. (When the category names a
+  // platform and an action, the full placement can only differ through a name that mentions another platform, which is excluded below.)
+  const coveredByCategory = new Map<string, boolean>()
   for (const c of candidates) {
+    const type = (c.serviceType ?? '').trim()
+    const catKey = `${type}\u0000${c.categoryRaw}`
+    let covered = coveredByCategory.get(catKey)
+    if (covered === undefined) {
+      const found = detectPlatform(c.categoryRaw, knownSlugs)
+      const platform = found.slug === OTHER_PLATFORM && found.brands.length === 0 ? (nichePlatform(c.categoryRaw, knownSlugs) ?? found) : found
+      const action = detectAction(LINK_AND_QUANTITY_TYPES.has(type.toLowerCase()) ? type : '', c.categoryRaw).key
+      covered = platform.slug !== OTHER_PLATFORM && action !== OTHER_ACTION.key && !isGap(platform.slug, action, ref)
+      coveredByCategory.set(catKey, covered)
+    }
+    if (covered) continue
     if (!isPublishable(c)) continue
     const { platform, action } = canonicalPlace(c, knownSlugs)
     if (!isGap(platform.slug, action.key, ref)) continue

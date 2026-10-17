@@ -53,6 +53,8 @@ export const PUBLISH_CHUNK = 600
  * a millisecond, so a first catalogue of ten thousand services is taken in slices: the next hourly run (or a manual one) carries on.
  */
 export const PUBLISH_BUDGET = 1500
+/** Donor services a fill_gaps run names and writes into the storefront's empty places; the rest waits for the next run. */
+export const FILL_BUDGET = 150
 /** Storefront services rewritten per run (price and availability changes). Availability changes go first; the rest waits for the next run. */
 export const MAX_SERVICE_UPDATES = 3000
 
@@ -256,8 +258,12 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
       // only the platforms customers can see: a switched-off platform is never filled
       const slugs = new Set(await store.loadPlatformSlugs(true))
       const chosen = chooseGapFillers(candidates, slugs, referenceCells(await store.loadReferenceServices()))
-      const built = buildCanonicalPublishRows(chosen, slugs, await store.loadCategories())
-      const filled = { chosen: chosen.length, created: 0, updated: 0, linked: 0, twins: 0, reactivated: 0 }
+      // what already sells through this provider (its card, or an offer on another card) needs nothing; the rest is named and written,
+      // FILL_BUDGET per run (naming is the costly part: a big donor's first fill takes a few runs)
+      const offered = new Set(providerOffers.map((o) => o.provider_service_id))
+      const pending = chosen.filter((c) => !offered.has(c.id))
+      const built = buildCanonicalPublishRows(pending.slice(0, FILL_BUDGET), slugs, await store.loadCategories())
+      const filled = { chosen: chosen.length, created: 0, updated: 0, linked: 0, twins: 0, reactivated: 0, backlog: Math.max(0, pending.length - FILL_BUDGET) }
       for (let i = 0; i < built.rows.length; i += PUBLISH_CHUNK) {
         const r = await store.fillGaps(provider.id, built.rows.slice(i, i + PUBLISH_CHUNK))
         filled.created += r.services_created ?? 0
