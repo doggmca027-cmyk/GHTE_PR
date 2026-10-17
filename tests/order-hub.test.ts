@@ -85,8 +85,12 @@ describe('the order hub (real SQL)', () => {
     expect(rows[1].payload).toMatchObject({ provider: 'JAP', provider_id: A, service: 'Telegram Post Views', quantity: 10000, charge: 40, cost: 10, balance: 3, needed: 20, waiting: 2 })
     const text = hubMessage(rows[1].payload as never).text
     expect(text).toContain('🏢 Провайдер: <b>JAP</b>')
-    expect(text).toContain('💵 Оплатил клиент: $40.00 | Себестоимость: $10.00 | Прибыль: +$30.00')
-    expect(text).toContain('🏦 Баланс на JAP: $3.00 (Нужно для всех заказов в очереди этого провайдера: <b>$20.00</b>)')
+    expect(text).toContain('💵 Оплатил клиент: $40.00 | Закуп: $10.00 | Чистая прибыль: +$30.00')
+    expect(text).toContain('🏦 Баланс JAP: $3.00 (Нужно пополнить минимум на: <b>$17.00</b> для всех ждущих заказов этого провайдера: 2 на $20.00)')
+    expect(hubMessage(rows[1].payload as never).replyMarkup?.inline_keyboard.flat()).toEqual([
+      { text: '🚀 Я пополнил — запустить очередь', callback_data: `hub_retry:${A}` },
+      { text: '🔀 Отправить через другой оффер', callback_data: `hub_fallback:${rows[1].payload.order_id}` },
+    ])
   })
 
   it('after the top-up the worker claims the waiting orders oldest first; each one sent is announced "from the hub"', async () => {
@@ -99,7 +103,7 @@ describe('the order hub (real SQL)', () => {
     await db.query(`update orders set status = 'submitted', provider_order_id = 'p-1', error_message = null where id = $1`, [first.id])
     const sent = await hubRows('sent')
     expect(sent[0].payload).toMatchObject({ provider: 'JAP', from_hub: true, charge: 40, cost: 10, balance: 5 })
-    expect(hubMessage(sent[0].payload as never).text).toContain('из Хаба запущен в JAP')
+    expect(hubMessage(sent[0].payload as never).text).toContain('отправлен в JAP</b> (из Хаба)')
   })
 
   it('an order sent at once is announced too, with the margin and what is left at the provider', async () => {
@@ -111,7 +115,7 @@ describe('the order hub (real SQL)', () => {
     await db.query(`update orders set status = 'submitted', provider_order_id = 'p-2' where id = $1`, [o.id])
     const [sent] = await hubRows('sent')
     expect(sent.payload).toMatchObject({ from_hub: false })
-    expect(hubMessage(sent.payload as never).text).toBe('✅ <b>Заказ #' + String(o.id).slice(0, 8) + ' отправлен в JAP</b>\n📦 Telegram Post Views × 10,000\n💵 Клиент: $40.00 → Закуп: $10.00 (Маржа: +$30.00) | Остаток на JAP: $40.00')
+    expect(hubMessage(sent.payload as never).text).toBe('✅ <b>Заказ #' + String(o.id).slice(0, 8) + ' отправлен в JAP</b>\n📦 Telegram Post Views × 10,000 | Клиент: $40.00 → Закуп: $10.00 (Маржа: +$30.00)\n🏦 Остаток на JAP: $40.00')
   })
 
   it('"not enough funds" at the panel: the claimed order goes back to the hub (no refund), and only through that function', async () => {
