@@ -1,9 +1,8 @@
 import { memo } from 'react'
-import { Globe, ShieldCheck, Zap } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
-import { currentLocale, useLanguage, useT } from '@/i18n'
-import { localizedName, serviceCountries } from '@/lib/service-view'
-import { deriveSpeed, formatCompact, formatMoneyAmount } from '@/lib/order-calc'
+import { useLanguage, useT } from '@/i18n'
+import { localizedName } from '@/lib/service-view'
+import { formatCompact, formatMoneyAmount } from '@/lib/order-calc'
+import { ServiceBadges } from './ServiceBadges'
 import type { ICatalogService, Platform } from '@/types/catalog'
 import { PlatformIcon } from './PlatformIcon'
 
@@ -21,14 +20,12 @@ interface Props {
 export const ServiceCard = memo(function ServiceCard({ service, platform, platformName, onSelect }: Props) {
   const t = useT()
   const { lang } = useLanguage()
-  const speed = deriveSpeed(service.name) // from the English name: the speed words are English
-  const country = serviceCountries(service.attributes, currentLocale())
 
   return (
     <button
       type="button"
       onClick={() => onSelect(service)}
-      className="cv-auto w-full rounded-3xl border border-blue-100/70 bg-surface p-4 text-start shadow-card transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
+      className="w-full rounded-3xl border border-blue-100/70 bg-surface p-4 text-start shadow-card transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
     >
       <div className="flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-light text-brand">
@@ -36,21 +33,8 @@ export const ServiceCard = memo(function ServiceCard({ service, platform, platfo
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-content-primary">{localizedName(service.name, service.nameI18n, lang)}</h3>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <Badge>
-              <Zap size={12} strokeWidth={2} /> {t(speed)}
-            </Badge>
-            {country !== '' && (
-              <Badge>
-                <Globe size={12} strokeWidth={2} /> {country}
-              </Badge>
-            )}
-            {service.refillSupported && (
-              <Badge>
-                <ShieldCheck size={12} strokeWidth={2} /> {t('Refill')}
-              </Badge>
-            )}
-          </div>
+          {/* what the service really offers (guarantee, countries, drip-feed), not a guessed speed grade */}
+          <ServiceBadges service={service} />
         </div>
       </div>
 

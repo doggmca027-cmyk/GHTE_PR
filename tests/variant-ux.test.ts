@@ -32,14 +32,15 @@ describe('technical duplicates', () => {
 })
 
 describe('the variant card', () => {
-  it('shows one switch per real choice, named', () => {
+  it('shows one switch per real choice, named by what sets it apart (the guarantee here), with its price', () => {
     const main = v('a', 'Members [refill: 7 days] [server 2]', 1, {
-      variants: [v('b', 'Members [refill: 7 days] [server 3]', 1, { maxQuantity: 9000 }), v('c', 'Members [refill: 30 days]', 2), v('d', 'Members [refill: 90 days]', 3), v('e', 'Members [refill: 365 days]', 4)],
+      attributes: { refill: 7 },
+      variants: [v('b', 'Members [refill: 7 days] [server 3]', 1, { maxQuantity: 9000, attributes: { refill: 7 } }), v('c', 'Members [refill: 30 days]', 2, { attributes: { refill: 30 } }), v('d', 'Members [refill: 90 days]', 3, { attributes: { refill: 90 } }), v('e', 'Members [refill: 365 days]', 4, { attributes: { refill: 365 } })],
     })
     const host = document.createElement('div')
     const root = createRoot(host)
     act(() => root.render(createElement(VariantCard, { service: main, platform: 'telegram', onSelect: () => {} })))
-    expect([...host.querySelectorAll('[role="radio"]')].map((r) => r.textContent)).toEqual(['Economy$1.00', 'Basic$2.00', 'Standard$3.00', 'Premium$4.00'])
+    expect([...host.querySelectorAll('[role="radio"]')].map((r) => r.textContent)).toEqual(['♻️ 7 days$1.00', '♻️ 30 days$2.00', '♻️ 90 days$3.00', '♻️ 365 days$4.00'])
     // the kept duplicate is the one with the widest range
     expect(host.textContent).toContain('Members [refill: 7 days] [server 3]')
     act(() => root.unmount())

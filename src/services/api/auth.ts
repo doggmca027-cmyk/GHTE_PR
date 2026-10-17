@@ -7,6 +7,13 @@ import type { IUser, IWallet } from '@/types'
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 const REQUEST_TIMEOUT_MS = 10_000
+/**
+ * The Mini App's sign-in while the start screen spins: a slow cold start or a mobile network hiccup must not end on "Can't reach the
+ * server". Each attempt may take this long, and a failure that a moment can cure (no connection, a timeout, a 5xx) is tried again after
+ * these pauses: three attempts in all. A refusal (invalid session, banned, sign-ups paused) is an answer and is never repeated.
+ */
+export const AUTH_TIMEOUT_MS = 15_000
+export const AUTH_RETRY_DELAYS_MS: readonly number[] = [800, 1500]
 /** Build-time switch: serve the offline mock backend instead of Supabase (no real access is granted by it). */
 const FORCE_MOCK = import.meta.env.VITE_MOCK_MODE === 'true'
 
@@ -60,16 +67,24 @@ export async function authenticateWithTelegram(): Promise<AuthSession> {
     throw new AuthError('not_configured', tr('Backend is not configured (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).'))
   }
 
-  let res: Response
-  try {
-    res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-auth`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
-      body: JSON.stringify({ initData }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    })
-  } catch {
-    throw new AuthError('network', tr('Could not reach the server. Check your connection and retry.'))
+  let res: Response | null = null
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-auth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
+        body: JSON.stringify({ initData }),
+        signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
+      })
+    } catch {
+      res = null // no connection or the attempt timed out
+    }
+    if (res && res.status < 500) break
+    if (attempt >= AUTH_RETRY_DELAYS_MS.length) {
+      if (!res) throw new AuthError('network', tr('Could not reach the server. Check your connection and retry.'))
+      break // a 5xx three times: answered below as a server error
+    }
+    await new Promise((r) => setTimeout(r, AUTH_RETRY_DELAYS_MS[attempt]))
   }
 
   const body = (await res.json().catch(() => null)) as

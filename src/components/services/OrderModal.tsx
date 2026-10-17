@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { sheetOverlayClass, sheetPanelClass, useWide } from '@/lib/layout-mode'
 import { CheckCircle2, Clock, Gem, Globe, Hourglass, Link2, Loader2, RefreshCw, ShieldCheck, TriangleAlert, X, Zap, type LucideIcon } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Toast, type ToastMessage } from '@/components/ui/Toast'
 import { currentLocale, tr, useLanguage, useT } from '@/i18n'
@@ -15,7 +14,6 @@ import { haptic } from '@/lib/haptics'
 import {
   calcTotalUnits,
   checkBalance,
-  deriveSpeed,
   formatInt,
   formatMoneyAmount,
   formatUnits,
@@ -33,6 +31,7 @@ import type { AuthSession } from '@/services/api/auth'
 import type { ICatalogService, Platform } from '@/types/catalog'
 import type { CreateOrderResult } from '@/types/orders'
 import { DripFeedFields } from './DripFeedFields'
+import { ServiceBadges } from './ServiceBadges'
 import { PlatformIcon } from './PlatformIcon'
 import { PriceSummary, displayedTotalUnits } from './PriceSummary'
 import { PromoField } from './PromoField'
@@ -233,10 +232,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-[15px] font-bold leading-snug text-content-primary">{localizedName(service.name, service.nameI18n, lang)}</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Badge><Zap size={12} strokeWidth={2} /> {t(deriveSpeed(service.name))}</Badge>
-                  {service.refillSupported && <Badge><ShieldCheck size={12} strokeWidth={2} /> {t('Refill')}</Badge>}
-                </div>
+                <ServiceBadges service={service} />
                 <p className="mt-2 text-xs font-medium text-content-secondary">
                   {t('{rate} per 1,000 · {min} – {max}', { rate: formatMoneyAmount(service.ratePer1000), min: formatInt(service.minQuantity), max: formatInt(service.maxQuantity) })}
                 </p>

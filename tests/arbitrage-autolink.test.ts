@@ -63,6 +63,49 @@ describe('service_fingerprint', () => {
   })
 })
 
+describe('package kind and what "the same product" means', () => {
+  const kind = async (name: string) => (await db.query<{ k: string }>(`select service_package_kind($1) k`, [name])).rows[0].k
+  const tagsFit = async (ours: string, donor: string) => (await db.query<{ ok: boolean }>(`select arbitrage_tags_fit($1, $2) ok`, [ours, donor])).rows[0].ok
+  const refillFits = async (ours: string, donor: string) => (await db.query<{ ok: boolean }>(`select arbitrage_refill_fits($1, $2) ok`, [ours, donor])).rows[0].ok
+
+  it('a package (Auto, subscription, N posts, posts/day) is never a single service ("1 Post", "Single")', async () => {
+    expect(await kind('Telegram Auto Post Views [no refill] [100 posts/day] [30 days] [public]')).toBe('multi')
+    expect(await kind('Telegram Auto Post Views | 1 Post | Start: Instant | Speed: SuperFast')).toBe('single')
+    expect(await kind('Telegram Auto Post Views ➜ [Subscription] [ Cheap Server ]')).toBe('multi')
+    expect(await kind('Telegram Post Views [last 10 posts]')).toBe('multi')
+    expect(await kind('Telegram Post Views [1 post]')).toBe('single')
+    expect(await kind('Instagram Likes [refill: 30 days]')).toBe('single')
+    expect(await kind('Telegram Views [Single Post]')).toBe('single')
+  })
+
+  it('tags: the numbers of the package must be the same; a donor may say more, never worse quality', async () => {
+    expect(await tagsFit('iran', 'iran')).toBe(true)
+    expect(await tagsFit('', 'drop: no,instant,real active,superfast')).toBe(true) // the donor says more
+    expect(await tagsFit('fast,high quality', '')).toBe(true) // quality words of ours need not be repeated
+    expect(await tagsFit('india', 'bots,india')).toBe(false) // a worse quality we do not state
+    expect(await tagsFit('', 'low quality')).toBe(false)
+    expect(await tagsFit('1 hour', '5 hours')).toBe(false) // another package
+    expect(await tagsFit('100 posts/day,30 days', '1 post')).toBe(false)
+    expect(await tagsFit('germany', 'france')).toBe(false) // another country
+    expect(await tagsFit('+ profile visits', '')).toBe(false) // a fact of ours the donor does not state
+    // beyond quality and speed words a donor adds nothing of its own: a reaction, a country, a niche make it another product
+    expect(await tagsFit('', 'sad 😥')).toBe(false)
+    expect(await tagsFit('', 'belgium')).toBe(false)
+    expect(await tagsFit('', 'vlog')).toBe(false)
+    expect(await tagsFit('belgium', 'belgium,hq')).toBe(true)
+  })
+
+  it('the guarantee: the donor\'s is at least ours', async () => {
+    expect(await refillFits('30', 'life')).toBe(true)
+    expect(await refillFits('30', '30')).toBe(true)
+    expect(await refillFits('30', '15')).toBe(false)
+    expect(await refillFits('30', 'unstated')).toBe(false)
+    expect(await refillFits('0', '0')).toBe(true)
+    expect(await refillFits('unstated', 'unknown')).toBe(true) // we promise nothing
+    expect(await refillFits('life', '365')).toBe(false)
+  })
+})
+
 describe('the matcher', () => {
   const P = { center: '00000000-0000-4000-8000-0000000a0001', jap: '00000000-0000-4000-8000-0000000a0002', off: '00000000-0000-4000-8000-0000000a0003' }
   let admin: string, cat: string, seq = 0
@@ -75,76 +118,106 @@ describe('the matcher', () => {
     return (await db.query<{ id: string }>(`insert into services (category_id, name, primary_provider_service_id, customer_rate_per_1000, min_quantity, max_quantity, refill_supported)
       values ($1, $2, $3, $4, $5, $6, $7) returning id`, [cat, name, source, cost * 2, o.min ?? 100, o.max ?? 10000, o.refill ?? false])).rows[0].id
   }
-  const refresh = async (interval = 0) => (await db.query<{ r: Record<string, number | boolean> }>(`select refresh_arbitrage_candidates(0.25, 500, $1) r`, [interval])).rows[0].r
+  const refresh = async (interval = 0) => (await db.query<{ r: Record<string, number | boolean> }>(`select refresh_arbitrage_candidates(0.15, 2000, $1) r`, [interval])).rows[0].r
   const candidate = async (svc: string) => (await db.query<{ status: string; mismatches: string[]; ps: string; offer_id: string | null }>(
-    `select status, mismatches, provider_service_id ps, offer_id from arbitrage_candidates where service_id = $1`, [svc])).rows
+    `select status, mismatches, provider_service_id ps, offer_id from arbitrage_candidates where service_id = $1 order by status`, [svc])).rows
   const offers = async (svc: string) => (await db.query<{ ps: string }>(`select provider_service_id ps from provider_service_offers where service_id = $1 order by cost_per_1000`, [svc])).rows.map((r) => r.ps)
 
-  let exact: string, exactDonor: string, details: string, refillBtn: string, limits: string, small: string, offOnly: string
+  const S: Record<string, string> = {}
+  const D: Record<string, string> = {}
   beforeAll(async () => {
     await db.exec(`insert into providers (id, name, api_url, routing_enabled, catalog_mode) values
       ('${P.center}', 'SMM Center', 'https://c', true, 'publish'), ('${P.jap}', 'JAP', 'https://j', true, 'linked_only'), ('${P.off}', 'Off', 'https://o', false, 'linked_only')`)
     cat = (await db.query<{ id: string }>(`insert into categories(platform_id, name, slug) values ((select id from platforms where slug='telegram'), 'C', 'c') returning id`)).rows[0].id
     admin = (await db.query<{ id: string }>(`insert into users(telegram_id, is_admin) values (90001, true) returning id`)).rows[0].id
 
-    exact = await service('Telegram Members [refill: 30 days] [Iran]', 1.0)
-    exactDonor = await ps(P.jap, '🇮🇷 Telegram Members [IRAN] [Refill: 30D] [Max: 50K] [Speed: 5K/D] 💧', 0.5, { min: 10, max: 50000 })
-    await ps(P.jap, 'Telegram Members [Iran] [Refill: 30D] [Low Quality]', 0.2) // cheaper, but "low quality": in doubt
+    S.exact = await service('Telegram Members [refill: 30 days] [Iran]', 1.0)
+    D.exact = await ps(P.jap, '🇮🇷 Telegram Members [IRAN] [Refill: 30D] [Max: 50K] [Speed: 5K/D] 💧', 0.5, { min: 10, max: 50000 })
+    D.lowQuality = await ps(P.jap, 'Telegram Members [Iran] [Refill: 30D] [Low Quality]', 0.3) // cheaper, but a worse quality
 
-    details = await service('Instagram Likes [refill: 30 days] [India]', 1.0)
+    S.extraTags = await service('Twitch Followers [refill: 30 days]', 1.0)
+    D.extraTags = await ps(P.jap, 'Twitch Followers [SuperFast] [Instant] [Drop: No] [Real & Active] [Refill: 30D]', 0.5)
+
+    S.strongerRefill = await service('Kick Followers [refill: 30 days]', 1.0)
+    D.strongerRefill = await ps(P.jap, 'Kick Followers [Refill: Lifetime]', 0.6)
+    S.weakerRefill = await service('Kick Likes [refill: 30 days]', 1.0)
+    await ps(P.jap, 'Kick Likes [Refill: 15D]', 0.5)
+
+    S.bots = await service('Instagram Likes [refill: 30 days] [India]', 1.0)
     await ps(P.jap, 'Instagram Likes [INDIA] [Bots] [Refill: 30D]', 0.3)
 
-    refillBtn = await service('YouTube Views [refill: 90 days]', 1.0, { refill: true })
+    S.refillBtn = await service('YouTube Views [refill: 90 days]', 1.0, { refill: true })
     await ps(P.jap, 'Youtube Views [Refill: 90D]', 0.3, { refill: false }) // our refill button needs a panel that does refills
 
-    limits = await service('TikTok Saves [refill: 30 days]', 1.0, { min: 100, max: 10000 })
+    S.limits = await service('TikTok Saves [refill: 30 days]', 1.0, { min: 100, max: 10000 })
     await ps(P.jap, 'TikTok Saves [Refill: 30D]', 0.3, { min: 10, max: 5000 }) // cannot take our biggest order
 
-    small = await service('Twitter Likes [refill: 30 days]', 1.0)
-    await ps(P.jap, 'Twitter Likes [Refill: 30D]', 0.8) // only 20% cheaper
+    S.modest = await service('Twitter Likes [refill: 30 days]', 1.0)
+    D.modest = await ps(P.jap, 'Twitter Likes [Refill: 30D]', 0.8) // 20% cheaper: worth it now (15% and more)
+    S.tooSmall = await service('Twitter Retweets [refill: 30 days]', 1.0)
+    await ps(P.jap, 'Twitter Retweets [Refill: 30D]', 0.9) // 10%: not worth a second provider
 
-    offOnly = await service('Spotify Plays [refill: lifetime]', 1.0)
-    await ps(P.off, 'Spotify Plays [Refill: Lifetime]', 0.1) // donor with routing off
+    S.offOnly = await service('Spotify Plays [refill: lifetime]', 1.0)
+    await ps(P.off, 'Spotify Plays [Refill: Lifetime]', 0.6) // donor with routing off
+
+    S.anomaly = await service('Spotify Saves [refill: lifetime] [Germany]', 2.856)
+    D.anomaly = await ps(P.jap, '🇩🇪 Spotify Saves [Germany] [Lifetime Guaranteed]', 0.132) // 95% cheaper: another package
+
+    S.autoViews = await service('Telegram Auto Post Views [no refill] [100 posts/day] [30 days]', 164.388)
+    await ps(P.jap, 'Telegram Auto Post Views | 1 Post | Start: Instant | Speed: SuperFast', 0.008) // one post is not a subscription
+
+    S.duration = await service('W.TV Live Stream Views [1 Hour]', 2.0)
+    await ps(P.jap, 'W.TV Live Stream Views [5 Hours]', 1.0) // another duration
   }, 60_000)
 
-  it('links only the exact cheaper pair; everything else waits with its reasons', async () => {
+  it('links every same product 15-80% cheaper by itself; anything else is not a candidate at all (there is no queue)', async () => {
     const r = await refresh()
-    expect(r).toMatchObject({ auto_linked: 1 })
-    expect(await offers(exact)).toEqual([exactDonor, expect.any(String)])
-    expect(await candidate(exact)).toEqual([expect.objectContaining({ status: 'auto_linked', ps: exactDonor, mismatches: [] })])
-    expect(await candidate(details)).toEqual([expect.objectContaining({ status: 'pending', mismatches: ['details'] })])
-    expect(await candidate(refillBtn)).toEqual([expect.objectContaining({ status: 'pending', mismatches: ['refill'] })])
-    expect(await candidate(limits)).toEqual([expect.objectContaining({ status: 'pending', mismatches: ['limits'] })])
-    expect(await candidate(small)).toEqual([])
-    expect(await candidate(offOnly)).toEqual([])
-    expect((await offers(details)).length).toBe(1) // nothing in doubt is ever linked by itself
+    expect(r).toMatchObject({ auto_linked: 4, price_anomalies: 1, pending: 0 })
+    expect(await offers(S.exact)).toEqual([D.exact, expect.any(String)])
+    expect(await candidate(S.exact)).toEqual([expect.objectContaining({ status: 'auto_linked', ps: D.exact, mismatches: [] })])
+    expect(await offers(S.extraTags)).toContain(D.extraTags)
+    expect(await offers(S.strongerRefill)).toContain(D.strongerRefill)
+    expect(await offers(S.modest)).toContain(D.modest)
+    for (const key of ['weakerRefill', 'bots', 'refillBtn', 'limits', 'tooSmall', 'offOnly', 'autoViews', 'duration']) {
+      expect(await candidate(S[key]), key).toEqual([])
+      expect((await offers(S[key])).length, key).toBe(1)
+    }
+    expect((await db.query<{ n: number }>(`select count(*)::int n from arbitrage_candidates where status = 'pending'`)).rows[0].n).toBe(0)
+  })
+
+  it('more than 80% cheaper is another package: rejected at once, never linked', async () => {
+    expect(await candidate(S.anomaly)).toEqual([expect.objectContaining({ status: 'rejected', ps: D.anomaly, mismatches: ['price_anomaly'], offer_id: null })])
+    expect((await offers(S.anomaly)).length).toBe(1)
   })
 
   it('a second run changes nothing; within the interval it is skipped', async () => {
-    expect(await refresh()).toMatchObject({ auto_linked: 0 })
+    expect(await refresh()).toMatchObject({ auto_linked: 0, unlinked: 0 })
     expect(await refresh(55)).toEqual({ skipped: true })
   })
 
-  it('admin: approve links, reject is final, removing an automatic link keeps it out', async () => {
-    const id = async (svc: string) => (await db.query<{ id: string }>(`select id from arbitrage_candidates where service_id = $1`, [svc])).rows[0].id
-    const decide = (cid: string, approve: boolean) => db.query(`select admin_decide_arbitrage_candidate($1, $2, $3) r`, [admin, cid, approve])
-    await decide(await id(limits), true)
-    expect((await offers(limits)).length).toBe(2)
-    expect((await candidate(limits))[0].status).toBe('approved')
-    await decide(await id(details), false)
-    await decide(await id(exact), false) // the automatic link is switched off
-    expect((await offers(exact)).length).toBe(1)
+  it('a link made before these rules that does not fit them is switched off and rejected with its reason', async () => {
+    // what the old matcher did: the subscription linked to a single post, 99.99% cheaper
+    const sub = await service('Telegram Auto Post Views [fast] [90 days]', 124.032)
+    const single = await ps(P.jap, 'Telegram Auto Post Views [fast] [90 days] | 1 Post', 0.008)
+    const offer = (await db.query<{ id: string }>(`insert into provider_service_offers (service_id, provider_id, provider_service_id, cost_per_1000, min_quantity, max_quantity, is_active, routing_score)
+      values ($1, $2, $3, 0.008, 10, 100000, true, 0) returning id`, [sub, P.jap, single])).rows[0].id
+    await db.query(`insert into arbitrage_candidates (service_id, provider_service_id, provider_id, current_cost, donor_cost, saving, status, offer_id) values ($1, $2, $3, 124.032, 0.008, 0.9999, 'auto_linked', $4)`, [sub, single, P.jap, offer])
+    const r = await refresh()
+    expect(r).toMatchObject({ unlinked: 1 })
+    expect(await candidate(sub)).toEqual([expect.objectContaining({ status: 'rejected', offer_id: null, mismatches: expect.arrayContaining(['package', 'price_anomaly']) })])
+    expect((await offers(sub)).length).toBe(1)
+  })
+
+  it('admin: removing an automatic link keeps that pair out; an approved link stays', async () => {
+    const id = async (svc: string) => (await db.query<{ id: string }>(`select id from arbitrage_candidates where service_id = $1 and status = 'auto_linked'`, [svc])).rows[0].id
+    await db.query(`select admin_decide_arbitrage_candidate($1, $2, false)`, [admin, await id(S.modest)])
+    expect(await offers(S.modest)).not.toContain(D.modest)
     await refresh()
-    expect((await candidate(details))[0].status).toBe('rejected')
-    expect((await offers(exact)).length).toBe(1)
-    // the rejected pair stays out; the donor's other (low quality) offer for that service is now proposed, never linked by itself
-    expect(await candidate(exact)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ ps: exactDonor, status: 'rejected' }),
-      expect.objectContaining({ status: 'pending', mismatches: ['details'] }),
-    ]))
+    expect(await offers(S.modest)).not.toContain(D.modest)
+    expect(await candidate(S.modest)).toEqual([expect.objectContaining({ status: 'rejected' })])
     const list = (await db.query<{ r: { items: unknown[]; counts: Record<string, number> } }>(`select admin_arbitrage_candidates($1, 'rejected') r`, [admin])).rows[0].r
-    expect(list.counts).toMatchObject({ rejected: 2, approved: 1, pending: 2 })
-    expect(list.items).toHaveLength(2)
+    expect(list.counts.pending ?? 0).toBe(0)
+    expect(list.counts.rejected).toBeGreaterThanOrEqual(3)
   })
 
   it('pg_cron runs it hourly, or at once after an admin asked (the button only queues)', async () => {
@@ -154,7 +227,7 @@ describe('the matcher', () => {
     expect(await run()).toHaveProperty('auto_linked')
     expect(await run()).toEqual({ skipped: true })
     await db.query(`update arbitrage_state set refreshed_at = now() - interval '56 minutes'`)
-    expect(await run()).toHaveProperty('pending')
+    expect(await run()).toHaveProperty('pending', 0)
   })
 
   it('only admins (through the service role)', async () => {
@@ -162,7 +235,7 @@ describe('the matcher', () => {
     await expect(db.query(`select admin_arbitrage_candidates($1)`, [user])).rejects.toThrow(/forbidden/)
     await expect(db.query(`select admin_refresh_arbitrage($1)`, [user])).rejects.toThrow(/forbidden/)
     for (const role of ['anon', 'authenticated']) {
-      for (const fn of ['refresh_arbitrage_candidates(numeric, integer, integer)', 'admin_arbitrage_candidates(uuid, text, integer, integer)', 'admin_decide_arbitrage_candidate(uuid, uuid, boolean)', 'admin_refresh_arbitrage(uuid)', 'run_arbitrage_matcher()', 'service_fingerprint(text)']) {
+      for (const fn of ['refresh_arbitrage_candidates(numeric, integer, integer)', 'service_package_kind(text)', 'arbitrage_tags_fit(text, text)', 'arbitrage_refill_fits(text, text)', 'arbitrage_strict_tags(text)', 'arbitrage_num_tags(text)', 'arbitrage_required_tags(text)', 'admin_arbitrage_candidates(uuid, text, integer, integer)', 'admin_decide_arbitrage_candidate(uuid, uuid, boolean)', 'admin_refresh_arbitrage(uuid)', 'run_arbitrage_matcher()', 'service_fingerprint(text)']) {
         expect((await db.query<{ p: boolean }>(`select has_function_privilege('${role}', 'public.${fn}', 'execute') p`)).rows[0].p).toBe(false)
       }
       expect((await db.query<{ p: boolean }>(`select has_table_privilege('${role}', 'public.arbitrage_candidates', 'select') p`)).rows[0].p).toBe(false)
@@ -212,7 +285,7 @@ describe('admin list', () => {
     const root = createRoot(host)
     await act(async () => root.render(createElement(ArbitrageCandidates, { session })))
     await vi.waitFor(() => expect(host.textContent).toContain('Пусто.'))
-    expect([...host.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(['На проверку', 'Подключены сами', 'Одобрены', 'Отклонены'])
+    expect([...host.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(['Подключены сами', 'Одобрены', 'Отклонены']) // no queue to review any more
     act(() => root.unmount())
   })
 })

@@ -193,7 +193,9 @@ export function isPublishable(c: PublishCandidate): boolean {
     c.rate > 0 &&
     Number.isInteger(c.min) && c.min > 0 &&
     Number.isInteger(c.max) && c.max >= c.min &&
-    stripDecor(c.name).replace(/[^\p{L}]/gu, '').length >= 3
+    stripDecor(c.name).replace(/[^\p{L}]/gu, '').length >= 3 &&
+    // a panel's separator row ("--------------- Real People ---------------") is a heading, not a service
+    !/^\s*[-=_~*]{3,}/.test(c.name)
   )
 }
 
@@ -426,6 +428,9 @@ export interface ReferenceCells {
 /** Services a donor puts into one empty place per run (the cheapest; fingerprint twins count once). */
 export const FILL_PER_CELL = 10
 
+/** A donor service that costs more than this per 1000 is a placeholder or a package, never a gap filler (RootPanel lists some at $99,999). */
+export const FILL_MAX_RATE = 1000
+
 /** The places the reference catalogue covers, from its active services (platform slug, category and service name in English). */
 export function referenceCells(services: ReadonlyArray<{ platform: string; category: string; name: string }>): ReferenceCells {
   const platforms = new Set<string>()
@@ -474,7 +479,7 @@ export function chooseGapFillers<C extends PublishCandidate & { fingerprint?: st
       covered = platform.slug !== OTHER_PLATFORM && action !== OTHER_ACTION.key && !isGap(platform.slug, action, ref)
       coveredByCategory.set(catKey, covered)
     }
-    if (covered) continue
+    if (covered || c.rate > FILL_MAX_RATE) continue
     if (!isPublishable(c)) continue
     const { platform, action } = canonicalPlace(c, knownSlugs)
     if (!isGap(platform.slug, action.key, ref)) continue

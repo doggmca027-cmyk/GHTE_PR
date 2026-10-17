@@ -114,7 +114,7 @@ export interface SetArbitrageModeResponse {
 /** A cheaper donor service the matcher found for a storefront service (migration 20261204000000). */
 export type CandidateStatus = 'pending' | 'auto_linked' | 'approved' | 'rejected'
 /** Why the matcher is not sure: other bracketed facts (quality, country...), another / unstated guarantee, limits that do not cover ours. */
-export type CandidateMismatch = 'details' | 'refill' | 'limits'
+export type CandidateMismatch = 'details' | 'refill' | 'limits' | 'package' | 'price_anomaly'
 
 export interface ArbitrageCandidate {
   id: string

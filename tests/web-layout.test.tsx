@@ -74,6 +74,17 @@ describe('which layout', () => {
   })
 })
 
+describe('scrolling', () => {
+  it('a new tab opens at its top: the Mini App\'s scrolling screen is reset (it stayed down past the content of the new tab)', () => {
+    render('app', { activeTab: 'services' })
+    const main = host.querySelector('main[data-scroll-root]') as HTMLElement
+    main.scrollTop = 900
+    expect(main.scrollTop).toBe(900)
+    render('app', { activeTab: 'home' })
+    expect((host.querySelector('main[data-scroll-root]') as HTMLElement).scrollTop).toBe(0)
+  })
+})
+
 describe('sheets', () => {
   it('in the app a bottom sheet inside the phone frame (as before); on the website a dialog fixed over the page', () => {
     expect(sheetOverlayClass(false)).toBe('absolute inset-0 z-50 flex items-end animate-fade-in')

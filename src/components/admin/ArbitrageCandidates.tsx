@@ -7,8 +7,8 @@ import { decideArbitrageCandidate, listArbitrageCandidates, runArbitrageMatch } 
 import type { AuthSession } from '@/services/api/auth'
 import type { ArbitrageCandidate, ArbitrageCandidatesPage, CandidateMismatch, CandidateStatus } from '@/types/admin-providers'
 
+// there is no queue to review: the autopilot links the same product by itself and rejects the rest (migration 20261214000000)
 const TABS: { status: CandidateStatus; label: string }[] = [
-  { status: 'pending', label: 'На проверку' },
   { status: 'auto_linked', label: 'Подключены сами' },
   { status: 'approved', label: 'Одобрены' },
   { status: 'rejected', label: 'Отклонены' },
@@ -18,16 +18,19 @@ export const MISMATCH_LABEL: Record<CandidateMismatch, string> = {
   details: 'Отличаются признаки (качество, гео, аудитория)',
   refill: 'Другая или не указана гарантия',
   limits: 'Лимиты не покрывают наши',
+  package: 'Другой пакет (подписка / несколько постов против одного)',
+  price_anomaly: 'Дешевле более чем в 5 раз — другой пакет',
 }
 
 const pct = (share: number) => `−${Math.round(share * 100)}%`
 
 /**
- * Smart Arbitrage autopilot: the database links a cheaper donor service by itself only when it is the same service in every respect
- * (name, details, stated guarantee, limits) and at least 25% cheaper. Everything it is not sure about waits here for a decision.
+ * Smart Arbitrage autopilot: the database links a cheaper donor service by itself when it is the same product (name, package kind and
+ * numbers, facts, a guarantee at least ours, limits) and 15% to 80% cheaper; more than 80% cheaper is rejected as another package.
+ * Nothing waits for a decision: an admin sees what was linked and rejected, and can switch a link off.
  */
 export function ArbitrageCandidates({ session }: { session: AuthSession }) {
-  const [tab, setTab] = useState<CandidateStatus>('pending')
+  const [tab, setTab] = useState<CandidateStatus>('auto_linked')
   const [page, setPage] = useState<ArbitrageCandidatesPage | null>(null)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)

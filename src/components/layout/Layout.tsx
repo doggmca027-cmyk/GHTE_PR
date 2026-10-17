@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react'
+import { useLayoutEffect, type ReactNode } from 'react'
 import { Header } from './Header'
 import { BottomNav } from '@/components/navigation/BottomNav'
 import { NAV_ITEMS, type TabId } from '@/constants/navigation'
 import { useWide } from '@/lib/layout-mode'
+import { resetScroll } from '@/lib/scroll'
 import { WebLayout } from './WebLayout'
 
 interface Props {
@@ -22,6 +23,8 @@ interface Props {
 export function Layout(props: Props) {
   // the website (a browser, not Telegram) has its own full-width frame; the Mini App keeps the phone screen below, untouched
   const wide = useWide()
+  // every tab opens at its top (before it is painted)
+  useLayoutEffect(() => { resetScroll() }, [props.activeTab])
   return wide ? <WebLayout {...props} /> : <AppLayout {...props} />
 }
 
@@ -41,7 +44,7 @@ function AppLayout({ activeTab, onTabChange, balance, currency, onTopUp, isAdmin
           onOpenAdmin={() => onTabChange('admin')}
           active={activeTab === 'settings' || activeTab === 'support' || activeTab === 'admin' ? activeTab : null}
         />
-        <main className="flex-1 overflow-y-auto px-5 pb-4">{children}</main>
+        <main data-scroll-root className="flex-1 overflow-y-auto px-5 pb-4">{children}</main>
         <BottomNav active={activeTab} onChange={onTabChange} items={NAV_ITEMS} />
       </div>
     </div>

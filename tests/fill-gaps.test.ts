@@ -5,7 +5,7 @@ import path from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
-  FILL_PER_CELL, canonicalPlace, chooseGapFillers, isGap, isLinkAndQuantity, isPublishable, nichePlatform, referenceCells, type PublishCandidate,
+  FILL_MAX_RATE, FILL_PER_CELL, canonicalPlace, chooseGapFillers, isGap, isLinkAndQuantity, isPublishable, nichePlatform, referenceCells, type PublishCandidate,
 } from '../supabase/functions/_shared/catalog-publish.ts'
 import { FILL_BUDGET, fillProviderGaps, syncProviderCatalog, type CatalogStore } from '../supabase/functions/_shared/catalog-sync-run.ts'
 import { silentLogger } from '../supabase/functions/_shared/logger.ts'
@@ -269,5 +269,19 @@ describe('the fill run (sync-catalog { fillGaps: true })', () => {
     })
     await syncProviderCatalog({ provider: donor, adapter, store, rules: [], log: silentLogger })
     expect(calls.fill).toHaveLength(0)
+  })
+})
+
+describe('what never fills a gap', () => {
+  it('a placeholder price (more than FILL_MAX_RATE per 1000) or a separator row', () => {
+    const ref = referenceCells([])
+    const slugs = new Set(['instagram', 'roblox'])
+    const chosen = chooseGapFillers([
+      { id: 'a', name: 'Instagram Subscribers RP-01OZA', categoryRaw: 'Instagram Subscribers', serviceType: 'Subscribers', rate: 99999, min: 1, max: 10 },
+      { id: 'b', name: '--------------- Real People ---------------', categoryRaw: 'Roblox Followers', serviceType: 'Default', rate: 5, min: 10, max: 1000 },
+      { id: 'c', name: 'Roblox Followers [30D]', categoryRaw: 'Roblox Followers', serviceType: 'Followers', rate: 1, min: 10, max: 1000 },
+    ], slugs, ref)
+    expect(chosen.map((c) => c.id)).toEqual(['c'])
+    expect(FILL_MAX_RATE).toBe(1000)
   })
 })

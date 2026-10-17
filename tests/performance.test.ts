@@ -37,11 +37,11 @@ describe('rendering and network', () => {
     expect(html).toContain('<link rel="icon" type="image/png" href="/tonconnect-icon.png" />')
   })
 
-  it('cards of a list are memoised, skip work off screen, and get a stable handler', () => {
+  it('cards of a list are memoised and get a stable handler; no content-visibility (Telegram painted skipped cards only after a touch)', () => {
     expect(src('src/components/services/ServiceCard.tsx')).toMatch(/export const ServiceCard = memo\(/)
-    expect(src('src/components/services/ServiceCard.tsx')).toContain('cv-auto')
     expect(src('src/components/services/VariantCard.tsx')).toMatch(/export const VariantCard = memo\(/)
-    expect(src('src/index.css')).toMatch(/\.cv-auto \{ content-visibility: auto;/)
+    expect(src('src/index.css')).not.toContain('content-visibility')
+    expect(src('src/components/services/ServiceCard.tsx')).not.toContain('cv-auto')
     expect(src('src/components/services/ServicesScreen.tsx')).toMatch(/const open = useCallback\(/)
   })
 

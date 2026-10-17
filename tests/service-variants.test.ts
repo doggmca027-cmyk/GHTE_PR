@@ -7,7 +7,8 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { CATEGORY_SELECT, serviceFromRow } from '../src/services/api/services'
-import { variantLabels } from '../src/components/services/VariantCard'
+import { nameTags, variantDiffLabels } from '../src/lib/variants'
+import type { ICatalogService } from '../src/types/catalog'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -102,26 +103,50 @@ describe('catalogue and card', () => {
     expect(serviceFromRow({ ...row('solo', 1), variants: [] })).not.toHaveProperty('variants')
   })
 
-  it('labels: Economy / Standard / Premium, and named steps (never numbers) in larger groups', () => {
-    expect(variantLabels(2)).toEqual(['Economy', 'Premium'])
-    expect(variantLabels(3)).toEqual(['Economy', 'Standard', 'Premium'])
-    expect(variantLabels(4)).toEqual(['Economy', 'Basic', 'Standard', 'Premium'])
-    expect(variantLabels(10)).toEqual(['Economy', 'Basic', 'Standard', 'Optimal', 'Advanced', 'Pro', 'Ultra', 'Elite', 'Max', 'Premium'])
-    for (let n = 2; n <= 10; n++) {
-      expect(new Set(variantLabels(n)).size).toBe(n)
-      expect(variantLabels(n).join(' ')).not.toMatch(/\d/)
-    }
+  const v = (id: string, rate: number, name: string, attributes: ICatalogService['attributes'] = {}, maxQuantity = 1000): ICatalogService =>
+    ({ id, categoryId: 'c', name, description: null, ratePer1000: rate, minQuantity: 10, maxQuantity, refillSupported: false, sortOrder: 0, attributes })
+  const labels = (list: ICatalogService[]) => variantDiffLabels(list, 'en', 'en-US')
+
+  it('a switch says what sets the variant apart, never a made-up grade: the guarantee first', () => {
+    expect(labels([v('a', 0.03, 'Likes [no refill]', { refill: 'none' }), v('b', 0.05, 'Likes [refill: 7 days]', { refill: 7 }), v('c', 0.08, 'Likes [refill: 30 days]', { refill: 30 }), v('d', 0.12, 'Likes [refill: 365 days]', { refill: 365 })]))
+      .toEqual(['No refill', '♻️ 7 days', '♻️ 30 days', '♻️ 365 days'])
+    expect(labels([v('a', 1, 'X', { refill: 'lifetime' }), v('b', 2, 'X', { refill: 30 })])).toEqual(['♻️ Lifetime', '♻️ 30 days'])
+    for (const l of labels([v('a', 1, 'A'), v('b', 2, 'B', {}, 5000)])) expect(l).not.toMatch(/Economy|Premium|Standard|Basic/)
+  })
+
+  it('the same guarantee: the next property that differs (quality, speed, countries, the largest order)', () => {
+    expect(labels([v('a', 1, 'Followers', { refill: 30 }), v('b', 2, 'Followers [real]', { refill: 30, real: true })])).toEqual(['', 'Real'])
+    expect(labels([v('a', 1, 'F', { refill: 30, speed: 5000 }), v('b', 2, 'F', { refill: 30, speed: 50000 })])).toEqual(['5K/day', '50K/day'])
+    expect(labels([v('a', 1, 'F', { geo: ['US'] }), v('b', 2, 'F', { geo: ['RU'] })])).toEqual(['US', 'RU'])
+    expect(labels([v('a', 1, 'F', {}, 1000), v('b', 2, 'F', {}, 50000)])).toEqual(['up to 1K', 'up to 50K'])
+  })
+
+  it('a second property only where the first leaves two variants alike', () => {
+    expect(labels([
+      v('a', 0.27, 'R [no refill] [speed: 10 K/day]', { refill: 'none', speed: 10000 }),
+      v('b', 0.28, 'R [no refill] [speed: 5000/day]', { refill: 'none', speed: 5000 }),
+      v('c', 0.98, 'R [refill: 30 days] [speed: 5000/day]', { refill: 30, speed: 5000 }),
+    ])).toEqual(['No refill · 10K/day', 'No refill · 5K/day', '♻️ 30 days'])
+  })
+
+  it('nothing in the facts: a tag of its own name the others do not have ("1 Hour" / "2 Hours"); server tags never count', () => {
+    expect(nameTags('W.TV Live Stream Views [HQ | 1 Hour | 10–2000] [server 2]')).toEqual(['HQ', '1 Hour', '10–2000'])
+    expect(labels([v('a', 1.1, 'W.TV Views [HQ | 1 Hour | Drop 0–30%]'), v('b', 2.2, 'W.TV Views [HQ | 2 Hours | Drop 0–30%]')])).toEqual(['1 Hour', '2 Hours'])
+    expect(labels([v('a', 1, 'Same [server 1]'), v('b', 2, 'Same [server 2]')])).toEqual(['', '']) // the price tells them apart
   })
 
   it('the switches change the shown variant, and ordering opens the chosen one', async () => {
     const { VariantCard } = await import('../src/components/services/VariantCard')
-    const service = { ...serviceFromRow({ ...row('main', 1, 'Members [refill: 30 days]'), variants: [row('p', 2, 'Members [refill: 365 days]')] }) }
+    const service = { ...serviceFromRow({ ...row('main', 1, 'Members [refill: 30 days]'), attributes: { refill: 30 }, variants: [{ ...row('p', 2, 'Members [refill: 365 days]'), attributes: { refill: 365 } }] }) }
     const onSelect = vi.fn()
     const host = document.createElement('div')
     const root = createRoot(host)
     act(() => root.render(createElement(VariantCard, { service, platform: 'telegram', onSelect })))
     const radios = [...host.querySelectorAll('[role="radio"]')] as HTMLButtonElement[]
-    expect(radios.map((r) => r.textContent)).toEqual(['Economy$1.00', 'Premium$2.00'])
+    expect(radios.map((r) => r.textContent)).toEqual(['♻️ 30 days$1.00', '♻️ 365 days$2.00'])
+    // the card states the guarantee instead of a guessed speed grade
+    expect(host.querySelector('[data-testid="service-badges"]')?.textContent).toContain('Recovery: 30 days')
+    expect(host.textContent).not.toMatch(/Economy|Premium|Standard/)
     expect(host.textContent).toContain('Members [refill: 30 days]')
     act(() => radios[1].click())
     expect(radios[1].getAttribute('aria-checked')).toBe('true')

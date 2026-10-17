@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, ArrowLeft, Loader2, SearchX } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -9,6 +9,7 @@ import { useLanguage, useT } from '@/i18n'
 import { track } from '@/lib/analytics-client'
 import { haptic } from '@/lib/haptics'
 import { useWide } from '@/lib/layout-mode'
+import { resetScroll } from '@/lib/scroll'
 import { localizedName } from '@/lib/service-view'
 import { SERVICES_PAGE, fetchCategories, fetchCategoryServices, fetchPlatforms } from '@/services/api/services'
 import { cachedLoad, isFresh, peekCached } from '@/lib/catalog-cache'
@@ -76,6 +77,8 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
   const [selected, setSelected] = useState<ICatalogService | null>(null)
   const [serviceQuery, setServiceQuery] = useState('')
   const request = useRef(0)
+  // into a platform or a category and back out: the new level opens at its top
+  useLayoutEffect(() => { resetScroll() }, [platform, categoryId])
 
   // The catalogue is kept in memory for a few minutes (lib/catalog-cache.ts): reopening the tab shows it at once and refreshes it quietly.
   // the catalogue is the same for everyone, so signing in (a guest becoming a customer) keeps what is on screen

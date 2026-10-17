@@ -1,13 +1,11 @@
 import { memo, useMemo, useState } from 'react'
-import { useT } from '@/i18n'
+import { currentLocale, useLanguage, useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
 import { formatMoneyAmount } from '@/lib/order-calc'
 import { cn } from '@/lib/utils'
-import { collapseTechnicalDuplicates, variantLabels } from '@/lib/variants'
+import { collapseTechnicalDuplicates, variantDiffLabels } from '@/lib/variants'
 import type { ICatalogService, Platform } from '@/types/catalog'
 import { ServiceCard } from './ServiceCard'
-
-export { variantLabels }
 
 interface Props {
   service: ICatalogService
@@ -16,13 +14,17 @@ interface Props {
   onSelect: (service: ICatalogService) => void
 }
 
-/** One card for a group of variants: the chosen variant's card, and a switch per variant with its price. Memoised like ServiceCard. */
+/**
+ * One card for a group of variants: the chosen variant's card, and a switch per variant with what sets it apart from the others (its
+ * guarantee, quality, speed...) and its price. Memoised like ServiceCard.
+ */
 export const VariantCard = memo(function VariantCard({ service, platform, platformName, onSelect }: Props) {
   const t = useT()
+  const { lang } = useLanguage()
   // variants that differ only by the panel's server and cost the same are one choice
   const all = useMemo(() => collapseTechnicalDuplicates([service, ...(service.variants ?? [])]), [service])
+  const labels = useMemo(() => variantDiffLabels(all, lang, currentLocale()), [all, lang])
   const [index, setIndex] = useState(0)
-  const labels = variantLabels(all.length)
   const shown = all[Math.min(index, all.length - 1)]
 
   // every variant was a technical duplicate of one: a plain card, no switch
@@ -44,8 +46,8 @@ export const VariantCard = memo(function VariantCard({ service, platform, platfo
               i === index ? 'border-brand bg-brand text-white' : 'border-blue-100/70 bg-surface text-content-secondary',
             )}
           >
-            <span className="text-[12px] font-bold leading-tight">{t(labels[i])}</span>
-            <span className={cn('text-[11px] font-semibold leading-tight', i === index ? 'text-white/85' : 'text-content-muted')}>
+            {labels[i] !== '' && <span className="whitespace-nowrap text-[12px] font-bold leading-tight">{labels[i]}</span>}
+            <span className={cn('leading-tight', labels[i] !== '' ? 'text-[11px] font-semibold' : 'text-[12px] font-bold', i === index ? (labels[i] !== '' ? 'text-white/85' : 'text-white') : 'text-content-muted')}>
               {formatMoneyAmount(v.ratePer1000)}
             </span>
           </button>

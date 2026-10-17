@@ -15,8 +15,6 @@
 @layer utilities {
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
-  /* a card of a long list: the browser skips laying out and painting it while it is off screen (the size keeps the scrollbar steady) */
-  .cv-auto { content-visibility: auto; contain-intrinsic-size: auto 172px; }
 }
 
 @layer components {
