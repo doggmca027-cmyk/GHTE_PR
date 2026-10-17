@@ -22,10 +22,12 @@ interface Props {
   shortfallUnits: number
   /** The largest order this service can take: volume steps above it are not shown. */
   maxQuantity?: number
+  /** A website guest has no balance to show. */
+  hideBalance?: boolean
 }
 
 /** The price block of the order form: list price, the tier and promo discounts, the final price, and the balance check. */
-export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, balance, sufficient, shortfallUnits, maxQuantity }: Props) {
+export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, balance, sufficient, shortfallUnits, maxQuantity, hideBalance = false }: Props) {
   const t = useT()
   const { units } = displayedTotalUnits(state, estimateUnits)
   const quote: Quote | null = state.kind === 'ready' ? state.quote : state.kind === 'loading' ? state.previous : null
@@ -82,6 +84,7 @@ export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, bala
         <p className="mt-1 text-sm font-medium text-content-muted">{t('Enter a valid quantity to see the price.')}</p>
       )}
 
+      {!hideBalance && <>
       <div className="mt-3 flex items-center justify-between border-t border-blue-100/70 pt-3 text-sm">
         <span className="font-medium text-content-secondary">{t('Your balance')}</span>
         <span className="flex items-center gap-1.5 font-bold text-content-primary">
@@ -94,6 +97,7 @@ export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, bala
       {quantity !== null && !sufficient && (
         <p className="mt-1.5 text-xs font-medium text-rose-500">{t('You need {amount} more to place this order.', { amount: formatUnits(shortfallUnits) })}</p>
       )}
+      </>}
     </div>
   )
 }

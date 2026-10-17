@@ -18,7 +18,19 @@ export interface AuthSession {
   user: IUser
   wallet: IWallet
   isMock: boolean
+  /** A visitor of the website who has not signed in: the catalogue and prices work, anything personal asks to sign in first. */
+  isGuest?: boolean
 }
+
+/** The session of a website guest: no token (catalogue reads use the public key), no wallet. Never sent anywhere as an identity. */
+export const GUEST_SESSION: AuthSession = Object.freeze({
+  token: '',
+  expiresAt: Number.MAX_SAFE_INTEGER,
+  isMock: false,
+  isGuest: true,
+  user: { id: 'guest', telegramId: null, email: null, username: null, firstName: null, languageCode: null, isAdmin: false },
+  wallet: { balance: 0, currency: 'USD' },
+}) as AuthSession
 
 export type AuthErrorCode = 'not_in_telegram' | 'not_configured' | 'network' | 'user_banned' | 'signups_paused' | 'rejected' | 'server'
 

@@ -32,6 +32,9 @@ export function parseQuoteBody(raw: unknown): { ok: true; value: QuoteInput } | 
   return { ok: true, value: { serviceId: b.serviceId.toLowerCase(), quantity: b.quantity, promoCode, ...(runs > 1 ? { runs } : {}) } }
 }
 
+/** Does the request carry a bearer token at all? (None: a guest of the website asking for the price list.) */
+export const hasBearer = (authorization: string | null): boolean => /^Bearer\s+\S+/i.test(authorization ?? '')
+
 /** A database error (message of the SQL exception) -> the HTTP answer. 500 means "not a business error". */
 export function mapQuoteError(message: string): { status: number; error: string; message: string } {
   if (/user_banned/.test(message)) return { status: 403, error: 'banned', message: 'Your account is suspended.' }

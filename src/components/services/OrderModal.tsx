@@ -7,6 +7,7 @@ import { currentLocale, tr, useLanguage, useT } from '@/i18n'
 import { describeServiceDetails, localizedName, type DetailKind } from '@/lib/service-view'
 import { tm } from '@/i18n/messages'
 import { useAuth } from '@/context/AuthContext'
+import { useSignIn } from '@/context/SignInContext'
 import { track } from '@/lib/analytics-client'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import { haptic } from '@/lib/haptics'
@@ -61,6 +62,9 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
   const t = useT()
   const { lang } = useLanguage()
   const { applyWallet } = useAuth()
+  // a website guest prices freely; ordering asks to sign in first (this form stays open, so the order continues right after)
+  const guest = session.isGuest === true
+  const signIn = useSignIn()
   const wallet = session.wallet
 
   const [link, setLink] = useState('')
@@ -170,6 +174,11 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
 
   function handleCta() {
     if (busy || !orderOk || pricing || promoRefused) return
+    if (guest) {
+      haptic.tap()
+      signIn()
+      return
+    }
     if (!balance.sufficient) {
       haptic.tap()
       onTopUp(balance.shortfallUnits / 10_000)
@@ -191,6 +200,8 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
         ? t('Calculating price…')
         : promoRefused
           ? t('Fix or remove the promo code')
+          : guest
+          ? t('Sign in with Telegram to order')
           : balance.sufficient
         ? t('Order Now (Total {total})', { total: formatUnits(totalUnits) })
         : t('Top Up Balance (Needs +{amount})', { amount: formatUnits(balance.shortfallUnits) })
@@ -300,7 +311,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
               />
             )}
 
-            <PromoField value={promo} onChange={(v) => { setPromo(v); edited() }} disabled={busy} state={quoteState} />
+            {!guest && <PromoField value={promo} onChange={(v) => { setPromo(v); edited() }} disabled={busy} state={quoteState} />}
 
             {/* Price + balance */}
             <PriceSummary
@@ -313,6 +324,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
               balance={wallet.balance}
               sufficient={balance.sufficient}
               shortfallUnits={balance.shortfallUnits}
+              hideBalance={guest}
             />
 
             {phase.kind === 'error' && (

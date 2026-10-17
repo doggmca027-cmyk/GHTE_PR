@@ -1,4 +1,4 @@
-// Supabase Edge Function (Deno): POST /quote-order   (signed-in users)
+// Supabase Edge Function (Deno): POST /quote-order   (signed-in users and guests of the website)
 //   Authorization: Bearer <JWT issued by telegram-auth>
 //   Body: { serviceId, quantity, promoCode?, runs? }   (drip-feed: quantity is the total, the offer limits hold for quantity / runs)
 //   -> { success, listPrice, tier: { slug, percentage, discount }, promo: { applied, discount }, finalPrice, totalDiscount, discountReduced }
@@ -11,7 +11,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
-import { mapQuoteError, parseQuoteBody, toQuoteDto } from '../_shared/discounts.ts'
+import { hasBearer, mapQuoteError, parseQuoteBody, toQuoteDto } from '../_shared/discounts.ts'
 
 Deno.serve(instrument('quote-order', async (req: Request, { log }): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
@@ -25,16 +25,19 @@ Deno.serve(instrument('quote-order', async (req: Request, { log }): Promise<Resp
     return fail(500, 'server_misconfigured', 'Server is not configured.')
   }
 
-  const userId = await authenticate(req, jwtSecret)
-  if (!userId) return fail(401, 'unauthorized', 'Sign in again.')
-  log.bind({ userId })
+  // A guest of the website (no Authorization at all) gets the price list: volume steps, no tier discount, no promo code. A token that is
+  // there but invalid is refused, so an expired session is asked to sign in again rather than shown guest prices.
+  const guest = !hasBearer(req.headers.get('authorization'))
+  const userId = guest ? null : await authenticate(req, jwtSecret)
+  if (!guest && !userId) return fail(401, 'unauthorized', 'Sign in again.')
+  if (userId) log.bind({ userId })
 
   const parsed = parseQuoteBody(await readJson(req))
   if (!parsed.ok) return fail(400, 'invalid_input', parsed.message)
 
   const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
   const { data, error } = await db.rpc('quote_order_price', {
-    p_user_id: userId, p_service_id: parsed.value.serviceId, p_quantity: parsed.value.quantity, p_promo_code: parsed.value.promoCode,
+    p_user_id: userId, p_service_id: parsed.value.serviceId, p_quantity: parsed.value.quantity, p_promo_code: guest ? null : parsed.value.promoCode,
     p_runs: parsed.value.runs ?? 1,
   })
   if (error) {

@@ -1,4 +1,5 @@
-import { Check, ExternalLink, FileText, Languages, LogOut, Monitor, Moon, ShieldCheck, Sun, type LucideIcon } from 'lucide-react'
+import { Check, ExternalLink, FileText, Languages, LogOut, Monitor, Moon, Send, ShieldCheck, Sun, type LucideIcon } from 'lucide-react'
+import { useSignIn } from '@/context/SignInContext'
 import { insideTelegram } from '@/services/api/web-auth'
 import { Card } from '@/components/ui/Card'
 import { LANGUAGES, tr, useLanguage, useT } from '@/i18n'
@@ -115,10 +116,20 @@ export function SettingsScreen({ session, onSignOut }: { session: AuthSession; o
   const t = useT()
   const { lang } = useLanguage()
   const { user, isMock } = session
+  const signIn = useSignIn()
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-extrabold tracking-tight text-content-primary">{t('Settings')}</h1>
 
+      {session.isGuest ? (
+        <Card className="space-y-2.5 p-4 text-sm">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-content-muted">{t('Account')}</h2>
+          <p className="text-content-secondary">{t('You are browsing as a guest.')}</p>
+          <button type="button" onClick={signIn} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-brand text-sm font-bold text-white active:scale-[0.98]">
+            <Send size={16} strokeWidth={2} /> {t('Sign in with Telegram')}
+          </button>
+        </Card>
+      ) : (
       <Card className="space-y-2.5 p-4 text-sm">
         <h2 className="text-xs font-bold uppercase tracking-wide text-content-muted">{t('Account')}</h2>
         <Row label={t('Name')} value={user.firstName ?? '-'} />
@@ -127,6 +138,7 @@ export function SettingsScreen({ session, onSignOut }: { session: AuthSession; o
         <Row label={t('Telegram ID')} value={user.telegramId !== null ? String(user.telegramId) : '-'} />
         {isMock && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">{t('Dev mock account: nothing here is real.')}</p>}
       </Card>
+      )}
 
       <ThemeCard />
 
@@ -139,7 +151,7 @@ export function SettingsScreen({ session, onSignOut }: { session: AuthSession; o
       </Card>
 
       {/* the website remembers the sign-in in this browser; inside Telegram there is nothing to sign out of */}
-      {onSignOut && !isMock && !insideTelegram() && (
+      {onSignOut && !isMock && !session.isGuest && !insideTelegram() && (
         <button type="button" onClick={onSignOut} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-surface text-sm font-bold text-rose-600 shadow-card active:scale-[0.98]">
           <LogOut size={16} strokeWidth={2} /> {t('Sign out')}
         </button>

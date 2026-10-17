@@ -401,6 +401,23 @@ const id: Record<string, string> = {
   'Signing you in…': 'Sedang masuk…',
   'Prefer the app?': 'Lebih suka aplikasinya?',
   'Open in Telegram': 'Buka di Telegram',
+  'Open Telegram': 'Buka Telegram',
+  'Preparing the sign-in…': 'Menyiapkan proses masuk…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Buka {bot} di Telegram (lewat tombol di bawah).',
+  'Press «Confirm» in the bot\'s message.': 'Tekan «Confirm» di pesan bot.',
+  'Come back here: you will be signed in by yourself.': 'Kembali ke sini: Anda akan masuk secara otomatis.',
+  'Waiting for confirmation in Telegram…': 'Menunggu konfirmasi di Telegram…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'Bot hanya meminta konfirmasi. Jangan pernah menekan «Confirm» untuk proses masuk yang tidak Anda mulai.',
+  'You are signed in.': 'Anda sudah masuk.',
+  'The sign-in request has expired.': 'Permintaan masuk sudah kedaluwarsa.',
+  'The sign-in was cancelled in Telegram.': 'Proses masuk dibatalkan di Telegram.',
+  'Your wallet': 'Dompet Anda',
+  'Your orders': 'Pesanan Anda',
+  'Sign in with Telegram to top up with TON and see your balance.': 'Masuk dengan Telegram untuk isi saldo dengan TON dan melihat saldo Anda.',
+  'Sign in with Telegram to order and follow your orders here.': 'Masuk dengan Telegram untuk memesan dan memantau pesanan Anda di sini.',
+  'Sign in with Telegram to write to support about your orders.': 'Masuk dengan Telegram untuk menghubungi dukungan tentang pesanan Anda.',
+  'Sign in with Telegram to order': 'Masuk dengan Telegram untuk memesan',
+  'You are browsing as a guest.': 'Anda menjelajah sebagai tamu.',
 }
 
 export default id

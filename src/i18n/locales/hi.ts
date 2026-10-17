@@ -401,6 +401,23 @@ const hi: Record<string, string> = {
   'Signing you in…': 'साइन इन हो रहा है…',
   'Prefer the app?': 'ऐप पसंद है?',
   'Open in Telegram': 'Telegram में खोलें',
+  'Open Telegram': 'Telegram खोलें',
+  'Preparing the sign-in…': 'साइन-इन तैयार हो रहा है…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Telegram में {bot} खोलें (नीचे दिए बटन से)।',
+  'Press «Confirm» in the bot\'s message.': 'बॉट के संदेश में «Confirm» दबाएँ।',
+  'Come back here: you will be signed in by yourself.': 'यहाँ वापस आएँ: आप अपने आप साइन इन हो जाएँगे।',
+  'Waiting for confirmation in Telegram…': 'Telegram में पुष्टि की प्रतीक्षा है…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'बॉट केवल पुष्टि माँगता है। जो साइन-इन आपने शुरू नहीं किया, उसके लिए कभी «Confirm» न दबाएँ।',
+  'You are signed in.': 'आप साइन इन हो गए हैं।',
+  'The sign-in request has expired.': 'साइन-इन अनुरोध की समय-सीमा समाप्त हो गई।',
+  'The sign-in was cancelled in Telegram.': 'साइन-इन Telegram में रद्द कर दिया गया।',
+  'Your wallet': 'आपका वॉलेट',
+  'Your orders': 'आपके ऑर्डर',
+  'Sign in with Telegram to top up with TON and see your balance.': 'TON से टॉप-अप करने और अपना बैलेंस देखने के लिए Telegram से साइन इन करें।',
+  'Sign in with Telegram to order and follow your orders here.': 'ऑर्डर करने और यहाँ अपने ऑर्डर देखने के लिए Telegram से साइन इन करें।',
+  'Sign in with Telegram to write to support about your orders.': 'अपने ऑर्डर के बारे में सहायता टीम को लिखने के लिए Telegram से साइन इन करें।',
+  'Sign in with Telegram to order': 'ऑर्डर के लिए Telegram से साइन इन करें',
+  'You are browsing as a guest.': 'आप अतिथि के रूप में ब्राउज़ कर रहे हैं।',
 }
 
 export default hi

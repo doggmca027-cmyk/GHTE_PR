@@ -68,6 +68,8 @@ export function HomeScreen({ session, onBrowse, onTopUp, onViewOrders }: Props) 
       },
       () => { if (live) { setCatalog({ status: 'error' }); setFeatured({ status: 'error' }) } },
     )
+    // a website guest has no orders or invite link yet: those blocks simply stay out of the way
+    if (session.isGuest) { setOrders({ status: 'error' }); setReferral({ status: 'error' }); return () => { live = false } }
     getOrders(session).then(
       (list) => { if (live) setOrders({ status: 'ready', data: ordersSummary(list) }) },
       () => { if (live) setOrders({ status: 'error' }) },

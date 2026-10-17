@@ -401,6 +401,23 @@ const ja: Record<string, string> = {
   'Signing you in…': 'ログインしています…',
   'Prefer the app?': 'アプリの方がお好みですか？',
   'Open in Telegram': 'Telegramで開く',
+  'Open Telegram': 'Telegram を開く',
+  'Preparing the sign-in…': 'ログインを準備しています…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Telegram で {bot} を開きます（下のボタンから）。',
+  'Press «Confirm» in the bot\'s message.': 'ボットのメッセージで「Confirm」を押します。',
+  'Come back here: you will be signed in by yourself.': 'ここに戻ってください。自動でログインされます。',
+  'Waiting for confirmation in Telegram…': 'Telegram での確認を待っています…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'ボットは確認を求めるだけです。自分で始めていないログインでは決して「Confirm」を押さないでください。',
+  'You are signed in.': 'ログインしました。',
+  'The sign-in request has expired.': 'ログインリクエストの有効期限が切れました。',
+  'The sign-in was cancelled in Telegram.': 'ログインは Telegram でキャンセルされました。',
+  'Your wallet': 'あなたのウォレット',
+  'Your orders': 'あなたの注文',
+  'Sign in with Telegram to top up with TON and see your balance.': 'TON でチャージして残高を確認するには Telegram でログインしてください。',
+  'Sign in with Telegram to order and follow your orders here.': '注文してここで注文を確認するには Telegram でログインしてください。',
+  'Sign in with Telegram to write to support about your orders.': '注文についてサポートに連絡するには Telegram でログインしてください。',
+  'Sign in with Telegram to order': 'Telegram でログインして注文',
+  'You are browsing as a guest.': 'ゲストとして閲覧中です。',
 }
 
 export default ja

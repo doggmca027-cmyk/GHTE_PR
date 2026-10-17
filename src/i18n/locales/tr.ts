@@ -401,6 +401,23 @@ const tr: Record<string, string> = {
   'Signing you in…': 'Giriş yapılıyor…',
   'Prefer the app?': 'Uygulamayı mı tercih edersiniz?',
   'Open in Telegram': 'Telegram\'da aç',
+  'Open Telegram': 'Telegram\'ı aç',
+  'Preparing the sign-in…': 'Giriş hazırlanıyor…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Telegram\'da {bot} botunu açın (aşağıdaki düğmeyle).',
+  'Press «Confirm» in the bot\'s message.': 'Botun mesajındaki «Confirm» düğmesine basın.',
+  'Come back here: you will be signed in by yourself.': 'Buraya geri dönün: giriş kendiliğinden yapılacak.',
+  'Waiting for confirmation in Telegram…': 'Telegram\'da onay bekleniyor…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'Bot yalnızca onay ister. Sizin başlatmadığınız bir giriş için asla «Confirm» düğmesine basmayın.',
+  'You are signed in.': 'Giriş yaptınız.',
+  'The sign-in request has expired.': 'Giriş isteğinin süresi doldu.',
+  'The sign-in was cancelled in Telegram.': 'Giriş Telegram\'da iptal edildi.',
+  'Your wallet': 'Cüzdanınız',
+  'Your orders': 'Siparişleriniz',
+  'Sign in with Telegram to top up with TON and see your balance.': 'TON ile bakiye yüklemek ve bakiyenizi görmek için Telegram ile giriş yapın.',
+  'Sign in with Telegram to order and follow your orders here.': 'Sipariş vermek ve siparişlerinizi burada takip etmek için Telegram ile giriş yapın.',
+  'Sign in with Telegram to write to support about your orders.': 'Siparişleriniz hakkında desteğe yazmak için Telegram ile giriş yapın.',
+  'Sign in with Telegram to order': 'Sipariş için Telegram ile giriş yapın',
+  'You are browsing as a guest.': 'Misafir olarak geziniyorsunuz.',
 }
 
 export default tr

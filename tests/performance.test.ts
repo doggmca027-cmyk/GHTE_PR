@@ -16,7 +16,7 @@ describe('the first screen', () => {
 
   it('tabs other than Home and the catalogue are their own chunks, fetched when the browser is idle', () => {
     const app = src('src/App.tsx')
-    for (const screen of ['OrdersScreen', 'SupportScreen', 'SettingsScreen', 'WebSignIn', 'AdminScreen']) {
+    for (const screen of ['OrdersScreen', 'SupportScreen', 'SettingsScreen', 'BotLoginModal', 'AdminScreen']) {
       expect(app).toMatch(new RegExp(`const ${screen} = lazy\\(`))
       expect(app).not.toMatch(new RegExp(`import \\{[^}]*\\b${screen}\\b[^}]*\\} from`))
     }

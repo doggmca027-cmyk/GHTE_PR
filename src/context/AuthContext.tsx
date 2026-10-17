@@ -1,15 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { IWallet } from '@/types'
 import { mockBackend } from '@/services/api/mock-orders'
-import { AuthError, authenticateWithTelegram, fetchWallet, type AuthSession } from '@/services/api/auth'
+import { AuthError, GUEST_SESSION, authenticateWithTelegram, fetchWallet, type AuthSession } from '@/services/api/auth'
 import { clearWebSession, insideTelegram, loadWebSession, saveWebSession } from '@/services/api/web-auth'
 
 type AuthState =
   | { status: 'loading' }
   | { status: 'authenticated'; session: AuthSession }
   | { status: 'error'; message: string }
-  /** A regular browser (not Telegram) without a remembered session: the website's sign-in is shown. */
-  | { status: 'signed_out' }
 
 interface AuthContextValue {
   state: AuthState
@@ -55,9 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({ status: 'authenticated', session })
     } catch (e) {
       sessionRef.current = null
-      // outside Telegram there is no initData to sign in with: the website's own sign-in takes over
+      // outside Telegram there is no initData: the website opens for a guest (catalogue and prices); signing in is one button away
       if (e instanceof AuthError && e.code === 'not_in_telegram') {
-        setState({ status: 'signed_out' })
+        sessionRef.current = GUEST_SESSION
+        setState({ status: 'authenticated', session: GUEST_SESSION })
         return
       }
       setState({ status: 'error', message: e instanceof AuthError ? e.message : 'Unexpected error. Please retry.' })
@@ -66,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshWallet = useCallback(async () => {
     const session = sessionRef.current
-    if (!session) return
+    if (!session || session.isGuest) return
     if (session.isMock) {
       // Dev: pick up refunds credited by the simulated sync worker.
       const next = { ...session, wallet: mockBackend.getWallet() }

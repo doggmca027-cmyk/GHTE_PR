@@ -105,6 +105,32 @@ export async function loginWithTelegramWidget(widget: TelegramWidgetUser): Promi
   return toSession(await call<SessionBody>({ action: 'TELEGRAM_WIDGET_LOGIN', widget }))
 }
 
+// ---- sign-in confirmed in the Telegram bot ----------------------------------------------------------------------------------
+
+export interface BotLoginStart {
+  /** https://t.me/<bot>?start=auth_<token>: opens the bot, which asks to Confirm. */
+  link: string
+  /** Kept by this browser only: the poll collects the session with it. */
+  pollToken: string
+  expiresInSeconds: number
+  pollSeconds: number
+}
+export type BotLoginState =
+  | { status: 'pending' | 'opened' | 'cancelled' | 'expired' | 'consumed' | 'unknown' }
+  | { status: 'confirmed'; session: AuthSession }
+
+export async function startBotLogin(lang?: string): Promise<BotLoginStart> {
+  const r = await call<BotLoginStart>({ action: 'BOT_LOGIN_INIT', lang: lang ?? null })
+  return { link: r.link, pollToken: r.pollToken, expiresInSeconds: r.expiresInSeconds, pollSeconds: r.pollSeconds }
+}
+
+export async function pollBotLogin(pollToken: string): Promise<BotLoginState> {
+  const r = await call<SessionBody & { status: string }>({ action: 'BOT_LOGIN_POLL', pollToken })
+  if (r.status === 'confirmed') return { status: 'confirmed', session: toSession(r) }
+  const known = ['pending', 'opened', 'cancelled', 'expired', 'consumed', 'unknown'] as const
+  return { status: (known as readonly string[]).includes(r.status) ? (r.status as (typeof known)[number]) : 'unknown' }
+}
+
 // ---- remembering the session in a regular browser ---------------------------------------------------------------------------
 
 /** True inside Telegram (a Mini App launch carries initData); then nothing is persisted. */

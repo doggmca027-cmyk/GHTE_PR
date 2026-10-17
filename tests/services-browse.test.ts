@@ -245,4 +245,33 @@ describe('browsing the services', () => {
     expect(host.textContent).toContain("Couldn't load services")
     expect(buttonWith('Retry')).toBeDefined()
   })
+
+  it('a website guest browses the same catalogue and prices freely; the order button asks to sign in (no token is sent)', async () => {
+    const { GUEST_SESSION } = await import('../src/services/api/auth')
+    const { SignInContext } = await import('../src/context/SignInContext')
+    const signIn = vi.fn()
+    const auth: Array<string | null> = []
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/functions/v1/quote-order')) {
+        requests.push(String(input))
+        auth.push(new Headers(init?.headers).get('Authorization'))
+        return new Response(JSON.stringify({ success: true, listPrice: 0.01, finalPrice: 0.01, totalDiscount: 0 }), { status: 200 })
+      }
+      return fakeFetch(input)
+    })
+    act(() => root.render(createElement(SignInContext.Provider, { value: signIn }, createElement(ServicesScreen, { session: GUEST_SESSION, onTopUp: () => {}, onViewOrders: () => {} }))))
+    await flush()
+    await click(buttonWith('Instagram'))
+    await click(host.querySelector('h3')?.closest('button'))
+    await act(async () => { await new Promise((r) => setTimeout(r, 600)) })
+    await flush()
+    expect(auth.length).toBeGreaterThan(0)
+    expect(auth.every((a) => a === null)).toBe(true)
+    expect(host.textContent).not.toContain('Promo code')
+    const cta = buttonWith('Sign in with Telegram to order')
+    expect(cta?.disabled).toBe(false)
+    await click(cta)
+    expect(signIn).toHaveBeenCalledTimes(1)
+    expect(requests.some((r) => r.includes('place-order'))).toBe(false)
+  })
 })

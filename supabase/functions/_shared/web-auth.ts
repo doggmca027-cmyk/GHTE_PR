@@ -14,8 +14,10 @@ export const CODE_TTL_SECONDS = 10 * 60
 /** Web sessions last a week (a desktop browser should not sign out on every refresh); every RPC still re-checks bans. */
 export const WEB_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60
 export const LIMITS = {
-  /** any web-auth request from one address */
+  /** any web-auth request from one address (the bot sign-in poll has its own, below) */
   ip: { limit: 40, windowSeconds: 10 * 60 },
+  /** the bot sign-in poll (one every 2 s while a sign-in waits; its 256-bit token cannot be guessed) */
+  botPoll: { limit: 600, windowSeconds: 10 * 60 },
   /** wrong passwords for one account before password sign-in pauses */
   passwordFailures: { limit: 10, windowSeconds: 15 * 60 },
 }
@@ -27,6 +29,10 @@ export type WebAuthRequest =
   | { action: 'REQUEST_CODE'; email: string; purpose: 'login_code' | 'reset_password'; lang: string | null }
   | { action: 'RESET_PASSWORD'; email: string; code: string; newPassword: string }
   | { action: 'TELEGRAM_WIDGET_LOGIN'; widget: TelegramWidgetPayload }
+  /** Sign-in confirmed in the bot: a challenge and the bot link (migration 20261210000000). */
+  | { action: 'BOT_LOGIN_INIT'; lang: string | null }
+  /** The browser asks whether the challenge was confirmed (every 2 s). */
+  | { action: 'BOT_LOGIN_POLL'; pollToken: string }
 
 export interface TelegramWidgetPayload {
   id: number
@@ -54,6 +60,12 @@ export function parseWebAuthRequest(body: unknown): WebAuthRequest | { error: st
   const b = body as Obj
   const action = typeof b.action === 'string' ? b.action.toUpperCase() : ''
   const lang = str(b.lang, 10)
+
+  if (action === 'BOT_LOGIN_INIT') return { action, lang }
+  if (action === 'BOT_LOGIN_POLL') {
+    if (typeof b.pollToken !== 'string' || !TOKEN_RE.test(b.pollToken)) return { error: 'pollToken is required.' }
+    return { action, pollToken: b.pollToken }
+  }
 
   if (action === 'TELEGRAM_WIDGET_LOGIN') {
     const w = (typeof b.widget === 'object' && b.widget !== null ? b.widget : b) as Obj
@@ -104,6 +116,36 @@ export function parseWebAuthRequest(body: unknown): WebAuthRequest | { error: st
 
 const encoder = new TextEncoder()
 const toHex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+
+// ---- sign-in confirmed in the bot ------------------------------------------------------------------------------------------------
+/** A challenge lives this long: the time to open the bot and press Confirm. */
+export const BOT_LOGIN_TTL_SECONDS = 5 * 60
+/** The browser polls this often. */
+export const BOT_LOGIN_POLL_SECONDS = 2
+/** The start / poll tokens: base64url, 32 characters (24 random bytes) or 43 (32 bytes). Telegram allows [A-Za-z0-9_-]{1,64} after /start. */
+export const TOKEN_RE = /^[A-Za-z0-9_-]{32,64}$/
+export const START_PREFIX = 'auth_'
+
+/** A random token, base64url (no padding). */
+export function randomToken(bytes: number): string {
+  const raw = crypto.getRandomValues(new Uint8Array(bytes))
+  return btoa(String.fromCharCode(...raw)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+/** SHA-256 of a token, hex: what the database keeps instead of the token. */
+export async function sha256Hex(text: string): Promise<string> {
+  return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(text))))
+}
+
+/** The user of a confirmed challenge as the bot recorded it (Telegram's own "from" of the update). */
+export interface BotLoginUser {
+  id: number
+  first_name?: string
+  last_name?: string
+  username?: string
+  language_code?: string
+}
+export type BotLoginPoll = { status: 'pending' | 'opened' | 'cancelled' | 'expired' | 'consumed' | 'unknown' } | { status: 'confirmed'; telegram_user: BotLoginUser }
 
 /**
  * The Telegram Login Widget check (https://core.telegram.org/widgets/login#checking-authorization): HMAC-SHA-256 of the sorted
@@ -156,7 +198,13 @@ export interface WebAuthPorts {
   /** Creates or refreshes the account of a Telegram identity; 'signups_paused' when a NEW account is not allowed now. */
   upsertTelegramUser(w: TelegramWidgetPayload): Promise<WebUser | 'signups_paused'>
   /** Signs the session: the same HS256 JWT as telegram-auth (sub = users.id, role = authenticated), plus the wallet. */
-  session(user: WebUser, method: 'email' | 'telegram_widget'): Promise<Record<string, unknown>>
+  session(user: WebUser, method: 'email' | 'telegram_widget' | 'telegram_bot'): Promise<Record<string, unknown>>
+  /** bot_login_create(): stores a challenge by the hashes of its tokens. Optional (the bot sign-in answers 503 without it). */
+  createBotLogin?(a: { startHash: string; pollHash: string; ttlSeconds: number }): Promise<void>
+  /** bot_login_poll(): the challenge's state; a confirmed one is handed out once. */
+  pollBotLogin?(pollHash: string): Promise<BotLoginPoll>
+  /** The bot's username (without @), for the link. */
+  botUsername?: string | null
   sendEmail(m: CodeEmail): Promise<SendOutcome>
   /** Can a code reach anyone here? (RESEND_API_KEY, or the local mock.) */
   emailReady: boolean
@@ -196,12 +244,38 @@ const codeFailure = (v: VerifyResult): WebAuthResponse => {
 }
 
 export async function handleWebAuth(req: WebAuthRequest, p: WebAuthPorts): Promise<WebAuthResponse> {
-  // one limit for every action from the same address (sign-in flooding, address probing)
-  if (!(await p.rateHit(`ip:${p.ipKey}`, LIMITS.ip.limit, LIMITS.ip.windowSeconds))) {
+  // the poll of a waiting bot sign-in has its own limit (it runs every 2 s); every other action shares one per address
+  // (sign-in flooding, address probing)
+  const limit = req.action === 'BOT_LOGIN_POLL' ? { bucket: `botpoll:${p.ipKey}`, ...LIMITS.botPoll } : { bucket: `ip:${p.ipKey}`, ...LIMITS.ip }
+  if (!(await p.rateHit(limit.bucket, limit.limit, limit.windowSeconds))) {
     return no(429, 'rate_limited', 'Too many attempts. Please wait a few minutes.')
   }
 
   switch (req.action) {
+    case 'BOT_LOGIN_INIT': {
+      if (!p.createBotLogin || !p.botUsername) return no(503, 'telegram_unavailable', 'Telegram sign-in is not configured.')
+      const start = randomToken(24)
+      const poll = randomToken(32)
+      await p.createBotLogin({ startHash: await sha256Hex(start), pollHash: await sha256Hex(poll), ttlSeconds: BOT_LOGIN_TTL_SECONDS })
+      return ok({
+        link: `https://t.me/${p.botUsername}?start=${START_PREFIX}${start}`,
+        pollToken: poll,
+        expiresInSeconds: BOT_LOGIN_TTL_SECONDS,
+        pollSeconds: BOT_LOGIN_POLL_SECONDS,
+      })
+    }
+
+    case 'BOT_LOGIN_POLL': {
+      if (!p.pollBotLogin) return no(503, 'telegram_unavailable', 'Telegram sign-in is not configured.')
+      const r = await p.pollBotLogin(await sha256Hex(req.pollToken))
+      if (r.status !== 'confirmed') return ok({ status: r.status })
+      const tg = r.telegram_user
+      const user = await p.upsertTelegramUser({ id: tg.id, first_name: tg.first_name, last_name: tg.last_name, username: tg.username, auth_date: 0, hash: '' })
+      if (user === 'signups_paused') return no(403, 'signups_paused', 'New registrations are temporarily closed. Please try again later.')
+      if (user.is_banned) return no(403, 'user_banned', 'Your account is suspended.')
+      return ok({ status: 'confirmed', ...(await p.session(user, 'telegram_bot')) })
+    }
+
     case 'REGISTER': {
       const pending = await hashPassword(req.password)
       return sendCode(p, req.email, 'register_verify', req.lang, { pendingPasswordHash: pending, pendingReferralCode: req.referralCode })

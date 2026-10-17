@@ -401,6 +401,23 @@ const it: Record<string, string> = {
   'Signing you in…': 'Accesso in corso…',
   'Prefer the app?': 'Preferisci l\'app?',
   'Open in Telegram': 'Apri in Telegram',
+  'Open Telegram': 'Apri Telegram',
+  'Preparing the sign-in…': 'Preparazione dell\'accesso…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Apri {bot} su Telegram (con il pulsante qui sotto).',
+  'Press «Confirm» in the bot\'s message.': 'Premi «Confirm» nel messaggio del bot.',
+  'Come back here: you will be signed in by yourself.': 'Torna qui: l\'accesso avverrà da solo.',
+  'Waiting for confirmation in Telegram…': 'In attesa di conferma su Telegram…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'Il bot chiede solo di confermare. Non premere mai «Confirm» per un accesso che non hai avviato tu.',
+  'You are signed in.': 'Hai effettuato l\'accesso.',
+  'The sign-in request has expired.': 'La richiesta di accesso è scaduta.',
+  'The sign-in was cancelled in Telegram.': 'L\'accesso è stato annullato su Telegram.',
+  'Your wallet': 'Il tuo wallet',
+  'Your orders': 'I tuoi ordini',
+  'Sign in with Telegram to top up with TON and see your balance.': 'Accedi con Telegram per ricaricare con TON e vedere il tuo saldo.',
+  'Sign in with Telegram to order and follow your orders here.': 'Accedi con Telegram per ordinare e seguire qui i tuoi ordini.',
+  'Sign in with Telegram to write to support about your orders.': 'Accedi con Telegram per scrivere all\'assistenza sui tuoi ordini.',
+  'Sign in with Telegram to order': 'Accedi con Telegram per ordinare',
+  'You are browsing as a guest.': 'Stai navigando come ospite.',
 }
 
 export default it

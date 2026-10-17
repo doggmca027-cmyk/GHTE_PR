@@ -74,7 +74,8 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
   const request = useRef(0)
 
   // The catalogue is kept in memory for a few minutes (lib/catalog-cache.ts): reopening the tab shows it at once and refreshes it quietly.
-  const who = session.isMock ? 'mock' : session.user.id
+  // the catalogue is the same for everyone, so signing in (a guest becoming a customer) keeps what is on screen
+  const who = session.isMock ? 'mock' : 'public'
   const load = useCallback(() => {
     const key = `overview:${who}`
     const hit = peekCached<{ categories: ICategory[]; platforms: PlatformInfo[] }>(key)

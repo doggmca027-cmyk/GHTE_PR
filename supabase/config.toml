@@ -96,6 +96,10 @@ verify_jwt = false
 [functions.web-auth]
 verify_jwt = false
 
+# The bot's webhook: Telegram calls it with X-Telegram-Bot-Api-Secret-Token (TELEGRAM_WEBHOOK_SECRET), checked by the function itself.
+[functions.telegram-bot]
+verify_jwt = false
+
 # Signed-in users: ask the provider to refill a delivered order (every rule in begin_order_refill). Authenticates the JWT itself.
 [functions.request-refill]
 verify_jwt = false

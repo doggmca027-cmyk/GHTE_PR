@@ -1,4 +1,4 @@
-import { LifeBuoy, Moon, Plus, Settings, ShieldCheck, Sun } from 'lucide-react'
+import { LifeBuoy, Moon, Plus, Send, Settings, ShieldCheck, Sun } from 'lucide-react'
 import { useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
 import { setThemePreference, useScheme } from '@/lib/theme'
@@ -16,13 +16,16 @@ interface Props {
   onOpenAdmin?: () => void
   /** Which header screen is open, to highlight its button. */
   active?: 'settings' | 'support' | 'admin' | null
+  /** A website guest: a "Sign in" button takes the place of the balance. */
+  guest?: boolean
+  onSignIn?: () => void
 }
 
 // a little smaller on narrow phones (360-399 px), so the balance always fits next to the logo
 const iconButton =
   'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-blue-100/70 shadow-sm transition-colors active:scale-95 min-[400px]:h-9 min-[400px]:w-9'
 
-export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSupport, isAdmin = false, onOpenAdmin, active = null }: Props) {
+export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSupport, isAdmin = false, onOpenAdmin, active = null, guest = false, onSignIn }: Props) {
   const t = useT()
   const scheme = useScheme()
   const dark = scheme === 'dark'
@@ -33,6 +36,16 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSuppo
         <Logo />
       </div>
       <div className="flex shrink-0 items-center gap-1 min-[400px]:gap-1.5">
+        {guest ? (
+          <button
+            type="button"
+            onClick={() => { haptic.tap(); onSignIn?.() }}
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-brand py-1.5 pl-2.5 pr-3 text-[13px] font-bold text-white shadow-sm active:scale-95"
+            data-testid="header-sign-in"
+          >
+            <Send size={15} strokeWidth={2.25} /> {t('Sign in')}
+          </button>
+        ) : (
         <button
           type="button"
           onClick={onTopUp}
@@ -44,6 +57,7 @@ export function Header({ balance, currency, onTopUp, onOpenSettings, onOpenSuppo
             <Plus size={16} strokeWidth={2} />
           </span>
         </button>
+        )}
         <button
           type="button"
           onClick={() => { haptic.select(); setThemePreference(dark ? 'light' : 'dark') }}

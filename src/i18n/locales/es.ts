@@ -401,6 +401,23 @@ const es: Record<string, string> = {
   'Signing you in…': 'Iniciando sesión…',
   'Prefer the app?': '¿Prefieres la app?',
   'Open in Telegram': 'Abrir en Telegram',
+  'Open Telegram': 'Abrir Telegram',
+  'Preparing the sign-in…': 'Preparando el inicio de sesión…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Abre {bot} en Telegram (con el botón de abajo).',
+  'Press «Confirm» in the bot\'s message.': 'Pulsa «Confirm» en el mensaje del bot.',
+  'Come back here: you will be signed in by yourself.': 'Vuelve aquí: la sesión se iniciará sola.',
+  'Waiting for confirmation in Telegram…': 'Esperando la confirmación en Telegram…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'El bot solo pide confirmar. Nunca pulses «Confirm» en un inicio de sesión que no hayas iniciado tú.',
+  'You are signed in.': 'Has iniciado sesión.',
+  'The sign-in request has expired.': 'La solicitud de inicio de sesión ha caducado.',
+  'The sign-in was cancelled in Telegram.': 'El inicio de sesión se canceló en Telegram.',
+  'Your wallet': 'Tu billetera',
+  'Your orders': 'Tus pedidos',
+  'Sign in with Telegram to top up with TON and see your balance.': 'Inicia sesión con Telegram para recargar con TON y ver tu saldo.',
+  'Sign in with Telegram to order and follow your orders here.': 'Inicia sesión con Telegram para hacer pedidos y seguirlos aquí.',
+  'Sign in with Telegram to write to support about your orders.': 'Inicia sesión con Telegram para escribir a soporte sobre tus pedidos.',
+  'Sign in with Telegram to order': 'Inicia sesión con Telegram para pedir',
+  'You are browsing as a guest.': 'Estás navegando como invitado.',
 }
 
 export default es

@@ -59,17 +59,17 @@ describe('the bot of the widget', () => {
 })
 
 describe('signed out outside Telegram', () => {
-  it('no initData and no remembered session: the website sign-in, not an error', async () => {
+  it('no initData and no remembered session: the whole site as a guest, not a sign-in wall or an error', async () => {
     vi.resetModules()
     vi.doMock('../src/services/api/auth', async (importOriginal) => {
       const real = await importOriginal<typeof import('../src/services/api/auth')>()
       return { ...real, authenticateWithTelegram: vi.fn(async () => { throw new real.AuthError('not_in_telegram', 'Please open this app from Telegram.') }) }
     })
     const { AuthProvider, useAuth } = await import('../src/context/AuthContext')
-    const Probe = () => createElement('p', null, useAuth().state.status)
+    const Probe = () => { const { state } = useAuth(); return createElement('p', null, `${state.status}:${state.status === 'authenticated' && state.session.isGuest === true}`) }
     act(() => root.render(createElement(AuthProvider, null, createElement(Probe))))
     await flush()
-    expect(host.textContent).toBe('signed_out')
+    expect(host.textContent).toBe('authenticated:true')
     vi.doUnmock('../src/services/api/auth')
   })
 })

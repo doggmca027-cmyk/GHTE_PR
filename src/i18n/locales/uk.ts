@@ -401,6 +401,23 @@ const uk: Record<string, string> = {
   'Signing you in…': 'Виконуємо вхід…',
   'Prefer the app?': 'Зручніше в застосунку?',
   'Open in Telegram': 'Відкрити в Telegram',
+  'Open Telegram': 'Відкрити Telegram',
+  'Preparing the sign-in…': 'Готуємо вхід…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Відкрийте {bot} у Telegram (кнопка нижче).',
+  'Press «Confirm» in the bot\'s message.': 'Натисніть «Confirm» у повідомленні бота.',
+  'Come back here: you will be signed in by yourself.': 'Поверніться сюди: вхід відбудеться сам.',
+  'Waiting for confirmation in Telegram…': 'Чекаємо підтвердження в Telegram…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'Бот лише просить підтвердити. Ніколи не натискайте «Confirm», якщо не починали вхід самі.',
+  'You are signed in.': 'Ви увійшли.',
+  'The sign-in request has expired.': 'Запит на вхід закінчився.',
+  'The sign-in was cancelled in Telegram.': 'Вхід скасовано в Telegram.',
+  'Your wallet': 'Ваш гаманець',
+  'Your orders': 'Ваші замовлення',
+  'Sign in with Telegram to top up with TON and see your balance.': 'Увійдіть через Telegram, щоб поповнювати баланс у TON і бачити його.',
+  'Sign in with Telegram to order and follow your orders here.': 'Увійдіть через Telegram, щоб замовляти й стежити за замовленнями тут.',
+  'Sign in with Telegram to write to support about your orders.': 'Увійдіть через Telegram, щоб написати в підтримку про свої замовлення.',
+  'Sign in with Telegram to order': 'Увійдіть через Telegram, щоб замовити',
+  'You are browsing as a guest.': 'Ви переглядаєте сайт як гість.',
 }
 
 export default uk

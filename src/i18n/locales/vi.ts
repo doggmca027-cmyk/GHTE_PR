@@ -401,6 +401,23 @@ const vi: Record<string, string> = {
   'Signing you in…': 'Đang đăng nhập…',
   'Prefer the app?': 'Thích dùng ứng dụng hơn?',
   'Open in Telegram': 'Mở trong Telegram',
+  'Open Telegram': 'Mở Telegram',
+  'Preparing the sign-in…': 'Đang chuẩn bị đăng nhập…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Mở {bot} trong Telegram (bằng nút bên dưới).',
+  'Press «Confirm» in the bot\'s message.': 'Nhấn «Confirm» trong tin nhắn của bot.',
+  'Come back here: you will be signed in by yourself.': 'Quay lại đây: bạn sẽ được đăng nhập tự động.',
+  'Waiting for confirmation in Telegram…': 'Đang chờ xác nhận trong Telegram…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'Bot chỉ yêu cầu xác nhận. Đừng bao giờ nhấn «Confirm» cho lần đăng nhập mà bạn không tự bắt đầu.',
+  'You are signed in.': 'Bạn đã đăng nhập.',
+  'The sign-in request has expired.': 'Yêu cầu đăng nhập đã hết hạn.',
+  'The sign-in was cancelled in Telegram.': 'Lần đăng nhập đã bị hủy trong Telegram.',
+  'Your wallet': 'Ví của bạn',
+  'Your orders': 'Đơn hàng của bạn',
+  'Sign in with Telegram to top up with TON and see your balance.': 'Đăng nhập bằng Telegram để nạp TON và xem số dư.',
+  'Sign in with Telegram to order and follow your orders here.': 'Đăng nhập bằng Telegram để đặt hàng và theo dõi đơn hàng tại đây.',
+  'Sign in with Telegram to write to support about your orders.': 'Đăng nhập bằng Telegram để nhắn hỗ trợ về đơn hàng của bạn.',
+  'Sign in with Telegram to order': 'Đăng nhập bằng Telegram để đặt hàng',
+  'You are browsing as a guest.': 'Bạn đang duyệt với tư cách khách.',
 }
 
 export default vi

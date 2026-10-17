@@ -401,6 +401,23 @@ const de: Record<string, string> = {
   'Signing you in…': 'Anmeldung läuft…',
   'Prefer the app?': 'Lieber in der App?',
   'Open in Telegram': 'In Telegram öffnen',
+  'Open Telegram': 'Telegram öffnen',
+  'Preparing the sign-in…': 'Anmeldung wird vorbereitet…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Öffnen Sie {bot} in Telegram (mit der Schaltfläche unten).',
+  'Press «Confirm» in the bot\'s message.': 'Tippen Sie in der Nachricht des Bots auf „Confirm“.',
+  'Come back here: you will be signed in by yourself.': 'Kommen Sie hierher zurück: Die Anmeldung erfolgt automatisch.',
+  'Waiting for confirmation in Telegram…': 'Warten auf Bestätigung in Telegram…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'Der Bot bittet nur um Bestätigung. Tippen Sie nie auf „Confirm“ für eine Anmeldung, die Sie nicht selbst gestartet haben.',
+  'You are signed in.': 'Sie sind angemeldet.',
+  'The sign-in request has expired.': 'Die Anmeldeanfrage ist abgelaufen.',
+  'The sign-in was cancelled in Telegram.': 'Die Anmeldung wurde in Telegram abgebrochen.',
+  'Your wallet': 'Ihr Wallet',
+  'Your orders': 'Ihre Bestellungen',
+  'Sign in with Telegram to top up with TON and see your balance.': 'Melden Sie sich mit Telegram an, um mit TON aufzuladen und Ihr Guthaben zu sehen.',
+  'Sign in with Telegram to order and follow your orders here.': 'Melden Sie sich mit Telegram an, um zu bestellen und Ihre Bestellungen hier zu verfolgen.',
+  'Sign in with Telegram to write to support about your orders.': 'Melden Sie sich mit Telegram an, um dem Support zu Ihren Bestellungen zu schreiben.',
+  'Sign in with Telegram to order': 'Zum Bestellen mit Telegram anmelden',
+  'You are browsing as a guest.': 'Sie sind als Gast unterwegs.',
 }
 
 export default de

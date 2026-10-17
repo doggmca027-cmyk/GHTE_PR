@@ -20,7 +20,8 @@ export async function getQuote(session: AuthSession, request: QuoteRequest, sign
   try {
     res = await fetch(`${SUPABASE_URL}/functions/v1/quote-order`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.token}` },
+      // a website guest sends no token at all: the server then prices without tier discount or promo code
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, ...(session.isGuest ? {} : { Authorization: `Bearer ${session.token}` }) },
       body: JSON.stringify({ serviceId: request.serviceId, quantity: request.quantity, ...(request.promoCode ? { promoCode: request.promoCode } : {}), ...(request.runs && request.runs > 1 ? { runs: request.runs } : {}) }),
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(QUOTE_TIMEOUT_MS)]) : AbortSignal.timeout(QUOTE_TIMEOUT_MS),
     })

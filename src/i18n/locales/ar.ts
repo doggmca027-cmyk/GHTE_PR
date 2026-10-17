@@ -401,6 +401,23 @@ const ar: Record<string, string> = {
   'Signing you in…': 'جارٍ تسجيل الدخول…',
   'Prefer the app?': 'تفضّل التطبيق؟',
   'Open in Telegram': 'افتح في Telegram',
+  'Open Telegram': 'افتح Telegram',
+  'Preparing the sign-in…': 'جارٍ تجهيز تسجيل الدخول…',
+  'Open {bot} in Telegram (it opens with the button below).': 'افتح {bot} في Telegram (بالزر أدناه).',
+  'Press «Confirm» in the bot\'s message.': 'اضغط «Confirm» في رسالة البوت.',
+  'Come back here: you will be signed in by yourself.': 'عُد إلى هنا: سيتم تسجيل دخولك تلقائيًا.',
+  'Waiting for confirmation in Telegram…': 'في انتظار التأكيد في Telegram…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'البوت يطلب التأكيد فقط. لا تضغط «Confirm» أبدًا لتسجيل دخول لم تبدأه بنفسك.',
+  'You are signed in.': 'تم تسجيل دخولك.',
+  'The sign-in request has expired.': 'انتهت صلاحية طلب تسجيل الدخول.',
+  'The sign-in was cancelled in Telegram.': 'تم إلغاء تسجيل الدخول في Telegram.',
+  'Your wallet': 'محفظتك',
+  'Your orders': 'طلباتك',
+  'Sign in with Telegram to top up with TON and see your balance.': 'سجّل الدخول عبر Telegram لشحن رصيدك بـ TON ومعرفة رصيدك.',
+  'Sign in with Telegram to order and follow your orders here.': 'سجّل الدخول عبر Telegram لتطلب وتتابع طلباتك هنا.',
+  'Sign in with Telegram to write to support about your orders.': 'سجّل الدخول عبر Telegram لمراسلة الدعم بشأن طلباتك.',
+  'Sign in with Telegram to order': 'سجّل الدخول عبر Telegram للطلب',
+  'You are browsing as a guest.': 'أنت تتصفح كزائر.',
 }
 
 export default ar

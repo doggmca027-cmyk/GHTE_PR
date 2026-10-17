@@ -401,6 +401,23 @@ const pt: Record<string, string> = {
   'Signing you in…': 'Entrando…',
   'Prefer the app?': 'Prefere o app?',
   'Open in Telegram': 'Abrir no Telegram',
+  'Open Telegram': 'Abrir o Telegram',
+  'Preparing the sign-in…': 'Preparando o login…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Abra {bot} no Telegram (pelo botão abaixo).',
+  'Press «Confirm» in the bot\'s message.': 'Toque em «Confirm» na mensagem do bot.',
+  'Come back here: you will be signed in by yourself.': 'Volte aqui: o login acontece sozinho.',
+  'Waiting for confirmation in Telegram…': 'Aguardando a confirmação no Telegram…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'O bot só pede a confirmação. Nunca toque em «Confirm» em um login que você não iniciou.',
+  'You are signed in.': 'Você entrou.',
+  'The sign-in request has expired.': 'O pedido de login expirou.',
+  'The sign-in was cancelled in Telegram.': 'O login foi cancelado no Telegram.',
+  'Your wallet': 'Sua carteira',
+  'Your orders': 'Seus pedidos',
+  'Sign in with Telegram to top up with TON and see your balance.': 'Entre com o Telegram para recarregar com TON e ver seu saldo.',
+  'Sign in with Telegram to order and follow your orders here.': 'Entre com o Telegram para fazer pedidos e acompanhá-los aqui.',
+  'Sign in with Telegram to write to support about your orders.': 'Entre com o Telegram para falar com o suporte sobre seus pedidos.',
+  'Sign in with Telegram to order': 'Entre com o Telegram para pedir',
+  'You are browsing as a guest.': 'Você está navegando como visitante.',
 }
 
 export default pt

@@ -401,6 +401,23 @@ const zh: Record<string, string> = {
   'Signing you in…': '正在登录…',
   'Prefer the app?': '更喜欢用应用？',
   'Open in Telegram': '在 Telegram 中打开',
+  'Open Telegram': '打开 Telegram',
+  'Preparing the sign-in…': '正在准备登录…',
+  'Open {bot} in Telegram (it opens with the button below).': '在 Telegram 中打开 {bot}（点击下方按钮）。',
+  'Press «Confirm» in the bot\'s message.': '在机器人的消息中点击「Confirm」。',
+  'Come back here: you will be signed in by yourself.': '回到这里：将自动为您登录。',
+  'Waiting for confirmation in Telegram…': '正在等待 Telegram 中的确认…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': '机器人只会请您确认。不是您本人发起的登录，切勿点击「Confirm」。',
+  'You are signed in.': '您已登录。',
+  'The sign-in request has expired.': '登录请求已过期。',
+  'The sign-in was cancelled in Telegram.': '登录已在 Telegram 中取消。',
+  'Your wallet': '您的钱包',
+  'Your orders': '您的订单',
+  'Sign in with Telegram to top up with TON and see your balance.': '使用 Telegram 登录，即可用 TON 充值并查看余额。',
+  'Sign in with Telegram to order and follow your orders here.': '使用 Telegram 登录，即可下单并在此跟踪订单。',
+  'Sign in with Telegram to write to support about your orders.': '使用 Telegram 登录，即可就订单联系客服。',
+  'Sign in with Telegram to order': '使用 Telegram 登录后下单',
+  'You are browsing as a guest.': '您正以访客身份浏览。',
 }
 
 export default zh

@@ -401,6 +401,23 @@ const ru: Record<string, string> = {
   'Signing you in…': 'Выполняем вход…',
   'Prefer the app?': 'Удобнее в приложении?',
   'Open in Telegram': 'Открыть в Telegram',
+  'Open Telegram': 'Открыть Telegram',
+  'Preparing the sign-in…': 'Готовим вход…',
+  'Open {bot} in Telegram (it opens with the button below).': 'Откройте {bot} в Telegram (кнопка ниже).',
+  'Press «Confirm» in the bot\'s message.': 'Нажмите «Confirm» в сообщении бота.',
+  'Come back here: you will be signed in by yourself.': 'Вернитесь сюда: вход произойдёт сам.',
+  'Waiting for confirmation in Telegram…': 'Ждём подтверждения в Telegram…',
+  'The bot only asks to confirm. Never press «Confirm» for a sign-in you did not start.': 'Бот только просит подтвердить. Никогда не нажимайте «Confirm», если не начинали вход сами.',
+  'You are signed in.': 'Вы вошли.',
+  'The sign-in request has expired.': 'Запрос на вход истёк.',
+  'The sign-in was cancelled in Telegram.': 'Вход отменён в Telegram.',
+  'Your wallet': 'Ваш кошелёк',
+  'Your orders': 'Ваши заказы',
+  'Sign in with Telegram to top up with TON and see your balance.': 'Войдите через Telegram, чтобы пополнять баланс в TON и видеть его.',
+  'Sign in with Telegram to order and follow your orders here.': 'Войдите через Telegram, чтобы заказывать и следить за заказами здесь.',
+  'Sign in with Telegram to write to support about your orders.': 'Войдите через Telegram, чтобы написать в поддержку о своих заказах.',
+  'Sign in with Telegram to order': 'Войдите через Telegram, чтобы заказать',
+  'You are browsing as a guest.': 'Вы просматриваете сайт как гость.',
 }
 
 export default ru

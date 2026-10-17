@@ -9,7 +9,9 @@ import type { DepositRequest } from '@/components/wallet/WalletScreen'
 import { ServicesScreen } from '@/components/services/ServicesScreen'
 import type { SupportRequest } from '@/components/support/SupportScreen'
 import { useAuth } from '@/context/AuthContext'
-import { useT } from '@/i18n'
+import { SignInContext } from '@/context/SignInContext'
+import { GuestPrompt } from '@/components/auth/GuestPrompt'
+import { tr, useT } from '@/i18n'
 import { tm } from '@/i18n/messages'
 import { bindAnalytics, track } from '@/lib/analytics-client'
 import { applyStartReferral } from '@/lib/referral-start'
@@ -26,7 +28,8 @@ const WalletRoute = lazy(loadWallet)
 const OrdersScreen = lazy(() => loadOrders().then((m) => ({ default: m.OrdersScreen })))
 const SupportScreen = lazy(() => loadSupport().then((m) => ({ default: m.SupportScreen })))
 const SettingsScreen = lazy(() => loadSettings().then((m) => ({ default: m.SettingsScreen })))
-const WebSignIn = lazy(() => import('@/components/auth/WebSignIn').then((m) => ({ default: m.WebSignIn })))
+// The website guest's sign-in (confirmed in the Telegram bot): its own chunk, loaded when a guest asks to sign in.
+const BotLoginModal = lazy(() => import('@/components/auth/BotLoginModal').then((m) => ({ default: m.BotLoginModal })))
 // Admin code is split into its own chunk: regular users never download it.
 const AdminScreen = lazy(() => import('@/components/admin/AdminScreen').then((m) => ({ default: m.AdminScreen })))
 
@@ -57,10 +60,15 @@ export default function App() {
   // a platform tile of the Home screen: the services tab opens on it
   const [servicesPlatform, setServicesPlatform] = useState<string | null>(null)
   const changeTab = (next: TabId) => { setServicesPlatform(null); setTab(next) }
+  // a website guest asked to sign in (header, Order button, a personal tab)
+  const [signingIn, setSigningIn] = useState(false)
+  const openSignIn = useCallback(() => setSigningIn(true), [])
+  const closeSignIn = useCallback(() => setSigningIn(false), [])
 
   // Product analytics (after the first paint, never blocking): bind the signed-in session, report the app opening once and the
   // screen the customer lands on. The services screen reports its own catalog views.
-  const session = state.status === 'authenticated' ? state.session : null
+  // a guest is not tracked (no identity); signing in starts the session's tracking
+  const session = state.status === 'authenticated' && !state.session.isGuest ? state.session : null
   const opened = useRef(false)
   useEffect(() => {
     bindAnalytics(session)
@@ -78,7 +86,7 @@ export default function App() {
     else if (tab === 'settings') track('settings_view')
   }, [tab, session?.token]) // eslint-disable-line react-hooks/exhaustive-deps
   // the other tabs' code, once the first screen is up
-  useEffect(() => { if (session) prefetchTabs() }, [Boolean(session)]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (state.status === 'authenticated') prefetchTabs() }, [state.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Jump to the wallet and open the deposit drawer (suggesting at least the missing amount, if known). */
   const topUp = (shortfallUsd?: number) => {
@@ -91,14 +99,6 @@ export default function App() {
       <FullScreen>
         <Loader2 size={32} strokeWidth={2} className="animate-spin text-brand" aria-label={t('Loading')} />
       </FullScreen>
-    )
-  }
-
-  if (state.status === 'signed_out') {
-    return (
-      <Suspense fallback={<FullScreen><Loader2 size={32} strokeWidth={2} className="animate-spin text-brand" aria-label={t('Loading')} /></FullScreen>}>
-        <WebSignIn onSignedIn={signInWeb} />
-      </Suspense>
     )
   }
 
@@ -118,8 +118,10 @@ export default function App() {
   }
 
   const { user, wallet } = state.session
+  const guest = state.session.isGuest === true
 
   return (
+    <SignInContext.Provider value={openSignIn}>
     <Layout
       activeTab={tab}
       onTabChange={changeTab}
@@ -127,10 +129,18 @@ export default function App() {
       currency={wallet.currency}
       onTopUp={() => topUp()}
       isAdmin={user.isAdmin}
+      guest={guest}
+      onSignIn={openSignIn}
     >
       <Suspense fallback={<Loader2 size={28} strokeWidth={2} className="mx-auto mt-16 animate-spin text-brand" aria-label={t('Loading')} />}>
       {tab === 'services' ? (
         <ServicesScreen session={state.session} onTopUp={topUp} onViewOrders={() => changeTab('orders')} initialPlatform={servicesPlatform} />
+      ) : guest && (tab === 'wallet' || tab === 'orders' || tab === 'support') ? (
+        // a guest's personal tabs: why to sign in, and the button
+        <GuestPrompt
+          title={tab === 'wallet' ? tr('Your wallet') : tab === 'orders' ? tr('Your orders') : tr('Support')}
+          text={tab === 'wallet' ? tr('Sign in with Telegram to top up with TON and see your balance.') : tab === 'orders' ? tr('Sign in with Telegram to order and follow your orders here.') : tr('Sign in with Telegram to write to support about your orders.')}
+        />
       ) : tab === 'wallet' ? (
         <WalletRoute session={state.session} depositRequest={depositRequest} onRequestHandled={clearDepositRequest} />
       ) : tab === 'admin' && user.isAdmin ? (
@@ -150,6 +160,12 @@ export default function App() {
         />
       )}
       </Suspense>
+      {signingIn && guest && (
+        <Suspense fallback={null}>
+          <BotLoginModal onSignedIn={(s) => { setSigningIn(false); signInWeb(s) }} onClose={closeSignIn} />
+        </Suspense>
+      )}
     </Layout>
+    </SignInContext.Provider>
   )
 }
