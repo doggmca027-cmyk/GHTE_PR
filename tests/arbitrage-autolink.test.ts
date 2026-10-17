@@ -208,6 +208,20 @@ describe('the matcher', () => {
     expect((await offers(sub)).length).toBe(1)
   })
 
+  it('two old links far under the card\'s own cost do not cover each other: both are switched off', async () => {
+    const card = await service('Spotify Plays [refill: lifetime] [Netherlands]', 2.856)
+    const link = async (name: string, cost: number) => {
+      const d = await ps(P.jap, name, cost)
+      const o = (await db.query<{ id: string }>(`insert into provider_service_offers (service_id, provider_id, provider_service_id, cost_per_1000, min_quantity, max_quantity, is_active, routing_score)
+        values ($1, $2, $3, $4, 10, 100000, true, 0) returning id`, [card, P.jap, d, cost])).rows[0].id
+      await db.query(`insert into arbitrage_candidates (service_id, provider_service_id, provider_id, current_cost, donor_cost, saving, status, offer_id) values ($1, $2, $3, 2.856, $4, 0.9, 'auto_linked', $5)`, [card, d, P.jap, cost, o])
+    }
+    await link('Spotify Plays [Netherlands] [Refill: Lifetime]', 0.2375)
+    await link('Spotify Plays [NETHERLANDS] [Lifetime Refill]', 0.25)
+    expect(await refresh()).toMatchObject({ unlinked: 2 })
+    expect((await offers(card)).length).toBe(1) // only the card's own source
+  })
+
   it('admin: removing an automatic link keeps that pair out; an approved link stays', async () => {
     const id = async (svc: string) => (await db.query<{ id: string }>(`select id from arbitrage_candidates where service_id = $1 and status = 'auto_linked'`, [svc])).rows[0].id
     await db.query(`select admin_decide_arbitrage_candidate($1, $2, false)`, [admin, await id(S.modest)])
