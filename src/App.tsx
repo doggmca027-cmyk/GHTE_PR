@@ -11,6 +11,7 @@ import { ServicesScreen } from '@/components/services/ServicesScreen'
 import { SettingsScreen } from '@/components/settings/SettingsScreen'
 import { SupportScreen, type SupportRequest } from '@/components/support/SupportScreen'
 import { useAuth } from '@/context/AuthContext'
+import { WebSignIn } from '@/components/auth/WebSignIn'
 import { useT } from '@/i18n'
 import { tm } from '@/i18n/messages'
 import { bindAnalytics, track } from '@/lib/analytics-client'
@@ -30,7 +31,7 @@ function FullScreen({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const t = useT()
-  const { state, retry } = useAuth()
+  const { state, retry, signInWeb, signOut } = useAuth()
   const [tab, setTab] = useState<TabId>('home')
   const [depositRequest, setDepositRequest] = useState<DepositRequest | null>(null)
   const clearDepositRequest = useCallback(() => setDepositRequest(null), [])
@@ -74,6 +75,8 @@ export default function App() {
     )
   }
 
+  if (state.status === 'signed_out') return <WebSignIn onSignedIn={signInWeb} />
+
   if (state.status === 'error') {
     return (
       <FullScreen>
@@ -109,7 +112,7 @@ export default function App() {
           <AdminScreen session={state.session} />
         </Suspense>
       ) : tab === 'settings' ? (
-        <SettingsScreen session={state.session} />
+        <SettingsScreen session={state.session} onSignOut={signOut} />
       ) : tab === 'support' ? (
         <SupportScreen session={state.session} request={supportRequest} onRequestHandled={clearSupportRequest} />
       ) : tab === 'orders' ? (

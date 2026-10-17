@@ -4,7 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#EBF3FE" />
-    <title>SMM Mini App</title>
+    <title>GRAM Hub — social media promotion paid with TON</title>
+    <!-- SEO: __SITE_URL__ is filled with the real origin by scripts/postbuild.ts (like the legal pages) -->
+    <meta name="description" content="GRAM Hub: followers, views, likes and members for Telegram, Instagram, YouTube, TikTok and 60+ platforms. Prepaid USD balance topped up with TON, automatic refunds, bulk prices. Works in Telegram and in the browser." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="__SITE_URL__/" />
+    <link rel="alternate" hreflang="x-default" href="__SITE_URL__/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="GRAM Hub" />
+    <meta property="og:title" content="GRAM Hub — social media promotion paid with TON" />
+    <meta property="og:description" content="Followers, views, likes and members for Telegram, Instagram, YouTube, TikTok and more. Pay with TON, automatic refunds." />
+    <meta property="og:url" content="__SITE_URL__/" />
+    <meta property="og:image" content="__SITE_URL__/tonconnect-icon.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="GRAM Hub — social media promotion paid with TON" />
+    <meta name="twitter:description" content="Followers, views, likes and members for Telegram, Instagram, YouTube, TikTok and more. Pay with TON." />
     <!-- Defines window.Telegram.WebApp (initData etc.). Must load before the app bundle; see src/lib/webapp.ts. -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -13,6 +27,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>GRAM Hub — social media promotion paid with TON</h1>
+      <p>Followers, views, likes and members for Telegram, Instagram, YouTube, TikTok and more than 60 other platforms. A prepaid USD balance
+        topped up with TON, automatic refunds when an order cannot be delivered, and bulk prices for large orders. Enable JavaScript to use
+        the app, or open it in Telegram.</p>
+      <p><a href="/terms">Terms of Service</a> · <a href="/privacy">Privacy Policy</a></p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

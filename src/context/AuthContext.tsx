@@ -8,6 +8,8 @@ type AuthState =
   | { status: 'loading' }
   | { status: 'authenticated'; session: AuthSession }
   | { status: 'error'; message: string }
+  /** A regular browser (not Telegram) without a remembered session: the website's sign-in is shown. */
+  | { status: 'signed_out' }
 
 interface AuthContextValue {
   state: AuthState
@@ -53,6 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({ status: 'authenticated', session })
     } catch (e) {
       sessionRef.current = null
+      // outside Telegram there is no initData to sign in with: the website's own sign-in takes over
+      if (e instanceof AuthError && e.code === 'not_in_telegram') {
+        setState({ status: 'signed_out' })
+        return
+      }
       setState({ status: 'error', message: e instanceof AuthError ? e.message : 'Unexpected error. Please retry.' })
     }
   }, [])

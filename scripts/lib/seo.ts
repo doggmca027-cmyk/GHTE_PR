@@ -34,7 +34,7 @@ const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 
 /**
  * sitemap.xml: every document in every language, each listing all its language versions plus x-default (Google's hreflang rules:
- * the set is complete and reciprocal on every URL). The app itself (/) is a Telegram Mini App and is left out.
+ * the set is complete and reciprocal on every URL). The home page (/) comes first: it is the website's sign-in and app.
  */
 export function buildSitemap(site: string, lastmod: string): string {
   const origin = site.replace(/\/+$/, '')
@@ -51,9 +51,11 @@ export function buildSitemap(site: string, lastmod: string): string {
       '  </url>',
     ].join('\n')
   }))
+  const home = ['  <url>', `    <loc>${xml(`${origin}/`)}</loc>`, `    <lastmod>${lastmod}</lastmod>`, '  </url>'].join('\n')
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
+    home,
     ...urls,
     '</urlset>',
     '',

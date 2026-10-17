@@ -1,4 +1,5 @@
-import { Check, ExternalLink, FileText, Languages, Monitor, Moon, ShieldCheck, Sun, type LucideIcon } from 'lucide-react'
+import { Check, ExternalLink, FileText, Languages, LogOut, Monitor, Moon, ShieldCheck, Sun, type LucideIcon } from 'lucide-react'
+import { insideTelegram } from '@/services/api/web-auth'
 import { Card } from '@/components/ui/Card'
 import { LANGUAGES, tr, useLanguage, useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
@@ -110,7 +111,7 @@ function ThemeCard() {
   )
 }
 
-export function SettingsScreen({ session }: { session: AuthSession }) {
+export function SettingsScreen({ session, onSignOut }: { session: AuthSession; onSignOut?: () => void }) {
   const t = useT()
   const { lang } = useLanguage()
   const { user, isMock } = session
@@ -122,7 +123,8 @@ export function SettingsScreen({ session }: { session: AuthSession }) {
         <h2 className="text-xs font-bold uppercase tracking-wide text-content-muted">{t('Account')}</h2>
         <Row label={t('Name')} value={user.firstName ?? '-'} />
         <Row label={t('Username')} value={user.username ? `@${user.username}` : '-'} />
-        <Row label={t('Telegram ID')} value={String(user.telegramId)} />
+        {user.email && <Row label={t('E-mail')} value={user.email} />}
+        <Row label={t('Telegram ID')} value={user.telegramId !== null ? String(user.telegramId) : '-'} />
         {isMock && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">{t('Dev mock account: nothing here is real.')}</p>}
       </Card>
 
@@ -135,6 +137,13 @@ export function SettingsScreen({ session }: { session: AuthSession }) {
         <LinkRow href={legalDocPath('terms', lang)} icon={FileText} label={t('Terms of Service')} />
         <LinkRow href={legalDocPath('privacy', lang)} icon={ShieldCheck} label={t('Privacy Policy')} />
       </Card>
+
+      {/* the website remembers the sign-in in this browser; inside Telegram there is nothing to sign out of */}
+      {onSignOut && !isMock && !insideTelegram() && (
+        <button type="button" onClick={onSignOut} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-surface text-sm font-bold text-rose-600 shadow-card active:scale-[0.98]">
+          <LogOut size={16} strokeWidth={2} /> {t('Sign out')}
+        </button>
+      )}
     </div>
   )
 }

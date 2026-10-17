@@ -36,6 +36,8 @@ for (const doc of DOCS) {
     if (appUrl) writeFileSync(file, fillPage(readFileSync(file, 'utf8'), appUrl, bot))
   }
 }
+// the home page: canonical / Open Graph URLs (the app now has a website sign-in, so it is a public page too)
+if (appUrl) writeFileSync(join(dist, 'index.html'), fillPage(readFileSync(join(dist, 'index.html'), 'utf8'), appUrl, bot))
 writeFileSync(join(dist, 'robots.txt'), buildRobots(appUrl))
 if (appUrl) {
   writeFileSync(join(dist, 'sitemap.xml'), buildSitemap(appUrl, new Date().toISOString().slice(0, 10)))

@@ -90,16 +90,28 @@ describe('robots.txt and sitemap.xml', () => {
     expect(buildRobots(undefined)).toBe('User-agent: *\nAllow: /\n')
   })
 
-  it('the sitemap lists the six pages, each with all its language versions and x-default', () => {
+  it('the sitemap lists the home page (the website) and the six documents, each document with all its language versions and x-default', () => {
     const xml = buildSitemap(SITE, '2026-10-12')
     expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true)
     expect(xml).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
     expect(all(xml, /<loc>([^<]+)<\/loc>/g).map(([u]) => u)).toEqual([
-      `${SITE}/terms`, `${SITE}/ru/terms`, `${SITE}/uk/terms`, `${SITE}/privacy`, `${SITE}/ru/privacy`, `${SITE}/uk/privacy`,
+      `${SITE}/`, `${SITE}/terms`, `${SITE}/ru/terms`, `${SITE}/uk/terms`, `${SITE}/privacy`, `${SITE}/ru/privacy`, `${SITE}/uk/privacy`,
     ])
     expect(all(xml, /<xhtml:link /g)).toHaveLength(6 * 4)
-    expect(all(xml, /<lastmod>2026-10-12<\/lastmod>/g)).toHaveLength(6)
-    expect(xml).not.toContain(`<loc>${SITE}/</loc>`) // the Mini App itself is not a search landing page
+    expect(all(xml, /<lastmod>2026-10-12<\/lastmod>/g)).toHaveLength(7)
+  })
+
+  it('the home page carries search meta tags; postbuild fills the site address', () => {
+    const html = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8')
+    expect(html).toMatch(/<title>GRAM Hub — [^<]+<\/title>/)
+    expect(html).toMatch(/<meta name="description" content="[^"]{80,}"/)
+    expect(html).toContain('<link rel="canonical" href="__SITE_URL__/" />')
+    expect(html).toContain('<meta property="og:url" content="__SITE_URL__/" />')
+    expect(html).toContain('<noscript>')
+    const filled = fillPage(html, SITE, BOT)
+    expect(filled).toContain(`<link rel="canonical" href="${SITE}/" />`)
+    expect(filled).not.toContain('__SITE_URL__')
+    expect(fs.readFileSync(path.resolve(__dirname, '../scripts/postbuild.ts'), 'utf8')).toContain("join(dist, 'index.html')")
   })
 
   it('the bot link comes from the Mini App URL', () => {
