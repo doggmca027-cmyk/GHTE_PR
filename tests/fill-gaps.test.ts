@@ -216,6 +216,13 @@ describe('the sync step', () => {
     expect((calls.fill[0] as { ps: string }[]).map((r) => r.ps)).toEqual(['ps-1'])
     expect(report.filled).toMatchObject({ chosen: 2, created: 1, backlog: 0 })
 
+    // its card was hidden (no ACTIVE card sells it): it is sent again, so the database can bring the card back
+    const hidden = makeStore()
+    ;(hidden.store as unknown as { loadOffers: () => Promise<unknown[]> }).loadOffers = (store as unknown as { loadOffers: () => Promise<unknown[]> }).loadOffers
+    ;(hidden.store as unknown as { loadSellingProviderServices: () => Promise<string[]> }).loadSellingProviderServices = async () => []
+    await syncProviderCatalog({ provider: { id: 'p', name: 'RootPanel', routing_enabled: true, catalog_mode: 'linked_only', fill_gaps: true }, adapter, store: hidden.store, rules: [], log: silentLogger })
+    expect((hidden.calls.fill[0] as { ps: string }[]).map((r) => r.ps)).toEqual(['ps-1', 'ps-3'])
+
     const big = { getServices: async () => Array.from({ length: 40 }, (_, i) => svc(String(100 + i), `Roblox Followers ${i % 20}`, `Roblox Followers ${i}`, i < 20 ? 'Followers' : 'Likes')), getBalance: adapter.getBalance }
     const many = makeStore()
     const r2 = await syncProviderCatalog({ provider: { id: 'p', name: 'RootPanel', routing_enabled: true, catalog_mode: 'linked_only', fill_gaps: true }, adapter: big, store: many.store, rules: [], log: silentLogger })

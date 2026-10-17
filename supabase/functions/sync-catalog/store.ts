@@ -172,6 +172,16 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       return rows.map((r) => r.slug)
     },
 
+    async loadSellingProviderServices(providerId) {
+      const rows = await fetchAll<{ provider_service_id: string }>(
+        (from, to) =>
+          db.from('provider_service_offers').select('provider_service_id, service:services!inner(is_active)')
+            .eq('provider_id', providerId).eq('service.is_active', true).order('id').range(from, to),
+        'load selling provider services',
+      )
+      return rows.map((r) => r.provider_service_id)
+    },
+
     async loadReferenceServices() {
       return (must(await db.rpc('storefront_reference_services'), 'load reference services') ?? []) as { platform: string; category: string; name: string }[]
     },

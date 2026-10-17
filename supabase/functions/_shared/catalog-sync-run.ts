@@ -86,6 +86,8 @@ export interface CatalogStore {
   loadPlatformSlugs?(activeOnly?: boolean): Promise<string[]>
   /** Every active service of the reference catalogue (platform slug, category and service name): the places it covers. Optional. */
   loadReferenceServices?(): Promise<{ platform: string; category: string; name: string }[]>
+  /** Provider services of this provider that sell on the storefront now: an ACTIVE card, or an offer on one. Optional (without it: every offer). */
+  loadSellingProviderServices?(providerId: string): Promise<string[]>
   /** A fill_gaps donor's services for the empty places (fill_storefront_gaps: twins back the existing card, the rest is published). Optional. */
   fillGaps?(providerId: string, rows: PublishRow[]): Promise<{ services_created: number; services_updated: number; linked: number; twins: number; reactivated: number }>
   /**
@@ -260,7 +262,8 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
       const chosen = chooseGapFillers(candidates, slugs, referenceCells(await store.loadReferenceServices()))
       // what already sells through this provider (its card, or an offer on another card) needs nothing; the rest is named and written,
       // FILL_BUDGET per run (naming is the costly part: a big donor's first fill takes a few runs)
-      const offered = new Set(providerOffers.map((o) => o.provider_service_id))
+      // (a card the compaction hid does not sell: it is sent again and comes back)
+      const offered = new Set(store.loadSellingProviderServices ? await store.loadSellingProviderServices(provider.id) : providerOffers.map((o) => o.provider_service_id))
       const pending = chosen.filter((c) => !offered.has(c.id))
       const built = buildCanonicalPublishRows(pending.slice(0, FILL_BUDGET), slugs, await store.loadCategories())
       const filled = { chosen: chosen.length, created: 0, updated: 0, linked: 0, twins: 0, reactivated: 0, backlog: Math.max(0, pending.length - FILL_BUDGET) }
