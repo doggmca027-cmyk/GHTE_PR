@@ -57,6 +57,8 @@ export const PLATFORM_RULES: readonly PlatformRule[] = [
   rule('website', /трафик на сайт/i),
   rule('google-maps', /услуги google|google maps|google карты/i),
   rule('crypto-nft', /крипто|opensea|dexscreener|nft/i),
+  // a category of Tripadvisor alone (the shared "reviews" category of several sites stays with Trustpilot)
+  rule('tripadvisor', /^(?!.*(trustpilot|yelp|отзывы)).*tripadvisor/i, ['Tripadvisor']),
   rule('trustpilot', /отзывы|trustpilot|yelp|tripadvisor/i),
   rule('twitter', /twitter|\bx\b твит|\(x\)/i, ['Twitter (X)', 'Twitter']),
   rule('telegram', /telegram|телеграм/i, ['Telegram']),
@@ -115,11 +117,53 @@ export const PLATFORM_RULES: readonly PlatformRule[] = [
   rule('vk', /vk\.com|вконтакте|\bvk\b/i, ['VK.com', 'VK']),
   rule('whatsapp', /whatsapp/i, ['WhatsApp']),
   rule('xiaohongshu', /xiaohongshu|rednote/i, ['Xiaohongshu (RedNote)', 'Xiaohongshu']),
+  rule('yandex-music', /yandex music|яндекс\.? ?музык/i, ['Yandex Music']),
   rule('yandex-zen', /zen|дзен/i, ['Yandex Zen (dzen.ru)', 'Yandex Zen']),
   rule('yandex-maps', /^yandex$|яндекс/i, ['Yandex']),
 ]
 
 export const OTHER_PLATFORM = 'other'
+
+/**
+ * Smaller platforms of the registry. They are tested against the panel's CATEGORY only, and only when no rule above matched the text:
+ * a service name may mention them in passing ("Website Traffic [Choose Referrer: Fiverr ...]", "YouTube Live Steam Views").
+ */
+export const NICHE_PLATFORM_RULES: readonly PlatformRule[] = [
+  rule('roblox', /roblox/i, ['Roblox']),
+  rule('dailymotion', /dailymotion/i, ['Dailymotion']),
+  rule('periscope', /periscope/i, ['Periscope']),
+  rule('prime-gs', /prime\.gs/i, ['Prime.gs']),
+  rule('w-tv', /\bw\.tv\b/i, ['W.TV', 'W.tv']),
+  rule('vc-ru', /vc\.ru/i, ['VC.ru']),
+  rule('avito', /avito|авито/i, ['Avito']),
+  rule('9gag', /9gag/i, ['9GAG']),
+  rule('dtf', /\bdtf\b/i, ['DTF']),
+  rule('fiverr', /fiverr/i, ['Fiverr']),
+  rule('imdb', /\bimdb\b/i, ['IMDb']),
+  rule('kuaishou', /kuaishou/i, ['Kuaishou']),
+  rule('loco', /\bloco\b/i, ['Loco']),
+  rule('mixch', /mixch/i, ['Mixch']),
+  rule('napster', /napster/i, ['Napster']),
+  rule('openrec', /openrec/i, ['Openrec']),
+  rule('pandatv', /panda ?tv/i, ['PandaTV']),
+  rule('provenexpert', /proven ?expert/i, ['ProvenExpert']),
+  rule('shedevrum', /shedevrum|шедеврум/i, ['Shedevrum']),
+  rule('spreaker', /spreaker/i, ['Spreaker']),
+  rule('steam', /\bsteam\b/i, ['Steam']),
+  rule('topick', /topick/i, ['Topick']),
+  rule('triller', /triller/i, ['Triller']),
+  rule('ttinglive', /tting ?live/i, ['TtingLive']),
+  rule('sitejabber', /sitejabber/i, ['Sitejabber']),
+  rule('email-marketing', /e-?mail marketing/i, ['Email']),
+  rule('max', /\bmax messenger\b|мессенджер max/i, ['MAX']),
+]
+
+/** The niche platform a panel category names, if the registry has it. */
+export function nichePlatform(categoryRaw: string, knownSlugs: ReadonlySet<string>): PlatformChoice | null {
+  const text = stripDecor(categoryRaw)
+  const r = NICHE_PLATFORM_RULES.find((x) => x.test.test(text))
+  return r && knownSlugs.has(r.slug) ? { slug: r.slug, brands: r.brands } : null
+}
 
 export interface PlatformChoice {
   slug: string
@@ -145,12 +189,32 @@ export const categoryKey = (categoryRaw: string): string => stripDecor(categoryR
  */
 export function isPublishable(c: PublishCandidate): boolean {
   return (
-    (c.serviceType ?? 'Default').trim().toLowerCase() === 'default' &&
+    isLinkAndQuantity(c.serviceType, c.name) &&
     c.rate > 0 &&
     Number.isInteger(c.min) && c.min > 0 &&
     Number.isInteger(c.max) && c.max >= c.min &&
     stripDecor(c.name).replace(/[^\p{L}]/gu, '').length >= 3
   )
+}
+
+/**
+ * Types of panels that name the action instead of the order form (RootPanel): those that take nothing but a link and a quantity. Comments,
+ * reviews, polls, packages, accounts, tools and the like need more than the order form collects, so they are not on the list.
+ */
+export const LINK_AND_QUANTITY_TYPES: ReadonlySet<string> = new Set([
+  'followers', 'live viewers', 'traffic', 'views', 'likes', 'track & playlist plays', 'members', 'video & shorts views', 'post reactions', 'post views',
+  'video likes', 'shares', 'page & post likes', 'post & video views', 'plays', 'page & profile followers', 'reposts', 'saves', 'subscribers',
+  'channel subscribers', 'stories', 'live stream viewers', 'group members', 'video views', 'reactions', 'watch time', 'listeners', 'channel members',
+  'upvotes', 'server members', 'monthly listeners', 'post & profile clicks', 'installs & downloads', 'story & spotlight views', 'connections',
+  'channel followers', 'repins', 'playlist adds', 'clicks', 'spotlight likes & favorites', 'reblogs', 're-ups', 'community subscribers', 'pin views',
+  'spotlight reposts', 'music plays',
+])
+
+/** A plain "Default" service, or an action type of LINK_AND_QUANTITY_TYPES whose name does not ask for texts, mentions or a package. */
+export function isLinkAndQuantity(serviceType: string | null, name: string): boolean {
+  const type = (serviceType ?? 'Default').trim().toLowerCase()
+  if (type === 'default') return true
+  return LINK_AND_QUANTITY_TYPES.has(type) && !/custom|mention|package|\bpoll|\bvotes?\b|hashtag|subscription/i.test(name)
 }
 
 export interface BuildResult {
@@ -174,7 +238,8 @@ export function buildPublishRows(candidates: readonly PublishCandidate[], knownS
     const key = categoryKey(c.categoryRaw)
     let cat = categoryCache.get(key)
     if (!cat) {
-      const platform = detectPlatform(c.categoryRaw, knownSlugs)
+      const found = detectPlatform(c.categoryRaw, knownSlugs)
+      const platform = found.slug === OTHER_PLATFORM && found.brands.length === 0 ? (nichePlatform(c.categoryRaw, knownSlugs) ?? found) : found
       const t = translateCategory(c.categoryRaw, { brands: platform.brands, platformSlug: platform.slug })
       cat = { platform, name: t.name, nameRu: t.nameRu, translated: t.translated }
       categoryCache.set(key, cat)
@@ -284,6 +349,24 @@ export function genericLabel(name: string, brands: readonly string[]): string | 
   return n === '' ? null : n
 }
 
+/** Where a donor service belongs on the storefront: its platform (shared rules on category + name, then niche and donor rules) and action. */
+export function canonicalPlace(c: Pick<PublishCandidate, 'categoryRaw' | 'name'> & { serviceType?: string | null }, knownSlugs: ReadonlySet<string>): { platform: PlatformChoice; action: Action } {
+  const text = `${c.categoryRaw} ${c.name}`
+  let platform = detectPlatform(text, knownSlugs)
+  if (platform.slug === OTHER_PLATFORM && platform.brands.length === 0) {
+    const niche = nichePlatform(c.categoryRaw, knownSlugs)
+    if (niche) platform = niche
+  }
+  if (platform.slug === OTHER_PLATFORM && platform.brands.length === 0) {
+    const extra = DONOR_PLATFORM_RULES.find((r) => r.test.test(stripDecor(text)))
+    if (extra && knownSlugs.has(extra.slug)) platform = { slug: extra.slug, brands: extra.brands }
+  }
+  // a panel that names the action in the type ("Post Reactions", "Live Stream Viewers") says it best; otherwise category, then name
+  const type = (c.serviceType ?? '').trim()
+  const actionType = LINK_AND_QUANTITY_TYPES.has(type.toLowerCase()) ? type : ''
+  return { platform, action: detectAction(actionType, c.categoryRaw, c.name) }
+}
+
 export function buildCanonicalPublishRows(
   candidates: readonly PublishCandidate[],
   knownSlugs: ReadonlySet<string>,
@@ -296,13 +379,7 @@ export function buildCanonicalPublishRows(
       result.skipped++
       continue
     }
-    const text = `${c.categoryRaw} ${c.name}`
-    let platform = detectPlatform(text, knownSlugs)
-    if (platform.slug === OTHER_PLATFORM && platform.brands.length === 0) {
-      const extra = DONOR_PLATFORM_RULES.find((r) => r.test.test(stripDecor(text)))
-      if (extra && knownSlugs.has(extra.slug)) platform = { slug: extra.slug, brands: extra.brands }
-    }
-    const action = detectAction(c.categoryRaw, c.name)
+    const { platform, action } = canonicalPlace(c, knownSlugs)
     const brand = platform.brands[0]
     const label = brand ? null : (PLATFORM_LABEL[platform.slug] ?? PLATFORM_LABEL[OTHER_PLATFORM])
     const match = existing.find((e) => e.platform === platform.slug && action.same.includes(genericLabel(e.name, platform.brands) ?? ''))
@@ -325,4 +402,89 @@ export function buildCanonicalPublishRows(
     })
   }
   return result
+}
+
+// ---------------------------------------------------------------------------
+// Filling the gaps (providers.fill_gaps)
+// ---------------------------------------------------------------------------
+// A donor normally only backs the storefront's reference cards. With fill_gaps it also puts its own services where the reference catalogue
+// sells nothing: a platform without a single reference service, or an action of a covered platform that no reference SERVICE sells
+// ("Roblox Followers", "Rumble Live Stream"). Never filled: the catch-all "other" platform, "other services" of a covered platform and the
+// NO_FILL_ACTIONS. Each run publishes at most
+// FILL_PER_CELL services per place and provider (the cheapest; twins by fingerprint count once), so a gap is filled, not flooded.
+
+/** Platforms never filled: the catch-all, and services that no longer exist (Periscope closed in 2021). */
+export const NO_FILL_PLATFORMS: ReadonlySet<string> = new Set([OTHER_PLATFORM, 'periscope'])
+
+export interface ReferenceCells {
+  /** Platforms with at least one active reference service. */
+  platforms: ReadonlySet<string>
+  /** "platform:action" of every active reference category. */
+  cells: ReadonlySet<string>
+}
+
+/** Services a donor puts into one empty place per run (the cheapest; fingerprint twins count once). */
+export const FILL_PER_CELL = 10
+
+/** The places the reference catalogue covers, from its active services (platform slug, category and service name in English). */
+export function referenceCells(services: ReadonlyArray<{ platform: string; category: string; name: string }>): ReferenceCells {
+  const platforms = new Set<string>()
+  const cells = new Set<string>()
+  for (const s of services) {
+    platforms.add(s.platform)
+    // the category says it when it can ("Instagram Likes"); a catch-all category ("VK") leaves it to the service's name
+    cells.add(`${s.platform}:${detectAction(s.category, s.name).key}`)
+  }
+  return { platforms, cells }
+}
+
+/**
+ * Actions never filled: traffic (website traffic with a network as the referrer: Website Traffic sells it), votes (a poll needs the answer)
+ * and reviews (they need texts); the order form collects neither.
+ */
+export const NO_FILL_ACTIONS: ReadonlySet<string> = new Set(['traffic', 'votes', 'reviews'])
+
+/** May a donor publish into this platform + action? */
+export function isGap(platform: string, action: string, ref: ReferenceCells): boolean {
+  if (NO_FILL_PLATFORMS.has(platform) || NO_FILL_ACTIONS.has(action)) return false
+  if (!ref.platforms.has(platform)) return true
+  return action !== OTHER_ACTION.key && !ref.cells.has(`${platform}:${action}`)
+}
+
+/**
+ * The donor services to put into the gaps: publishable, in an empty place, at most `perCell` per place (cheapest first; services with the
+ * same fingerprint count once, the database keeps one card of them).
+ */
+export function chooseGapFillers<C extends PublishCandidate & { fingerprint?: string | null }>(
+  candidates: readonly C[], knownSlugs: ReadonlySet<string>, ref: ReferenceCells, perCell = FILL_PER_CELL,
+): C[] {
+  const byCell = new Map<string, C[]>()
+  for (const c of candidates) {
+    if (!isPublishable(c)) continue
+    const { platform, action } = canonicalPlace(c, knownSlugs)
+    if (!isGap(platform.slug, action.key, ref)) continue
+    // a mixed panel category ("... Twitter ..." holding "YouTube Subscribers") or a referrer ("YouTube Likes [Telegram.org]"): a name that
+    // mentions any other platform is not trusted with a place of its own
+    const name = stripDecor(c.name)
+    if (PLATFORM_RULES.some((r) => r.brands.length > 0 && r.slug !== platform.slug && r.test.test(name))) continue
+    // what the name itself sells must be missing too ("Twitter Tweet Views" in a panel's "Live" category: views are already on sale)
+    const byName = detectAction(c.name).key
+    if (byName !== OTHER_ACTION.key && byName !== action.key && !isGap(platform.slug, byName, ref)) continue
+    const key = `${platform.slug}:${action.key}`
+    const list = byCell.get(key) ?? []
+    list.push(c)
+    byCell.set(key, list)
+  }
+  const out: C[] = []
+  for (const list of byCell.values()) {
+    const seen = new Set<string>()
+    for (const c of [...list].sort((a, b) => a.rate - b.rate || a.id.localeCompare(b.id))) {
+      const fp = c.fingerprint || c.id
+      if (seen.has(fp)) continue
+      if (seen.size >= perCell) break
+      seen.add(fp)
+      out.push(c)
+    }
+  }
+  return out
 }

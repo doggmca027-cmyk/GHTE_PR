@@ -51,14 +51,16 @@ interface OfferJoinRow extends Omit<ExistingOffer, 'source' | 'cost_per_1000'> {
 
 export function createSupabaseCatalogStore(db: Db): CatalogStore {
   return {
-    loadProviderServices: (providerId) =>
-      fetchAll<ExistingProviderService>(
+    async loadProviderServices(providerId) {
+      const rows = await fetchAll<ExistingProviderService & { fp_base?: string | null; fp_tags?: string | null; fp_refill?: string | null }>(
         (from, to) =>
           db.from('provider_services')
-            .select('id, external_service_id, name, category_raw, rate_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, service_type, description, is_dripfeed_enabled, is_active')
+            .select('id, external_service_id, name, category_raw, rate_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, service_type, description, is_dripfeed_enabled, is_active, fp_base, fp_tags, fp_refill')
             .eq('provider_id', providerId).order('id').range(from, to),
         'load provider_services',
-      ),
+      )
+      return rows.map(({ fp_base, fp_tags, fp_refill, ...r }) => ({ ...r, fingerprint: fp_base ? `${fp_base}|${fp_tags ?? ''}|${fp_refill ?? ''}` : null }))
+    },
 
     async upsertProviderServices(rows) {
       const saved: { id: string; external_service_id: string }[] = []
@@ -162,9 +164,22 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
       }
     },
 
-    async loadPlatformSlugs() {
-      const rows = await fetchAll<{ slug: string }>((from, to) => db.from('platforms').select('slug').order('slug').range(from, to), 'load platforms')
+    async loadPlatformSlugs(activeOnly = false) {
+      const rows = await fetchAll<{ slug: string }>(
+        (from, to) => (activeOnly ? db.from('platforms').select('slug').eq('active', true) : db.from('platforms').select('slug')).order('slug').range(from, to),
+        'load platforms',
+      )
       return rows.map((r) => r.slug)
+    },
+
+    async loadReferenceServices() {
+      return (must(await db.rpc('storefront_reference_services'), 'load reference services') ?? []) as { platform: string; category: string; name: string }[]
+    },
+
+    async fillGaps(providerId, rows: PublishRow[]) {
+      return must(await db.rpc('fill_storefront_gaps', { p_provider_id: providerId, p_rows: rows }), 'fill storefront gaps') as {
+        services_created: number; services_updated: number; linked: number; twins: number; reactivated: number
+      }
     },
 
     async publishServices(providerId, rows: PublishRow[]) {

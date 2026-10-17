@@ -40,13 +40,14 @@ describe('the platform list', () => {
     const platforms = [info('zzz', 'Zzz', 5), info('telegram', 'Telegram', 10), info('instagram', 'Instagram', 20), info('tiktok', 'TikTok', 30), info('aaa', 'Aaa', 5), info('youtube', 'YouTube', 40)]
     const entries = platformEntries(platforms, counted())
     // the mock catalog: telegram has 4 services, instagram 2, tiktok 2
-    expect(entries.map((e) => [e.slug, e.count])).toEqual([['telegram', 4], ['instagram', 2], ['tiktok', 2], ['aaa', 0], ['zzz', 0], ['youtube', 0]])
+    expect(entries.map((e) => [e.slug, e.count])).toEqual([['telegram', 4], ['instagram', 2], ['tiktok', 2]])
   })
 
-  it('every platform is listed whether or not it has services: that is the point of the list', () => {
-    const entries = platformEntries([...MOCK_PLATFORMS], [])
-    expect(entries).toHaveLength(MOCK_PLATFORMS.length)
-    expect(entries.every((e) => e.count === 0)).toBe(true)
+  it('a platform with nothing on sale is not listed at all (no empty "No services yet" cards)', () => {
+    expect(platformEntries([...MOCK_PLATFORMS], [])).toEqual([])
+    const entries = platformEntries([...MOCK_PLATFORMS], counted())
+    expect(entries.length).toBeGreaterThan(0)
+    expect(entries.every((e) => e.count > 0)).toBe(true)
   })
 
   it('a platform with categories but missing from the registry is added, so its services stay reachable', () => {

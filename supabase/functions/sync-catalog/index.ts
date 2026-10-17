@@ -36,6 +36,7 @@ interface ProviderRow {
   routing_enabled: boolean
   catalog_mode: 'publish' | 'linked_only'
   publish_mapping: 'translate' | 'canonical'
+  fill_gaps: boolean
 }
 
 const json = (body: unknown, status = 200) =>
@@ -110,7 +111,7 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
       }
     }
     const providers = must(
-      await db.from('providers').select('id, name, api_url, api_key_encrypted, routing_enabled, catalog_mode, publish_mapping').eq('is_active', true).eq('id', target),
+      await db.from('providers').select('id, name, api_url, api_key_encrypted, routing_enabled, catalog_mode, publish_mapping, fill_gaps').eq('is_active', true).eq('id', target),
       'load providers',
     ) as ProviderRow[]
 

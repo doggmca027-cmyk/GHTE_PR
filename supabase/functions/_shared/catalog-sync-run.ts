@@ -34,7 +34,7 @@ import {
   type ProviderSyncReport,
   type ServiceRow,
 } from './catalog-sync.ts'
-import { buildCanonicalPublishRows, buildPublishRows, isPublishable, type ExistingCategory, type PublishCandidate, type PublishRow } from './catalog-publish.ts'
+import { buildCanonicalPublishRows, buildPublishRows, chooseGapFillers, isPublishable, referenceCells, type ExistingCategory, type PublishCandidate, type PublishRow } from './catalog-publish.ts'
 import type { Logger } from './logger.ts'
 import type { IProviderAdapter } from './providers/contract.ts'
 import { groupByService, serviceCostBasis, type PricingOffer } from './service-cost.ts'
@@ -80,8 +80,12 @@ export interface CatalogStore {
   publishServices?(providerId: string, rows: PublishRow[]): Promise<{ categories_changed: number; services_created: number; services_updated: number }>
   /** The storefront's active categories with their platform (canonical publishing puts donor services into them). Optional. */
   loadCategories?(): Promise<ExistingCategory[]>
-  /** Slugs of the platforms of the registry (a category on an unknown platform goes to "other"). */
-  loadPlatformSlugs?(): Promise<string[]>
+  /** Slugs of the platforms of the registry (a category on an unknown platform goes to "other"); `activeOnly`: the ones customers see. */
+  loadPlatformSlugs?(activeOnly?: boolean): Promise<string[]>
+  /** Every active service of the reference catalogue (platform slug, category and service name): the places it covers. Optional. */
+  loadReferenceServices?(): Promise<{ platform: string; category: string; name: string }[]>
+  /** A fill_gaps donor's services for the empty places (fill_storefront_gaps: twins back the existing card, the rest is published). Optional. */
+  fillGaps?(providerId: string, rows: PublishRow[]): Promise<{ services_created: number; services_updated: number; linked: number; twins: number; reactivated: number }>
   /**
    * Refresh last_synced_at of every active row of the provider except `skipIds` (the ones the panel no longer lists), inside the database.
    * Optional: a store without it gets every row rewritten on every run.
@@ -98,7 +102,7 @@ export interface CatalogStore {
 
 export interface SyncProviderInput {
   /** routing_enabled false: the catalogue is imported and kept current, but nothing of this provider is put on the storefront. */
-  provider: { id: string; name: string; routing_enabled?: boolean; catalog_mode?: 'publish' | 'linked_only'; publish_mapping?: 'translate' | 'canonical' }
+  provider: { id: string; name: string; routing_enabled?: boolean; catalog_mode?: 'publish' | 'linked_only'; publish_mapping?: 'translate' | 'canonical'; fill_gaps?: boolean }
   adapter: CatalogAdapter
   store: CatalogStore
   rules: PriceRule[]
@@ -236,6 +240,40 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
     }
   }
 
+  // 5c. A donor with fill_gaps puts its services where the reference catalogue sells nothing: empty platforms and missing actions, at most
+  //     FILL_PER_CELL per place (catalog-publish.ts). Twins of a card already on sale back that card instead. The new cards are priced in
+  //     step 6 like every other card of this provider. A failure here is reported but never stops the pricing.
+  let filledAny = false
+  if (provider.routing_enabled !== false && provider.catalog_mode === 'linked_only' && provider.fill_gaps === true
+    && store.fillGaps && store.loadReferenceServices && store.loadPlatformSlugs && store.loadCategories) {
+    try {
+      const fingerprintOf = new Map(existingPS.map((e) => [e.external_service_id, e.fingerprint ?? null] as const))
+      const idOf = new Map([...existingPS.map((e) => [e.external_service_id, e.id] as const), ...saved.map((s) => [s.external_service_id, s.id] as const)])
+      const candidates = valid.flatMap((s) => {
+        const id = idOf.get(s.externalServiceId)
+        return id ? [{ id, name: s.name, categoryRaw: s.categoryRaw, serviceType: s.type ?? null, rate: s.ratePer1000, min: s.minQuantity, max: s.maxQuantity, description: s.description ?? null, fingerprint: fingerprintOf.get(s.externalServiceId) ?? null }] : []
+      })
+      // only the platforms customers can see: a switched-off platform is never filled
+      const slugs = new Set(await store.loadPlatformSlugs(true))
+      const chosen = chooseGapFillers(candidates, slugs, referenceCells(await store.loadReferenceServices()))
+      const built = buildCanonicalPublishRows(chosen, slugs, await store.loadCategories())
+      const filled = { chosen: chosen.length, created: 0, updated: 0, linked: 0, twins: 0, reactivated: 0 }
+      for (let i = 0; i < built.rows.length; i += PUBLISH_CHUNK) {
+        const r = await store.fillGaps(provider.id, built.rows.slice(i, i + PUBLISH_CHUNK))
+        filled.created += r.services_created ?? 0
+        filled.updated += r.services_updated ?? 0
+        filled.linked += r.linked ?? 0
+        filled.twins += r.twins ?? 0
+        filled.reactivated += r.reactivated ?? 0
+      }
+      report.filled = filled
+      filledAny = filled.created + filled.reactivated + filled.linked > 0
+    } catch (e) {
+      log.error('filling the storefront gaps failed', { err: e, providerId: provider.id, error_code: 'catalog_fill_failed' })
+      report.warning = [report.warning, `filling the gaps failed: ${e instanceof Error ? e.message : 'unknown error'}`].filter(Boolean).join('; ')
+    }
+  }
+
   // 6. Storefront services that sell through this provider: priced from their cheapest usable offer (read after steps 3-5, so a
   //    deactivated provider service, a suspended anomaly or a changed cost is already reflected).
   const reactivatedPsIds = new Set(existingPS.filter((e) => diff.reactivated.has(e.external_service_id)).map((e) => e.id))
@@ -273,8 +311,8 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
   if (planned.length > 0) await store.updateServices(planned.map((p) => p.row))
 
   // 7. Variant groups (Economy / Standard / Premium cards) follow what the storefront now sells. Only after a run of a provider that
-  //    publishes its catalogue; a failure here never fails the sync.
-  if (provider.routing_enabled !== false && provider.catalog_mode !== 'linked_only' && store.regroupVariants) {
+  //    publishes its catalogue (or filled a gap); a failure here never fails the sync.
+  if (provider.routing_enabled !== false && (provider.catalog_mode !== 'linked_only' || filledAny) && store.regroupVariants) {
     try {
       const g = await store.regroupVariants()
       report.variants = { groups: g.groups, services: g.services_in_groups }

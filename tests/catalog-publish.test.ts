@@ -318,7 +318,7 @@ describe('the catalog sync publishes what it just stored', () => {
     const src = fs.readFileSync(path.join(ROOT, 'supabase/functions/sync-catalog/index.ts'), 'utf8')
     expect(src).toContain('let target = onlyProvider')
     expect(src).toContain("db.rpc('claim_catalog_sync_provider')")
-    expect(src).toContain("select('id, name, api_url, api_key_encrypted, routing_enabled, catalog_mode, publish_mapping')")
+    expect(src).toContain("select('id, name, api_url, api_key_encrypted, routing_enabled, catalog_mode, publish_mapping, fill_gaps')")
     // the claim itself only hands out routing-enabled providers (tests/catalog-sync-rotation.test.ts runs it)
     const sql = fs.readFileSync(path.join(ROOT, 'supabase/migrations/20261203000000_catalog_sync_rotation.sql'), 'utf8')
     expect(sql).toMatch(/where is_active and routing_enabled/)

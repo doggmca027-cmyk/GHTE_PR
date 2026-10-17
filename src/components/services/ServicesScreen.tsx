@@ -56,9 +56,11 @@ export function mergePlatforms(registry: PlatformInfo[] | null, categories: Read
 export function platformEntries(platforms: PlatformInfo[], categories: ReadonlyArray<Pick<ICategory, 'platform' | 'count'>>): PlatformEntry[] {
   const counts = new Map<string, number>()
   for (const c of categories) counts.set(c.platform, (counts.get(c.platform) ?? 0) + (c.count ?? 0))
+  // a platform with nothing on sale is not shown at all: a customer never meets an empty "No services yet" card
   return platforms
     .map((p) => ({ slug: p.slug, name: p.name, count: counts.get(p.slug) ?? 0, sortOrder: p.sortOrder }))
-    .sort((a, b) => Number(b.count > 0) - Number(a.count > 0) || (a.count > 0 ? b.count - a.count : 0) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+    .filter((p) => p.count > 0)
+    .sort((a, b) => b.count - a.count || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
     .map(({ slug, name, count }) => ({ slug, name, count }))
 }
 

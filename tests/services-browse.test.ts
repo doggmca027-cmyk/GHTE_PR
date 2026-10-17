@@ -162,8 +162,8 @@ describe('browsing the services', () => {
     expect(rows[0]).toContain('Telegram')
     expect(rows[0]).toContain('Services: 77') // 75 + 2
     expect(rows[1]).toContain('Instagram')
-    expect(rows[2]).toContain('Twitch')
-    expect(rows[2]).toContain('No services yet')
+    expect(rows).toHaveLength(2) // Twitch is in the registry but sells nothing: not shown
+    expect(host.textContent).not.toContain('No services yet')
   })
 
   it('a platform with several categories opens a list of categories; a platform with one goes straight to its services', async () => {

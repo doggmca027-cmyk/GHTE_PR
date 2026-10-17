@@ -133,6 +133,8 @@ export interface ExistingProviderService {
   /** The panel's drip-feed flag. Absent on rows read before the column existed. */
   is_dripfeed_enabled?: boolean
   is_active: boolean
+  /** The database's fingerprint of the service (fp_base | fp_tags | fp_refill), when a store reads it: twins are told apart by it. */
+  fingerprint?: string | null
 }
 
 export interface ProviderServiceRow {
@@ -549,6 +551,8 @@ export interface ProviderSyncReport {
   skippedInvalid: number
   /** What putting this provider's services on the storefront did in this run (absent when the store cannot publish). */
   published?: { created: number; updated: number; categories: number; skipped: number; untranslatedServices: number; untranslatedCategories: number; /** Services still waiting for a later run (a run translates a bounded number). */ backlog: number }
+  /** A donor with fill_gaps: what it put into the storefront's empty places. */
+  filled?: { chosen: number; created: number; updated: number; linked: number; twins: number; reactivated: number }
 }
 
 export interface SyncReport {
