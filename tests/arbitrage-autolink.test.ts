@@ -50,6 +50,17 @@ describe('service_fingerprint', () => {
     expect(await fp('🇩🇰 Spotify Plays ➜ [Denmark] [ Cheap | 10-20K/Day | Refill : Lifetime ]')).toEqual({ base: 'spotify plays', tags: 'cheap,denmark', refill: 'life' })
     expect(await fp('Facebook [👍] Post Reactions ➜ [Cheap | Fast | Refill : 30 Days] ♻️')).toEqual({ base: 'facebook post reactions', tags: 'cheap,fast,👍', refill: '30' })
   })
+
+  it('facts listed with pipes (SMMFollows): the first part is the service, markers and labels go, entities are decoded', async () => {
+    expect(await fp('Spotify Saves | 🌍Location: Hungary 🇭🇺 | ✅Quality: High Quality | ⚡Start: 0–1 Hour | 🚀Speed: 3.5K–50K/Day | ♻️Refill: Lifetime | ⬆️MAX: 1M'))
+      .toEqual({ base: 'spotify saves', tags: 'high quality,hungary', refill: 'life' })
+    expect(await fp('Telegram Members | Real | 30 Days Refill')).toEqual({ base: 'telegram members', tags: 'real', refill: '30' })
+    expect(await fp('TikTok Likes  | Brazil 🇧🇷 | High Quality | Speed: Up To 10K/Day | Refill: 365 Days | MAX 1M'))
+      .toEqual(await fp('TikTok Likes [refill: 365 days] [speed: up to 100 K/day] [start: instant] [high quality] [Brazil] [max: 1 M]'))
+    expect((await fp('Rumble Views | Real &amp; Active')).tags).toBe('real active') // no "amp" left over
+    // pipes inside a bracket are still facts of that bracket, not of the name
+    expect(await fp('Telegram Members ➜ [ Speed : 10K+/Day | Refill : 14 Days | Quality : World ]')).toEqual({ base: 'telegram members', tags: 'world', refill: '14' })
+  })
 })
 
 describe('the matcher', () => {
