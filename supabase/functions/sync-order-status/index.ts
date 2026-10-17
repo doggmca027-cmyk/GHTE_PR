@@ -148,7 +148,7 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
   // The order hub of one provider, asked for by an admin. Not under the worker's lease (the claim is atomic, so it never races the
-  // every-minute run), but one hub run per provider at a time.
+  // every-minute run), but one hub run per provider at a time (lease order-hub-<provider id>: worker_locks names are [a-z0-9_-]).
   const hubProviderId = await req.clone().json().then((b) => (typeof b?.hubProviderId === 'string' ? b.hubProviderId : null), () => null)
   if (hubProviderId) {
     const hub = await withWorkerLock(db, `order-hub-${hubProviderId.toLowerCase()}`, () => runHub(hubProviderId))
