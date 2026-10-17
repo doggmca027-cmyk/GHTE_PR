@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   FILL_PER_CELL, canonicalPlace, chooseGapFillers, isGap, isLinkAndQuantity, isPublishable, nichePlatform, referenceCells, type PublishCandidate,
 } from '../supabase/functions/_shared/catalog-publish.ts'
-import { FILL_BUDGET, syncProviderCatalog, type CatalogStore } from '../supabase/functions/_shared/catalog-sync-run.ts'
+import { FILL_BUDGET, fillProviderGaps, syncProviderCatalog, type CatalogStore } from '../supabase/functions/_shared/catalog-sync-run.ts'
 import { silentLogger } from '../supabase/functions/_shared/logger.ts'
 
 const SLUGS = new Set(['telegram', 'instagram', 'twitter', 'youtube', 'twitch', 'kick', 'website', 'roblox', 'w-tv', 'tripadvisor', 'trustpilot', 'yandex-music', 'yandex-maps', 'fiverr', 'periscope', 'other'])
@@ -167,6 +167,18 @@ describe('fill_storefront_gaps', () => {
     expect(await cardOf(x)).toBeUndefined()
   })
 
+  it('the fill job takes the fill_gaps donors in turn, each at most once in 50 minutes', async () => {
+    // the four production donors were switched on by the migrations too: start from a clean rotation of this test's two
+    await db.exec(`update providers set fill_gaps = false where id not in ('${JAP}', '${RP}'); update providers set gaps_filled_at = null`)
+    const claim = async () => (await db.query<{ id: string | null }>(`select claim_gap_fill_provider() id`)).rows[0].id
+    const first = await claim()
+    const second = await claim()
+    expect(new Set([first, second])).toEqual(new Set([JAP, RP]))
+    expect(await claim()).toBeNull() // both were just filled
+    await db.exec(`update providers set gaps_filled_at = now() - interval '1 hour' where id = '${JAP}'`)
+    expect(await claim()).toBe(JAP)
+  })
+
   it('only the database itself may call it', async () => {
     const r = (await db.query<{ anon: boolean; svc: boolean }>(`select has_function_privilege('anon', 'public.fill_storefront_gaps(uuid, jsonb)', 'execute') anon, has_function_privilege('service_role', 'public.fill_storefront_gaps(uuid, jsonb)', 'execute') svc`)).rows[0]
     expect(r).toEqual({ anon: false, svc: true })
@@ -175,65 +187,87 @@ describe('fill_storefront_gaps', () => {
   })
 })
 
-describe('the sync step', () => {
-  const makeStore = () => {
-    const calls = { fill: [] as unknown[][], publish: 0, regroup: 0 }
+describe('the fill run (sync-catalog { fillGaps: true })', () => {
+  type Cand = PublishCandidate & { fingerprint: string | null }
+  const c = (id: string, categoryRaw: string, name: string, serviceType = 'Default', rate = 1): Cand =>
+    ({ id, name, categoryRaw, serviceType, rate, min: 10, max: 1000, fingerprint: null })
+  const makeStore = (candidates: Cand[], selling: string[] = []) => {
+    const calls = { fill: [] as { ps: string; platform: string; description: string | null }[][], publish: 0, regroup: 0, dripfeed: 0, priced: 0, panel: 0 }
     const store = {
-      loadProviderServices: async () => [], touchProviderServices: async () => {},
-      upsertProviderServices: async (rows: { external_service_id: string }[]) => rows.map((r) => ({ id: `ps-${r.external_service_id}`, external_service_id: r.external_service_id })),
-      flagAnomaly: async () => {}, loadOffers: async () => [], updateOffers: async () => {}, deactivateProviderServices: async () => {},
-      loadLinkedServices: async () => [], loadServiceOffers: async () => [], updateServices: async () => {}, saveBalance: async () => {},
+      loadProviderServices: async () => { calls.panel++; return [] },
+      loadFillCandidates: async () => candidates.map((x) => ({ ...x })),
+      loadDescriptions: async (ids: string[]) => new Map(ids.map((id) => [id, `text ${id}`])),
+      loadSellingProviderServices: async () => selling,
       loadPlatformSlugs: async (activeOnly?: boolean) => (activeOnly ? ['twitter', 'roblox', 'other'] : ['twitter', 'roblox', 'periscope', 'other']),
       loadCategories: async () => [],
       loadReferenceServices: async () => [{ platform: 'twitter', category: 'Twitter Followers', name: 'Twitter Followers' }],
       publishServices: async () => { calls.publish++; return { categories_changed: 0, services_created: 0, services_updated: 0 } },
-      fillGaps: async (_p: string, rows: unknown[]) => { calls.fill.push(rows); return { services_created: rows.length, services_updated: 0, linked: 0, twins: 0, reactivated: 0 } },
+      fillGaps: async (_p: string, rows: { ps: string; platform: string; description: string | null }[]) => { calls.fill.push(rows); return { services_created: rows.length, services_updated: 0, linked: 0, twins: 0, reactivated: 0 } },
+      loadLinkedServices: async () => { calls.priced++; return [] },
+      loadServiceOffers: async () => [], updateServices: async () => {},
       regroupVariants: async () => { calls.regroup++; return { groups: 0, services_in_groups: 0 } },
+      refreshDripFeed: async () => { calls.dripfeed++; return 0 },
     } as unknown as CatalogStore
     return { store, calls }
   }
-  const svc = (id: string, categoryRaw: string, name: string, type = 'Default') =>
-    ({ externalServiceId: id, name, type, categoryRaw, ratePer1000: 1, minQuantity: 10, maxQuantity: 1000, refillSupported: false, cancelSupported: false })
-  const adapter = { getServices: async () => [
-    svc('1', 'Roblox Followers', 'Roblox Followers [30D]', 'Followers'),
-    svc('2', 'Twitter Followers', 'Twitter Followers [Real]'),
-    svc('3', 'Twitter Spaces', 'Twitter Space Listeners [15 Min]'),
-  ], getBalance: async () => ({ balance: 1, currency: 'USD' }) }
+  const donor = { id: 'p', name: 'RootPanel', routing_enabled: true, catalog_mode: 'linked_only' as const, fill_gaps: true }
+  const CATALOGUE = [
+    c('ps-1', 'Roblox Followers', 'Roblox Followers [30D]', 'Followers'),
+    c('ps-2', 'Twitter Followers', 'Twitter Followers [Real]'),
+    c('ps-3', 'Twitter Spaces', 'Twitter Space Listeners [15 Min]'),
+  ]
 
-  it('a fill_gaps donor publishes the empty places only, never its whole catalogue, and regroups the variants', async () => {
-    const { store, calls } = makeStore()
-    const report = await syncProviderCatalog({ provider: { id: 'p', name: 'RootPanel', routing_enabled: true, catalog_mode: 'linked_only', fill_gaps: true }, adapter, store, rules: [], log: silentLogger })
+  it('fills the empty places only (from the database, never the panel), with the panel texts, then prices, regroups and refreshes drip-feed', async () => {
+    const { store, calls } = makeStore(CATALOGUE)
+    const report = await fillProviderGaps({ provider: donor, store, rules: [], log: silentLogger })
+    expect(calls.panel).toBe(0)
     expect(calls.publish).toBe(0)
-    expect((calls.fill[0] as { ps: string; platform: string }[]).map((r) => [r.ps, r.platform])).toEqual([['ps-1', 'roblox'], ['ps-3', 'twitter']])
-    expect(report.filled).toMatchObject({ chosen: 2, created: 2 })
-    expect(calls.regroup).toBe(1)
+    expect(calls.fill[0].map((r) => [r.ps, r.platform, r.description])).toEqual([['ps-1', 'roblox', 'text ps-1'], ['ps-3', 'twitter', 'text ps-3']])
+    expect(report.filled).toMatchObject({ chosen: 2, created: 2, backlog: 0 })
+    expect([calls.priced, calls.regroup, calls.dripfeed]).toEqual([1, 1, 1])
   })
 
-  it('what already sells through the provider is not written again, and a run writes at most FILL_BUDGET', async () => {
-    const { store, calls } = makeStore()
-    ;(store as unknown as { loadOffers: () => Promise<unknown[]> }).loadOffers = async () => [{ id: 'o', service_id: 's', provider_id: 'p', provider_service_id: 'ps-3', cost_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: false, cancel_supported: false, source: { rate_per_1000: 1, min_quantity: 10, max_quantity: 1000, refill_supported: false, cancel_supported: false } }]
-    const report = await syncProviderCatalog({ provider: { id: 'p', name: 'RootPanel', routing_enabled: true, catalog_mode: 'linked_only', fill_gaps: true }, adapter, store, rules: [], log: silentLogger })
-    expect((calls.fill[0] as { ps: string }[]).map((r) => r.ps)).toEqual(['ps-1'])
-    expect(report.filled).toMatchObject({ chosen: 2, created: 1, backlog: 0 })
-
-    // its card was hidden (no ACTIVE card sells it): it is sent again, so the database can bring the card back
-    const hidden = makeStore()
-    ;(hidden.store as unknown as { loadOffers: () => Promise<unknown[]> }).loadOffers = (store as unknown as { loadOffers: () => Promise<unknown[]> }).loadOffers
-    ;(hidden.store as unknown as { loadSellingProviderServices: () => Promise<string[]> }).loadSellingProviderServices = async () => []
-    await syncProviderCatalog({ provider: { id: 'p', name: 'RootPanel', routing_enabled: true, catalog_mode: 'linked_only', fill_gaps: true }, adapter, store: hidden.store, rules: [], log: silentLogger })
-    expect((hidden.calls.fill[0] as { ps: string }[]).map((r) => r.ps)).toEqual(['ps-1', 'ps-3'])
-
-    const big = { getServices: async () => Array.from({ length: 40 }, (_, i) => svc(String(100 + i), `Roblox Followers ${i % 20}`, `Roblox Followers ${i}`, i < 20 ? 'Followers' : 'Likes')), getBalance: adapter.getBalance }
-    const many = makeStore()
-    const r2 = await syncProviderCatalog({ provider: { id: 'p', name: 'RootPanel', routing_enabled: true, catalog_mode: 'linked_only', fill_gaps: true }, adapter: big, store: many.store, rules: [], log: silentLogger })
-    expect(r2.filled!.chosen).toBe(20) // 10 followers + 10 likes
-    expect((many.calls.fill.flat() as unknown[]).length).toBeLessThanOrEqual(FILL_BUDGET)
+  it('what already sells (an active card) is not written again; a hidden card is, so it can come back', async () => {
+    const { store, calls } = makeStore(CATALOGUE, ['ps-3'])
+    const report = await fillProviderGaps({ provider: donor, store, rules: [], log: silentLogger })
+    expect(calls.fill[0].map((r) => r.ps)).toEqual(['ps-1'])
+    expect(report.filled).toMatchObject({ chosen: 2, created: 1 })
   })
 
-  it('a donor without fill_gaps fills nothing', async () => {
-    const { store, calls } = makeStore()
-    await syncProviderCatalog({ provider: { id: 'p', name: 'SMMStone', routing_enabled: true, catalog_mode: 'linked_only' }, adapter, store, rules: [], log: silentLogger })
+  it('nothing to do: nothing is written, priced or regrouped', async () => {
+    const { store, calls } = makeStore(CATALOGUE, ['ps-1', 'ps-3'])
+    const report = await fillProviderGaps({ provider: donor, store, rules: [], log: silentLogger })
     expect(calls.fill).toHaveLength(0)
-    expect(calls.regroup).toBe(0)
+    expect([calls.priced, calls.regroup, calls.dripfeed]).toEqual([0, 0, 0])
+    expect(report.filled).toMatchObject({ chosen: 2, created: 0, backlog: 0 })
+  })
+
+  it('a run writes at most FILL_BUDGET; the rest is the backlog of the next runs', async () => {
+    const many = Array.from({ length: 400 }, (_, i) => c(`ps-${i}`, `Roblox Section ${i}`, `Roblox Followers ${i}`, ['Followers', 'Likes', 'Members', 'Views'][i % 4], 1 + i / 1000))
+    // forty places of ten: 40 categories x 4 actions would be more, but chooseGapFillers caps each place at ten
+    const { store, calls } = makeStore(many)
+    const report = await fillProviderGaps({ provider: donor, store, rules: [], log: silentLogger })
+    expect(calls.fill.flat().length).toBe(Math.min(FILL_BUDGET, report.filled!.chosen))
+    expect(report.filled!.backlog).toBe(Math.max(0, report.filled!.chosen - FILL_BUDGET))
+  })
+
+  it('a provider that is not a fill_gaps donor is skipped', async () => {
+    for (const provider of [{ ...donor, fill_gaps: false }, { ...donor, catalog_mode: 'publish' as const }, { ...donor, routing_enabled: false }]) {
+      const { store, calls } = makeStore(CATALOGUE)
+      const report = await fillProviderGaps({ provider, store, rules: [], log: silentLogger })
+      expect(report.status).toBe('skipped')
+      expect(calls.fill).toHaveLength(0)
+    }
+  })
+
+  it('the catalogue sync itself never fills (its worker is busy enough with a big panel)', async () => {
+    const { store, calls } = makeStore(CATALOGUE)
+    const adapter = { getServices: async () => [{ externalServiceId: '1', name: 'Roblox Followers [30D]', type: 'Followers', categoryRaw: 'Roblox Followers', ratePer1000: 1, minQuantity: 10, maxQuantity: 1000, refillSupported: false, cancelSupported: false }], getBalance: async () => ({ balance: 1, currency: 'USD' }) }
+    Object.assign(store as object, {
+      touchProviderServices: async () => {}, flagAnomaly: async () => {}, loadOffers: async () => [], updateOffers: async () => {}, deactivateProviderServices: async () => {}, saveBalance: async () => {},
+      upsertProviderServices: async (rows: { external_service_id: string }[]) => rows.map((r) => ({ id: `ps-${r.external_service_id}`, external_service_id: r.external_service_id })),
+    })
+    await syncProviderCatalog({ provider: donor, adapter, store, rules: [], log: silentLogger })
+    expect(calls.fill).toHaveLength(0)
   })
 })

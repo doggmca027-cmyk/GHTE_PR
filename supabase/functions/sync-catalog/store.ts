@@ -51,15 +51,36 @@ interface OfferJoinRow extends Omit<ExistingOffer, 'source' | 'cost_per_1000'> {
 
 export function createSupabaseCatalogStore(db: Db): CatalogStore {
   return {
-    async loadProviderServices(providerId) {
-      const rows = await fetchAll<ExistingProviderService & { fp_base?: string | null; fp_tags?: string | null; fp_refill?: string | null }>(
+    loadProviderServices: (providerId) =>
+      fetchAll<ExistingProviderService>(
         (from, to) =>
           db.from('provider_services')
-            .select('id, external_service_id, name, category_raw, rate_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, service_type, description, is_dripfeed_enabled, is_active, fp_base, fp_tags, fp_refill')
+            .select('id, external_service_id, name, category_raw, rate_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, service_type, description, is_dripfeed_enabled, is_active')
             .eq('provider_id', providerId).order('id').range(from, to),
         'load provider_services',
+      ),
+
+    async loadFillCandidates(providerId) {
+      const rows = await fetchAll<{ id: string; name: string; category_raw: string | null; service_type: string | null; rate_per_1000: number | string; min_quantity: number; max_quantity: number; fp_base: string | null; fp_tags: string | null; fp_refill: string | null }>(
+        (from, to) =>
+          db.from('provider_services')
+            .select('id, name, category_raw, service_type, rate_per_1000, min_quantity, max_quantity, fp_base, fp_tags, fp_refill')
+            .eq('provider_id', providerId).eq('is_active', true).gt('rate_per_1000', 0).order('id').range(from, to),
+        'load fill candidates',
       )
-      return rows.map(({ fp_base, fp_tags, fp_refill, ...r }) => ({ ...r, fingerprint: fp_base ? `${fp_base}|${fp_tags ?? ''}|${fp_refill ?? ''}` : null }))
+      return rows.map((r) => ({
+        id: r.id, name: r.name, categoryRaw: r.category_raw ?? '', serviceType: r.service_type, rate: Number(r.rate_per_1000), min: r.min_quantity, max: r.max_quantity,
+        fingerprint: r.fp_base ? `${r.fp_base}|${r.fp_tags ?? ''}|${r.fp_refill ?? ''}` : null,
+      }))
+    },
+
+    async loadDescriptions(ids) {
+      const out = new Map<string, string | null>()
+      for (const part of chunks(ids, ID_CHUNK)) {
+        const rows = must(await db.from('provider_services').select('id, description').in('id', part), 'load descriptions') as { id: string; description: string | null }[]
+        for (const r of rows) out.set(r.id, r.description)
+      }
+      return out
     },
 
     async upsertProviderServices(rows) {

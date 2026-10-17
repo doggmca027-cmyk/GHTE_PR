@@ -88,6 +88,10 @@ export interface CatalogStore {
   loadReferenceServices?(): Promise<{ platform: string; category: string; name: string }[]>
   /** Provider services of this provider that sell on the storefront now: an ACTIVE card, or an offer on one. Optional (without it: every offer). */
   loadSellingProviderServices?(providerId: string): Promise<string[]>
+  /** A fill_gaps donor's active services with their fingerprint, without their texts (the fill run reads the database, not the panel). */
+  loadFillCandidates?(providerId: string): Promise<(PublishCandidate & { fingerprint: string | null })[]>
+  /** The panel's texts of these provider services (only for the few the fill run writes). */
+  loadDescriptions?(ids: string[]): Promise<Map<string, string | null>>
   /** A fill_gaps donor's services for the empty places (fill_storefront_gaps: twins back the existing card, the rest is published). Optional. */
   fillGaps?(providerId: string, rows: PublishRow[]): Promise<{ services_created: number; services_updated: number; linked: number; twins: number; reactivated: number }>
   /**
@@ -244,48 +248,53 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
     }
   }
 
-  // 5c. A donor with fill_gaps puts its services where the reference catalogue sells nothing: empty platforms and missing actions, at most
-  //     FILL_PER_CELL per place (catalog-publish.ts). Twins of a card already on sale back that card instead. The new cards are priced in
-  //     step 6 like every other card of this provider. A failure here is reported but never stops the pricing.
-  let filledAny = false
-  if (provider.routing_enabled !== false && provider.catalog_mode === 'linked_only' && provider.fill_gaps === true
-    && store.fillGaps && store.loadReferenceServices && store.loadPlatformSlugs && store.loadCategories) {
-    try {
-      const fingerprintOf = new Map(existingPS.map((e) => [e.external_service_id, e.fingerprint ?? null] as const))
-      const idOf = new Map([...existingPS.map((e) => [e.external_service_id, e.id] as const), ...saved.map((s) => [s.external_service_id, s.id] as const)])
-      const candidates = valid.flatMap((s) => {
-        const id = idOf.get(s.externalServiceId)
-        return id ? [{ id, name: s.name, categoryRaw: s.categoryRaw, serviceType: s.type ?? null, rate: s.ratePer1000, min: s.minQuantity, max: s.maxQuantity, description: s.description ?? null, fingerprint: fingerprintOf.get(s.externalServiceId) ?? null }] : []
-      })
-      // only the platforms customers can see: a switched-off platform is never filled
-      const slugs = new Set(await store.loadPlatformSlugs(true))
-      const chosen = chooseGapFillers(candidates, slugs, referenceCells(await store.loadReferenceServices()))
-      // what already sells through this provider (its card, or an offer on another card) needs nothing; the rest is named and written,
-      // FILL_BUDGET per run (naming is the costly part: a big donor's first fill takes a few runs)
-      // (a card the compaction hid does not sell: it is sent again and comes back)
-      const offered = new Set(store.loadSellingProviderServices ? await store.loadSellingProviderServices(provider.id) : providerOffers.map((o) => o.provider_service_id))
-      const pending = chosen.filter((c) => !offered.has(c.id))
-      const built = buildCanonicalPublishRows(pending.slice(0, FILL_BUDGET), slugs, await store.loadCategories())
-      const filled = { chosen: chosen.length, created: 0, updated: 0, linked: 0, twins: 0, reactivated: 0, backlog: Math.max(0, pending.length - FILL_BUDGET) }
-      for (let i = 0; i < built.rows.length; i += PUBLISH_CHUNK) {
-        const r = await store.fillGaps(provider.id, built.rows.slice(i, i + PUBLISH_CHUNK))
-        filled.created += r.services_created ?? 0
-        filled.updated += r.services_updated ?? 0
-        filled.linked += r.linked ?? 0
-        filled.twins += r.twins ?? 0
-        filled.reactivated += r.reactivated ?? 0
-      }
-      report.filled = filled
-      filledAny = filled.created + filled.reactivated + filled.linked > 0
-    } catch (e) {
-      log.error('filling the storefront gaps failed', { err: e, providerId: provider.id, error_code: 'catalog_fill_failed' })
-      report.warning = [report.warning, `filling the gaps failed: ${e instanceof Error ? e.message : 'unknown error'}`].filter(Boolean).join('; ')
-    }
-  }
-
   // 6. Storefront services that sell through this provider: priced from their cheapest usable offer (read after steps 3-5, so a
   //    deactivated provider service, a suspended anomaly or a changed cost is already reflected).
   const reactivatedPsIds = new Set(existingPS.filter((e) => diff.reactivated.has(e.external_service_id)).map((e) => e.id))
+  await priceLinkedServices(provider, store, rules, report, reactivatedPsIds, deactivatedPsIds)
+
+  // 7. Variant groups (Economy / Standard / Premium cards) follow what the storefront now sells. Only after a run of a provider that
+  //    publishes its catalogue; a failure here never fails the sync.
+  if (provider.routing_enabled !== false && provider.catalog_mode !== 'linked_only' && store.regroupVariants) {
+    try {
+      const g = await store.regroupVariants()
+      report.variants = { groups: g.groups, services: g.services_in_groups }
+    } catch (e) {
+      log.warn('regrouping the service variants failed', { err: e, providerId: provider.id, error_code: 'regroup_failed' })
+    }
+  }
+
+  // 8. Cheaper donor services for the storefront (at most hourly, whichever provider this run synced): exact matches are linked, the
+  //    rest wait for an admin. Before step 9, so a new offer counts for drip-feed. A failure here never fails the sync.
+  if (store.refreshArbitrage) {
+    try {
+      const a = await store.refreshArbitrage()
+      if (!a.skipped) report.arbitrage = { autoLinked: a.auto_linked ?? 0, pending: a.pending ?? 0 }
+    } catch (e) {
+      log.warn('the arbitrage matcher failed', { err: e, providerId: provider.id, error_code: 'arbitrage_refresh_failed' })
+    }
+  }
+
+  // 9. Which storefront services offer gradual delivery (drip-feed), from the flags this run may have changed. After every provider:
+  //    a donor's offer counts too. A failure here never fails the sync.
+  if (store.refreshDripFeed) {
+    try {
+      report.dripfeedChanged = await store.refreshDripFeed()
+    } catch (e) {
+      log.warn('refreshing the drip-feed flags of services failed', { err: e, providerId: provider.id, error_code: 'dripfeed_refresh_failed' })
+    }
+  }
+  return report
+}
+
+/**
+ * Storefront services that sell through this provider: priced from their cheapest usable offer. `reactivatedPsIds` / `deactivatedPsIds`:
+ * provider services this run brought back / lost (empty for a run that did not read the panel).
+ */
+async function priceLinkedServices(
+  provider: SyncProviderInput['provider'], store: CatalogStore, rules: PriceRule[], report: ProviderSyncReport,
+  reactivatedPsIds: ReadonlySet<string>, deactivatedPsIds: ReadonlySet<string>,
+): Promise<void> {
   const linked = await store.loadLinkedServices(provider.id)
   const offersByService = groupByService(linked.length > 0 ? await store.loadServiceOffers(linked.map((s) => s.id)) : [])
   const planned: { row: ServiceRow; plan: ReturnType<typeof planService> }[] = []
@@ -318,10 +327,59 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
     if (plan.deactivated) report.services.deactivated++
   }
   if (planned.length > 0) await store.updateServices(planned.map((p) => p.row))
+}
 
-  // 7. Variant groups (Economy / Standard / Premium cards) follow what the storefront now sells. Only after a run of a provider that
-  //    publishes its catalogue (or filled a gap); a failure here never fails the sync.
-  if (provider.routing_enabled !== false && (provider.catalog_mode !== 'linked_only' || filledAny) && store.regroupVariants) {
+export interface FillGapsInput {
+  provider: SyncProviderInput['provider']
+  store: CatalogStore
+  rules: PriceRule[]
+  log: Logger
+}
+
+/**
+ * A donor with fill_gaps puts its services where the reference catalogue sells nothing (empty platforms and missing actions), at most
+ * FILL_PER_CELL per place (catalog-publish.ts chooseGapFillers). Its own run, apart from the catalogue sync: it reads the donor's services
+ * from the database (the panel is not asked: a big catalogue already fills the catalogue sync's worker), writes FILL_BUDGET of them
+ * (fill_storefront_gaps: a twin of a card on sale backs that card instead), prices what sells through the donor with the rules, and
+ * rebuilds the variant groups and drip-feed flags.
+ */
+export async function fillProviderGaps(input: FillGapsInput): Promise<ProviderSyncReport> {
+  const { provider, store, rules, log } = input
+  const report = emptyProviderReport(provider.name)
+  if (provider.routing_enabled === false || provider.catalog_mode !== 'linked_only' || provider.fill_gaps !== true
+    || !store.loadFillCandidates || !store.fillGaps || !store.loadReferenceServices || !store.loadPlatformSlugs || !store.loadCategories) {
+    report.status = 'skipped'
+    report.error = 'not a fill_gaps donor'
+    return report
+  }
+  const candidates = await store.loadFillCandidates(provider.id)
+  // only the platforms customers can see: a switched-off platform is never filled
+  const slugs = new Set(await store.loadPlatformSlugs(true))
+  const chosen = chooseGapFillers(candidates, slugs, referenceCells(await store.loadReferenceServices()))
+  // what already sells through this provider (an active card, or an offer on one) needs nothing; a card the compaction hid does not sell,
+  // so it is sent again and comes back. The rest is named and written, FILL_BUDGET per run.
+  const selling = new Set(store.loadSellingProviderServices ? await store.loadSellingProviderServices(provider.id) : [])
+  const pending = chosen.filter((c) => !selling.has(c.id)).slice(0, FILL_BUDGET)
+  if (pending.length > 0 && store.loadDescriptions) {
+    const texts = await store.loadDescriptions(pending.map((c) => c.id))
+    for (const c of pending) c.description = texts.get(c.id) ?? null
+  }
+  const built = buildCanonicalPublishRows(pending, slugs, await store.loadCategories())
+  const filled = { chosen: chosen.length, created: 0, updated: 0, linked: 0, twins: 0, reactivated: 0, backlog: Math.max(0, chosen.filter((c) => !selling.has(c.id)).length - FILL_BUDGET) }
+  for (let i = 0; i < built.rows.length; i += PUBLISH_CHUNK) {
+    const r = await store.fillGaps(provider.id, built.rows.slice(i, i + PUBLISH_CHUNK))
+    filled.created += r.services_created ?? 0
+    filled.updated += r.services_updated ?? 0
+    filled.linked += r.linked ?? 0
+    filled.twins += r.twins ?? 0
+    filled.reactivated += r.reactivated ?? 0
+  }
+  report.filled = filled
+  if (filled.created + filled.reactivated + filled.linked === 0) return report
+
+  // the new cards were written at a placeholder price: the rules price them now, in this run
+  await priceLinkedServices(provider, store, rules, report, new Set(), new Set())
+  if (store.regroupVariants) {
     try {
       const g = await store.regroupVariants()
       report.variants = { groups: g.groups, services: g.services_in_groups }
@@ -329,20 +387,6 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
       log.warn('regrouping the service variants failed', { err: e, providerId: provider.id, error_code: 'regroup_failed' })
     }
   }
-
-  // 8. Cheaper donor services for the storefront (at most hourly, whichever provider this run synced): exact matches are linked, the
-  //    rest wait for an admin. Before step 9, so a new offer counts for drip-feed. A failure here never fails the sync.
-  if (store.refreshArbitrage) {
-    try {
-      const a = await store.refreshArbitrage()
-      if (!a.skipped) report.arbitrage = { autoLinked: a.auto_linked ?? 0, pending: a.pending ?? 0 }
-    } catch (e) {
-      log.warn('the arbitrage matcher failed', { err: e, providerId: provider.id, error_code: 'arbitrage_refresh_failed' })
-    }
-  }
-
-  // 9. Which storefront services offer gradual delivery (drip-feed), from the flags this run may have changed. After every provider:
-  //    a donor's offer counts too. A failure here never fails the sync.
   if (store.refreshDripFeed) {
     try {
       report.dripfeedChanged = await store.refreshDripFeed()

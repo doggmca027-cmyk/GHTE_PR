@@ -1,5 +1,7 @@
 // Supabase Edge Function (Deno): POST /sync-catalog  { providerId?: uuid, republishOffset?: number, republishLimit?: number }
 //   Without providerId (pg_cron, every 5 minutes): ONE due provider per run, in rotation (claim_catalog_sync_provider).
+//   { fillGaps: true [, providerId] } (pg_cron fill-storefront-gaps, every 15 minutes): ONE fill_gaps donor puts its services into the
+//   storefront's empty places (fillProviderGaps; the donor is read from the database, its panel is not asked).
 //   republishOffset / republishLimit (with providerId): put that slice of the provider's catalogue on the storefront again instead of what is new or
 //   changed, e.g. after the translator improved. A run does a bounded amount of work, so a big catalogue is taken slice by slice.
 //
@@ -18,7 +20,7 @@ import { mockModeEnabled } from '../_shared/mock-guard.ts'
 import { withWorkerLock } from '../_shared/worker-lock.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createSupabaseCatalogStore, must, type Db } from './store.ts'
-import { syncProviderCatalog } from '../_shared/catalog-sync-run.ts'
+import { fillProviderGaps, syncProviderCatalog } from '../_shared/catalog-sync-run.ts'
 import { emptyProviderReport, isAuthorized, summarize, type ProviderSyncReport } from '../_shared/catalog-sync.ts'
 import { recordHeartbeat } from '../_shared/heartbeat.ts'
 import { instrument } from '../_shared/http.ts'
@@ -76,9 +78,11 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
 
   let onlyProvider: string | undefined
   let republish: { offset: number; limit: number } | undefined
+  let fillMode = false
   try {
     const body = await req.json()
     if (typeof body?.providerId === 'string') onlyProvider = body.providerId
+    fillMode = body?.fillGaps === true
     if (onlyProvider && Number.isInteger(body?.republishOffset) && body.republishOffset >= 0 && Number.isInteger(body?.republishLimit) && body.republishLimit > 0) {
       republish = { offset: body.republishOffset, limit: Math.min(body.republishLimit, 3000) }
     }
@@ -96,9 +100,39 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
   }
   return locked.value
 
+  async function loadRules(): Promise<PriceRule[]> {
+    return (must(
+      await db.from('price_rules').select('id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, name_all, name_any, priority, is_active').eq('is_active', true),
+      'load price_rules',
+    ) as unknown as (Omit<PriceRule, 'platform'> & { platform: { slug: string } | null })[]).map((r) => ({
+      ...r,
+      platform: r.platform?.slug ?? null,
+      value: Number(r.value),
+      min_rate: r.min_rate == null ? null : Number(r.min_rate),
+      max_rate: r.max_rate == null ? null : Number(r.max_rate),
+    }))
+  }
+
   async function runCatalog(): Promise<Response> {
   const reports: ProviderSyncReport[] = []
   try {
+    if (fillMode) {
+      const target = onlyProvider ?? ((must(await db.rpc('claim_gap_fill_provider'), 'claim gap-fill provider') as string | null) ?? undefined)
+      if (!target) {
+        await recordHeartbeat(db, 'sync-catalog', { ok: true, startedAt: started }, log)
+        return json({ success: true, idle: 'no donor is due for filling' })
+      }
+      const [provider] = must(
+        await db.from('providers').select('id, name, api_url, api_key_encrypted, routing_enabled, catalog_mode, publish_mapping, fill_gaps').eq('is_active', true).eq('id', target),
+        'load provider',
+      ) as ProviderRow[]
+      if (!provider) return json({ success: true, idle: 'provider not found or inactive' })
+      const report = await fillProviderGaps({ provider, store: createSupabaseCatalogStore(db), rules: await loadRules(), log })
+      log.info('gap fill complete', { providerId: provider.id, filled: report.filled ?? null })
+      await recordHeartbeat(db, 'sync-catalog', { ok: true, startedAt: started }, log)
+      return json(summarize([report]))
+    }
+
     // The scheduled run (every 5 minutes) syncs ONE provider: the routing-enabled one that is due and waited longest
     // (claim_catalog_sync_provider, migration 20261203000000). All of them in one invocation exceeded the worker's resources.
     // A provider with routing switched off (imported, not enabled yet) is only synced when it is asked for by id.
@@ -115,16 +149,7 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
       'load providers',
     ) as ProviderRow[]
 
-    const rules = (must(
-      await db.from('price_rules').select('id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, name_all, name_any, priority, is_active').eq('is_active', true),
-      'load price_rules',
-    ) as unknown as (Omit<PriceRule, 'platform'> & { platform: { slug: string } | null })[]).map((r) => ({
-      ...r,
-      platform: r.platform?.slug ?? null,
-      value: Number(r.value),
-      min_rate: r.min_rate == null ? null : Number(r.min_rate),
-      max_rate: r.max_rate == null ? null : Number(r.max_rate),
-    }))
+    const rules = await loadRules()
 
     for (const provider of providers) {
       try {
