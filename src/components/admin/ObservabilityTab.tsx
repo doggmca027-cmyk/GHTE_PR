@@ -3,7 +3,7 @@ import { Activity, AlertCircle, CheckCircle2, Database, RefreshCw, TriangleAlert
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useLoader } from '@/hooks/useLoader'
-import { plural, timeAgoRu, usd } from '@/lib/admin-view'
+import { isBlip, plural, timeAgoRu, usd } from '@/lib/admin-view'
 import { haptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
@@ -210,6 +210,7 @@ function ProviderRow({ provider: p }: { provider: ProviderPulse }) {
   const kinds = Object.entries(p.errorsByKind).sort((a, b) => b[1] - a[1])
   const rate = p.errorRate === null ? '—' : `${Math.round(p.errorRate * 100)}%`
   const bad = p.errorRate !== null && p.errorRate >= 0.5 && p.checks >= 5
+  const blip = isBlip(p)
   return (
     <article className={cn('rounded-3xl border bg-surface p-4 shadow-card', p.health === 'unavailable' || bad ? 'border-rose-300' : p.lowBalance ? 'border-amber-300' : 'border-blue-100/70')} aria-label={`Провайдер ${p.name}`}>
       <div className="flex items-start justify-between gap-3">
@@ -225,11 +226,14 @@ function ProviderRow({ provider: p }: { provider: ProviderPulse }) {
         <div><dt className="text-xs text-content-secondary">Задержка</dt><dd className="font-bold text-content-primary">{p.avgLatencyMs === null ? '—' : `${p.avgLatencyMs} мс`}</dd><dd className="text-[11px] text-content-secondary">{p.maxLatencyMs === null ? '' : `макс. ${p.maxLatencyMs} мс`}</dd></div>
         <div><dt className="text-xs text-content-secondary">Баланс</dt><dd className={cn('font-bold', p.lowBalance ? 'text-amber-600' : 'text-content-primary')}>{p.lastBalanceSync ? usd(p.balance) : '—'}</dd><dd className="text-[11px] text-content-secondary">{p.currency}</dd></div>
       </dl>
-      {kinds.length > 0 && (
+      {kinds.length > 0 && (blip ? (
+        // a working provider with a stray failure among 1000+ checks: a note, not an alarm
+        <p className="mt-2 text-[11px] text-content-secondary">Разовые сбои: {kinds.map(([k, n]) => `${k} × ${n}`).join(', ')}</p>
+      ) : (
         <p className="mt-2 flex flex-wrap gap-1.5">
           {kinds.map(([k, n]) => <span key={k} className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700">{k} × {n}</span>)}
         </p>
-      )}
+      ))}
       <p className="mt-2 text-xs text-content-secondary">Заказов за период: {p.orders} · неудачных {p.ordersFailed} · на удержании {p.ordersHeld}</p>
     </article>
   )

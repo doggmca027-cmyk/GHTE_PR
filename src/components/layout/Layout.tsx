@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { Header } from './Header'
 import { BottomNav } from '@/components/navigation/BottomNav'
 import { NAV_ITEMS, type TabId } from '@/constants/navigation'
+import { useWide } from '@/lib/layout-mode'
+import { WebLayout } from './WebLayout'
 
 interface Props {
   activeTab: TabId
@@ -17,7 +19,13 @@ interface Props {
   children: ReactNode
 }
 
-export function Layout({ activeTab, onTabChange, balance, currency, onTopUp, isAdmin = false, guest = false, onSignIn, children }: Props) {
+export function Layout(props: Props) {
+  // the website (a browser, not Telegram) has its own full-width frame; the Mini App keeps the phone screen below, untouched
+  const wide = useWide()
+  return wide ? <WebLayout {...props} /> : <AppLayout {...props} />
+}
+
+function AppLayout({ activeTab, onTabChange, balance, currency, onTopUp, isAdmin = false, guest = false, onSignIn, children }: Props) {
   return (
     <div className="flex min-h-full items-center justify-center bg-backdrop sm:p-6">
       <div className="relative mx-auto flex h-[100dvh] w-full max-w-[430px] flex-col overflow-hidden bg-gradient-to-b from-screen to-screen-end sm:h-[860px] sm:max-h-[calc(100dvh-3rem)] sm:rounded-[40px] sm:shadow-2xl">

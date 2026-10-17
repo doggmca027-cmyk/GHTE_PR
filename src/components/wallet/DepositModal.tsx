@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { sheetOverlayClass, sheetPanelClass, useWide } from '@/lib/layout-mode'
 import { Check, CheckCircle2, FlaskConical, Loader2, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/context/AuthContext'
@@ -44,6 +45,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export function DepositModal({ session, wallet, initialAmount, onClose, onCredited }: Props) {
   const t = useT()
+  const wide = useWide()
   const { applyWallet } = useAuth()
   const [amountText, setAmountText] = useState(initialAmount ? String(initialAmount) : '10')
   const [asset, setAsset] = useState<DepositAsset>('TON')
@@ -165,10 +167,10 @@ export function DepositModal({ session, wallet, initialAmount, onClose, onCredit
   const inFlight = phase.kind === 'signing' || phase.kind === 'verifying' || phase.kind === 'mock_awaiting' || phase.kind === 'credited' || phase.kind === 'delayed'
 
   return (
-    <div className="absolute inset-0 z-50 flex items-end animate-fade-in" role="dialog" aria-modal="true" aria-label={t('Top up balance')}>
+    <div className={sheetOverlayClass(wide)} role="dialog" aria-modal="true" aria-label={t('Top up balance')}>
       <button type="button" aria-label={t('Close')} onClick={() => !busy && onClose()} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
 
-      <div className="relative z-10 max-h-[94%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]">
+      <div className={cn('relative z-10 max-h-[94%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]', sheetPanelClass(wide))}>
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-blue-100" />
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-extrabold text-content-primary">{t('Top up balance')}</h2>

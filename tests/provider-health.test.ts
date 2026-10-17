@@ -7,6 +7,8 @@ import {
   balanceAction,
   classifyPingError,
   isBalanceParseError,
+  isNoAnswer,
+  localOutage,
   sanitizeBalance,
   nextPenalty,
   runHealthChecks,
@@ -387,6 +389,58 @@ describe('provider-health-monitor core', () => {
     await Promise.all([runHealthChecks(ports), runHealthChecks(ports)])
     expect(await statusOf(db, A)).toBe('unavailable')
     expect(alerts).toHaveLength(1)
+  })
+
+  describe('our own network failing is not an outage of every provider', () => {
+    const D = '00000000-0000-0000-0000-0000000000d2'
+    const E = '00000000-0000-0000-0000-0000000000e2'
+    const more = async () => db.exec(`insert into providers(id, name, api_url, is_active, routing_enabled, health_status) values
+      ('${D}', 'D', 'https://d', true, true, 'healthy'), ('${E}', 'E', 'https://e', true, true, 'healthy')`)
+    const logged = async () => (await db.query<{ n: number }>(`select count(*)::int n from provider_health_log where error_kind is not null`)).rows[0].n
+
+    it('three panels silent in the same run: nothing flips, nobody is alerted, no failure is logged, the penalty stays', async () => {
+      await more()
+      const { ports, alerts } = portsFor(db, { down: new Set(), hang: new Set([A, B, D]), debounce: true })
+      for (let i = 0; i < 3; i++) {
+        const r = await runHealthChecks(ports)
+        expect(r.providers.filter((p) => p.errorKind === 'local_network').map((p) => p.name).sort()).toEqual(['A', 'B', 'D'])
+        expect(r.unavailable).toBe(0)
+      }
+      for (const id of [A, B, D, E]) expect(await statusOf(db, id)).toBe('healthy')
+      expect(alerts).toEqual([])
+      expect(await logged()).toBe(0)
+      const pen = (await db.query<{ p: number }>(`select max(reliability_penalty_multiplier)::float8 p from providers`)).rows[0].p
+      expect(pen).toBe(1)
+    })
+
+    it('one silent panel among four is that panel\'s own failure (the usual two-in-a-row rule applies)', async () => {
+      await more()
+      const { ports, alerts } = portsFor(db, { down: new Set(), hang: new Set([A]), debounce: true })
+      await runHealthChecks(ports)
+      expect(await statusOf(db, A)).toBe('healthy') // first failure: soft
+      await runHealthChecks(ports)
+      expect(await statusOf(db, A)).toBe('unavailable')
+      expect(alerts).toEqual([{ name: 'A', kind: 'down' }])
+      expect(await logged()).toBe(2)
+    })
+
+    it('panels that ANSWER with errors are their own failures, however many at once', async () => {
+      await more()
+      const { ports } = portsFor(db, { down: new Set([A, B, D]) })
+      const r = await runHealthChecks(ports)
+      expect(r.unavailable).toBe(3)
+      expect(r.providers.some((p) => p.errorKind === 'local_network')).toBe(false)
+    })
+
+    it('the rule itself', () => {
+      expect(localOutage(3, 7)).toBe(true)
+      expect(localOutage(2, 7)).toBe(false)
+      expect(localOutage(3, 12)).toBe(false) // a third of all at least
+      expect(localOutage(4, 12)).toBe(true)
+      expect(isNoAnswer(new SMMProviderError('timeout', 'x'))).toBe(true)
+      expect(isNoAnswer(new SMMProviderError('network', 'x'))).toBe(true)
+      expect(isNoAnswer(new SMMProviderError('http', 'x', { httpStatus: 503 }))).toBe(false)
+    })
   })
 
   it('a provider that throws or hangs does not stop the batch', async () => {

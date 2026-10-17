@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import type { TabId } from '@/constants/navigation'
 import { HomeScreen } from '@/components/home/HomeScreen'
+import { WebHome } from '@/components/home/WebHome'
 import type { DepositRequest } from '@/components/wallet/WalletScreen'
 import { ServicesScreen } from '@/components/services/ServicesScreen'
 import type { SupportRequest } from '@/components/support/SupportScreen'
@@ -14,7 +15,9 @@ import { GuestPrompt } from '@/components/auth/GuestPrompt'
 import { tr, useT } from '@/i18n'
 import { tm } from '@/i18n/messages'
 import { bindAnalytics, track } from '@/lib/analytics-client'
+import { LayoutModeContext, layoutModeFor } from '@/lib/layout-mode'
 import { applyStartReferral } from '@/lib/referral-start'
+import { insideTelegram } from '@/services/api/web-auth'
 import { WebApp } from '@/lib/webapp'
 
 // The first screen (Home) and the catalogue are in the main bundle. Everything else is its own chunk: the wallet with TON Connect (the
@@ -48,6 +51,9 @@ function FullScreen({ children }: { children: React.ReactNode }) {
     </div>
   )
 }
+
+// Decided once: inside Telegram the Mini App's phone screen, in a browser the full-width website.
+const LAYOUT_MODE = layoutModeFor(insideTelegram())
 
 export default function App() {
   const t = useT()
@@ -119,8 +125,12 @@ export default function App() {
 
   const { user, wallet } = state.session
   const guest = state.session.isGuest === true
+  const wide = LAYOUT_MODE === 'web'
+  // a form-like screen keeps a readable width on the website
+  const readable = (node: React.ReactNode) => (wide ? <div className="mx-auto max-w-3xl">{node}</div> : node)
 
   return (
+    <LayoutModeContext.Provider value={LAYOUT_MODE}>
     <SignInContext.Provider value={openSignIn}>
     <Layout
       activeTab={tab}
@@ -146,11 +156,18 @@ export default function App() {
       ) : tab === 'admin' && user.isAdmin ? (
         <AdminScreen session={state.session} />
       ) : tab === 'settings' ? (
-        <SettingsScreen session={state.session} onSignOut={signOut} />
+        readable(<SettingsScreen session={state.session} onSignOut={signOut} />)
       ) : tab === 'support' ? (
-        <SupportScreen session={state.session} request={supportRequest} onRequestHandled={clearSupportRequest} />
+        readable(<SupportScreen session={state.session} request={supportRequest} onRequestHandled={clearSupportRequest} />)
       ) : tab === 'orders' ? (
         <OrdersScreen session={state.session} onBrowse={() => setTab('services')} onReportIssue={(order) => { setSupportRequest({ orderId: order.id }); setTab('support') }} />
+      ) : wide ? (
+        <WebHome
+          session={state.session}
+          onBrowse={(platform) => { setServicesPlatform(platform ?? null); setTab('services'); window.scrollTo({ top: 0 }) }}
+          onTopUp={topUp}
+          onViewOrders={() => changeTab('orders')}
+        />
       ) : (
         <HomeScreen
           session={state.session}
@@ -167,5 +184,6 @@ export default function App() {
       )}
     </Layout>
     </SignInContext.Provider>
+    </LayoutModeContext.Provider>
   )
 }

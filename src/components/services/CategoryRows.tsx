@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { useLanguage, useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
+import { useWide } from '@/lib/layout-mode'
 import { localizedName } from '@/lib/service-view'
 import type { ICategory } from '@/types/catalog'
 
@@ -15,8 +16,9 @@ interface Props {
 export function CategoryRows({ categories, onSelect, onIntent }: Props) {
   const t = useT()
   const { lang } = useLanguage()
+  const wide = useWide()
   return (
-    <ul className="space-y-2" aria-label={t('Categories')}>
+    <ul className={wide ? 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3' : 'space-y-2'} aria-label={t('Categories')}>
       {categories.map((c) => (
         <li key={c.id}>
           <button
@@ -24,7 +26,7 @@ export function CategoryRows({ categories, onSelect, onIntent }: Props) {
             onClick={() => { haptic.tap(); onSelect(c.id) }}
             onPointerDown={() => onIntent?.(c.id)}
             onMouseEnter={() => onIntent?.(c.id)}
-            className="flex w-full items-center gap-3 rounded-3xl border border-blue-100/70 bg-surface px-4 py-3.5 text-start shadow-sm transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
+            className="flex h-full w-full items-center gap-3 rounded-3xl border border-blue-100/70 bg-surface px-4 py-3.5 text-start shadow-sm transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
           >
             <span className="min-w-0 flex-1">
               <span className="line-clamp-2 block text-[15px] font-bold leading-snug text-content-primary">{localizedName(c.name, c.nameI18n, lang)}</span>

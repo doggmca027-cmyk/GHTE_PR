@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
+import { useWide } from '@/lib/layout-mode'
 import { isActiveStatus, matchesFilter, ORDER_FILTERS, type OrderFilter } from '@/lib/order-view'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
@@ -24,6 +25,7 @@ interface Props {
 
 export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
   const t = useT()
+  const wide = useWide()
   const { refreshWallet } = useAuth()
   const lastStatuses = useRef<Map<string, string>>(new Map())
   const [orders, setOrders] = useState<IOrderView[] | null>(null)
@@ -99,11 +101,11 @@ export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
         ))}
       </div>
 
-      <div className="mt-4 space-y-3">
+      <div className={wide ? 'mt-4 grid items-start gap-3 lg:grid-cols-2' : 'mt-4 space-y-3'}>
         {orders === null && !error && [0, 1].map((i) => <div key={i} className="h-[170px] animate-pulse rounded-3xl border border-blue-100/70 bg-surface/80" />)}
 
         {error && (
-          <Card className="space-y-3 text-center">
+          <Card className="col-span-full space-y-3 text-center">
             <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
             <p className="text-sm font-medium text-content-secondary">{t("Couldn't load your orders. Check your connection and retry.")}</p>
             <Button className="w-full" onClick={() => void load()}>{t('Retry')}</Button>
@@ -111,7 +113,7 @@ export function OrdersScreen({ session, onBrowse, onReportIssue }: Props) {
         )}
 
         {orders !== null && visible.length === 0 && (
-          <Card className="space-y-3 py-10 text-center">
+          <Card className="col-span-full space-y-3 py-10 text-center">
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-light text-brand">
               <ReceiptText size={26} strokeWidth={1.75} />
             </span>

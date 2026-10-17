@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { sheetOverlayClass, sheetPanelClass, useWide } from '@/lib/layout-mode'
 import { Loader2, Send, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useT } from '@/i18n'
@@ -24,6 +25,7 @@ const field = (invalid: boolean) =>
 /** New ticket form: subject, message and (optionally) the order it is about. */
 export function NewTicketModal({ session, orderId = null, onClose, onCreate }: Props) {
   const t = useT()
+  const wide = useWide()
   const [orders, setOrders] = useState<IOrderView[]>([])
   const [selected, setSelected] = useState<string>(orderId ?? '')
   const [subject, setSubject] = useState('')
@@ -62,11 +64,11 @@ export function NewTicketModal({ session, orderId = null, onClose, onCreate }: P
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={t('New support ticket')} className="absolute inset-0 z-50 flex items-end animate-fade-in">
+    <div role="dialog" aria-modal="true" aria-label={t('New support ticket')} className={sheetOverlayClass(wide)}>
       <button type="button" aria-label={t('Close')} onClick={() => !busy && onClose()} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
       <form
         onSubmit={(e) => { e.preventDefault(); void submit() }}
-        className="relative z-10 max-h-[92%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]"
+        className={cn('relative z-10 max-h-[92%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]', sheetPanelClass(wide))}
       >
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-blue-100" />
         <div className="mb-3 flex items-center justify-between">

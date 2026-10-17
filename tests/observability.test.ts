@@ -590,8 +590,8 @@ describe('get_system_health (real SQL)', () => {
     await healthLog('Panel A', 'unavailable', 'http 503', 5, 50)
     await healthLog('Panel A', 'unavailable', 'http 503', 2 * 24 * 60, 50) // outside every window
     const a = (await health(1)).providers.find((p) => p.name === 'Panel A')!
-    expect(a).toMatchObject({ checks: 10, failed_checks: 2, last_error_kind: 'http 503', errors_by_kind: { timeout: 1, 'http 503': 1 }, max_latency_ms: 8000 })
-    expect(a.avg_latency_ms).toBeGreaterThan(100)
+    expect(a).toMatchObject({ checks: 10, failed_checks: 2, last_error_kind: 'http 503', errors_by_kind: { timeout: 1, 'http 503': 1 }, max_latency_ms: 170 }) // answered checks only: a timeout's 8 s is the monitor's limit, not the panel's latency
+    expect(a.avg_latency_ms).toBe(135)
     const wide = (await health(24)).providers.find((p) => p.name === 'Panel A')!
     expect(wide.checks).toBe(10) // 2 days old row is still outside 24 h
     const b = (await health()).providers.find((p) => p.name === 'Panel B')!
@@ -792,6 +792,19 @@ describe('System Health tab', () => {
       recent_provider_errors: [{ provider_id: 'p1', provider_name: 'Backup', error_kind: 'http 503', status: 'unavailable', latency_ms: 4100, checked_at: ago(1) }],
     }), NOW), 6)
     for (const text of ['Backup', 'Недоступен', '62%', '62 из 100', '4200 мс', 'макс. 8000 мс', 'http 503 × 50', 'timeout × 12', 'Заказов за период: 9 · неудачных 4 · на удержании 2', 'Последние ошибки API провайдеров', 'последние 6 ч']) expect(out).toContain(text)
+  })
+
+  it('a working provider with one blip among 1439 checks gets a quiet note, not the red badge', async () => {
+    const out = await render(buildSystemHealth(raw({
+      providers: [{ ...raw().providers[0], name: 'JAP', health_status: 'healthy', checks: 1439, failed_checks: 1, avg_latency_ms: 420, max_latency_ms: 1200, errors_by_kind: { timeout: 1 } }],
+    }), NOW))
+    expect(out).toContain('Разовые сбои: timeout × 1')
+    expect(out).not.toContain('bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700">timeout')
+    const { isBlip } = await import('../src/lib/admin-view')
+    expect(isBlip({ health: 'healthy', errorRate: 1 / 1439, checks: 1439 })).toBe(true)
+    expect(isBlip({ health: 'healthy', errorRate: 0.02, checks: 1439 })).toBe(false)
+    expect(isBlip({ health: 'unavailable', errorRate: 0.001, checks: 1439 })).toBe(false)
+    expect(isBlip({ health: 'healthy', errorRate: 0.005, checks: 20 })).toBe(false) // too few checks to call it a blip
   })
 
   it('queues: stuck orders, open cases by severity, pipeline depth', async () => {

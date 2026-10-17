@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { ChevronRight, Search, SearchX, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { haptic } from '@/lib/haptics'
+import { cn } from '@/lib/utils'
+import { useWide } from '@/lib/layout-mode'
 import { useT } from '@/i18n'
 import { searchPlatforms } from '@/lib/platform-search'
 import { PlatformBadge } from './PlatformIcon'
@@ -21,6 +23,7 @@ interface Props {
 /** Every platform as a list (not tabs): the colour tile, the name and how many services it has. Tapping one opens its services. */
 export function PlatformList({ platforms, onSelect }: Props) {
   const t = useT()
+  const wide = useWide()
   const [query, setQuery] = useState('')
   // in memory and instant: the list is already on the device, typing never makes a request
   const shown = useMemo(() => searchPlatforms(platforms, query), [platforms, query])
@@ -28,7 +31,7 @@ export function PlatformList({ platforms, onSelect }: Props) {
   return (
     <>
       {/* stays at the top of the scrolling screen while the list moves under it; the background matches the screen's, so it looks seamless */}
-      <div data-testid="platform-search" className="sticky top-0 z-10 -mx-5 bg-screen px-5 pb-2 pt-1">
+      <div data-testid="platform-search" className={wide ? 'sticky top-16 z-10 -mx-1 bg-screen/95 px-1 pb-3 pt-1 backdrop-blur sm:max-w-xl' : 'sticky top-0 z-10 -mx-5 bg-screen px-5 pb-2 pt-1'}>
         <label className="relative block">
           <span className="sr-only">{t('Search platforms')}</span>
           <Search size={16} strokeWidth={1.75} className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-content-muted" />
@@ -63,7 +66,7 @@ export function PlatformList({ platforms, onSelect }: Props) {
           <p className="text-xs text-content-secondary">{t('Try another name.')}</p>
         </Card>
       ) : (
-        <ul className="mt-1 space-y-2" aria-label={t('Platforms')}>
+        <ul className={cn('mt-1', wide ? 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3' : 'space-y-2')} aria-label={t('Platforms')}>
           {shown.map((p) => (
             <li key={p.slug}>
               <button

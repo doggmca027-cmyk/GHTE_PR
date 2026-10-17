@@ -122,3 +122,8 @@ export function analyticsRequest(key: AnalyticsRangeKey, now: Date = new Date())
   if (key === 'today') return { startDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString() }
   return { startDate: new Date(now.getTime() - (key === '7d' ? 7 : 30) * DAY).toISOString() }
 }
+
+/** A working provider whose failures in the window are under 1% of its checks (one network blip among ~1440 a day): worth a note, not an alarm. */
+export function isBlip(p: { health: string; errorRate: number | null; checks: number }): boolean {
+  return p.health === 'healthy' && p.errorRate !== null && p.checks >= 100 && p.errorRate < 0.01
+}

@@ -9,6 +9,9 @@
 //     logged and the status stays; a real outage is declared one minute later.
 //   * A transient failure (5xx, timeout, network) is retried once before it counts as a failed check at all: a panel that answers
 //     502 for a second would otherwise flip to unavailable, alert the admins and push traffic to the fallback for a minute.
+//   * Every provider is pinged first (in parallel), then judged. When several panels give NO answer at all in the same run (a timeout or a
+//     dropped connection, at least LOCAL_OUTAGE_MIN of them and a third of all), the cause is our own network, not each of those providers:
+//     their checks are inconclusive (status, penalty and alerts untouched, nothing logged), so one blip on our side never reads as an outage.
 //   * Alerts fire only on a real transition and only for the caller that won the compare-and-set on
 //     providers.health_status, so a cron tick that finds nothing new (or two overlapping runs) sends nothing.
 //   * Routing needs no extra work: selectBestOffer / the pricing view already read providers.health_status.
@@ -188,6 +191,20 @@ export function classifyPingError(e: unknown): { status: 'unavailable' | 'inconc
 
 class PingTimeout extends Error {}
 
+/** At least this many providers with no answer in one run (and a third of all of them) means our own network failed, not theirs. */
+export const LOCAL_OUTAGE_MIN = 3
+
+/** The panel never answered (a timeout or a dropped connection): unlike a 5xx or a refused key this can be our side of the line. */
+export function isNoAnswer(e: unknown): boolean {
+  if (e instanceof PingTimeout) return true
+  return e instanceof SMMProviderError && (e.kind === 'timeout' || e.kind === 'network')
+}
+
+/** Several independent panels silent in the same run: our network, not theirs. */
+export function localOutage(silent: number, total: number): boolean {
+  return silent >= LOCAL_OUTAGE_MIN && silent * 3 >= total
+}
+
 /** A failure that a repeat a moment later can cure: a timeout, a dropped connection or a 5xx. A refused key or a garbage answer is not. */
 export function isTransientPingError(e: unknown): boolean {
   if (e instanceof PingTimeout) return true
@@ -251,22 +268,45 @@ async function adjustPenalty<P extends MonitoredProvider>(p: P, outcome: 'ok' | 
   }
 }
 
-async function checkOne<P extends MonitoredProvider>(p: P, ports: HealthPorts<P>): Promise<ProviderCheckReport> {
-  const clock = ports.now ?? (() => new Date())
+interface Probe {
+  reading: BalanceReading | void
+  /** Set when the ping (and its retry, for a transient failure) failed. */
+  error?: unknown
+  latencyMs: number
+}
+
+/** The ping with its single retry. Never throws: the outcome is judged afterwards, with the whole run in view. */
+async function probe<P extends MonitoredProvider>(p: P, ports: HealthPorts<P>): Promise<Probe> {
   const started = Date.now()
-  let to: HealthStatus | null = 'healthy'
-  let errorKind: string | null = null
-  let reading: BalanceReading | void = undefined
+  const ping = () => withTimeout(Promise.resolve().then(() => ports.ping(p)), ports.pingTimeoutMs ?? PING_TIMEOUT_MS)
   try {
-    const ping = () => withTimeout(Promise.resolve().then(() => ports.ping(p)), ports.pingTimeoutMs ?? PING_TIMEOUT_MS)
     try {
-      reading = await ping()
+      return { reading: await ping(), latencyMs: Date.now() - started }
     } catch (first) {
       if (!isTransientPingError(first)) throw first
       await new Promise((r) => setTimeout(r, ports.retryDelayMs ?? PING_RETRY_DELAY_MS))
-      reading = await ping()
+      return { reading: await ping(), latencyMs: Date.now() - started }
     }
-  } catch (e) {
+  } catch (error) {
+    return { reading: undefined, error: error ?? new Error('ping failed'), latencyMs: Date.now() - started }
+  }
+}
+
+async function checkOne<P extends MonitoredProvider>(p: P, result: Probe, localNetworkDown: boolean, ports: HealthPorts<P>): Promise<ProviderCheckReport> {
+  const clock = ports.now ?? (() => new Date())
+  let to: HealthStatus | null = 'healthy'
+  let errorKind: string | null = null
+  const reading = result.reading
+  const latencyMs = result.latencyMs
+
+  // our own network dropped this run: say nothing about this provider (it is asked again in a minute)
+  if (result.error !== undefined && localNetworkDown && isNoAnswer(result.error)) {
+    await ports.applyCheck(p, p.healthStatus, p.healthStatus, clock().toISOString()).catch(() => {})
+    return { providerId: p.id, name: p.name, from: p.healthStatus, to: 'unchanged_inconclusive', alert: null, balanceAlert: false, errorKind: 'local_network' }
+  }
+
+  if (result.error !== undefined) {
+    const e = result.error
     if (e instanceof PingTimeout) {
       to = 'unavailable'
       errorKind = 'timeout'
@@ -276,7 +316,6 @@ async function checkOne<P extends MonitoredProvider>(p: P, ports: HealthPorts<P>
       errorKind = c.label
     }
   }
-  const latencyMs = Date.now() - started
   const checkedAt = clock().toISOString()
   const base = { providerId: p.id, name: p.name, from: p.healthStatus, errorKind }
 
@@ -308,7 +347,10 @@ async function checkOne<P extends MonitoredProvider>(p: P, ports: HealthPorts<P>
 /** Checks every provider. Never throws because of a single provider. */
 export async function runHealthChecks<P extends MonitoredProvider>(ports: HealthPorts<P>): Promise<HealthRunReport> {
   const providers = await ports.listProviders()
-  const settled = await Promise.allSettled(providers.map((p) => checkOne(p, ports)))
+  const probes = await Promise.all(providers.map((p) => probe(p, ports)))
+  const silent = probes.filter((r) => r.error !== undefined && isNoAnswer(r.error)).length
+  const localNetworkDown = localOutage(silent, providers.length)
+  const settled = await Promise.allSettled(providers.map((p, i) => checkOne(p, probes[i], localNetworkDown, ports)))
 
   const report: HealthRunReport = { checked: providers.length, healthy: 0, unavailable: 0, inconclusive: 0, errors: 0, alerts: 0, balanceAlerts: 0, providers: [] }
   settled.forEach((r, i) => {

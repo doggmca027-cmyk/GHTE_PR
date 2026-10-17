@@ -152,3 +152,12 @@ export async function fetchCategoryServices(session: AuthSession, categoryId: st
   )
   return rows.map(serviceFromRow)
 }
+
+/** The lowest price per 1,000 in the whole storefront (the website's "from $X / 1K"), or null when it cannot be read. */
+export async function fetchLowestRate(session: AuthSession): Promise<number | null> {
+  if (session.isMock) return MOCK_CATALOG.services.reduce<number | null>((min, s) => (min === null || s.ratePer1000 < min ? s.ratePer1000 : min), null)
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null
+  const rows = await rest<Array<{ customer_rate_per_1000: number | string }>>(
+    'services?select=customer_rate_per_1000&is_active=eq.true&customer_rate_per_1000=gt.0&order=customer_rate_per_1000.asc&limit=1', session.token)
+  return rows.length > 0 ? Number(rows[0].customer_rate_per_1000) : null
+}

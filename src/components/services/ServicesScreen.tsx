@@ -8,6 +8,7 @@ import { useServiceSearch } from '@/hooks/useServiceSearch'
 import { useLanguage, useT } from '@/i18n'
 import { track } from '@/lib/analytics-client'
 import { haptic } from '@/lib/haptics'
+import { useWide } from '@/lib/layout-mode'
 import { localizedName } from '@/lib/service-view'
 import { SERVICES_PAGE, fetchCategories, fetchCategoryServices, fetchPlatforms } from '@/services/api/services'
 import { cachedLoad, isFresh, peekCached } from '@/lib/catalog-cache'
@@ -63,6 +64,7 @@ export function platformEntries(platforms: PlatformInfo[], categories: ReadonlyA
 
 export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform = null }: Props) {
   const t = useT()
+  const wide = useWide()
   const { lang } = useLanguage()
   const { refreshWallet } = useAuth()
   const [state, setState] = useState<Overview>({ status: 'loading' })
@@ -191,7 +193,7 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
       {state.status === 'loading' && <div className="space-y-3">{[0, 1, 2].map((i) => <SkeletonCard key={i} />)}</div>}
 
       {state.status === 'error' && (
-        <Card className="space-y-3 text-center">
+        <Card className="col-span-full space-y-3 text-center">
           <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
           <p className="text-sm font-medium text-content-secondary">{t("Couldn't load services. Check your connection and retry.")}</p>
           <Button className="w-full" onClick={load}>{t('Retry')}</Button>
@@ -205,11 +207,11 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
       )}
 
       {state.status === 'ready' && platform !== null && search.active && (
-        <div className="mt-1 space-y-3">
+        <div className={wide ? 'mt-1 grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3' : 'mt-1 space-y-3'}>
           {(search.status === 'idle' || search.status === 'loading') && [0, 1, 2].map((i) => <SkeletonCard key={i} />)}
 
           {search.status === 'error' && (
-            <Card className="space-y-3 text-center">
+            <Card className="col-span-full space-y-3 text-center">
               <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
               <p className="text-sm font-medium text-content-secondary">{t("Couldn't load services. Check your connection and retry.")}</p>
               <Button className="w-full" onClick={search.retry}>{t('Retry')}</Button>
@@ -217,7 +219,7 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
           )}
 
           {search.status === 'ready' && search.items.length === 0 && (
-            <Card className="space-y-2 py-10 text-center">
+            <Card className="col-span-full space-y-2 py-10 text-center">
               <SearchX size={28} strokeWidth={1.75} className="mx-auto text-content-muted" />
               <p className="text-sm font-semibold text-content-primary">{t('No services found')}</p>
               <p className="text-xs text-content-secondary">{t('Try other words or a country.')}</p>
@@ -229,7 +231,7 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
           ))}
 
           {search.status === 'ready' && search.more && (
-            <Button className="w-full" onClick={search.loadMore} disabled={search.loadingMore} aria-busy={search.loadingMore}>
+            <Button className="col-span-full w-full" onClick={search.loadMore} disabled={search.loadingMore} aria-busy={search.loadingMore}>
               {search.loadingMore && <Loader2 size={16} strokeWidth={2} className="animate-spin" />} {t('Show more')}
             </Button>
           )}
@@ -238,7 +240,7 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
 
       {state.status === 'ready' && platform !== null && !search.active && categoryId === null && (
         platformCategories.length === 0 ? (
-          <Card className="space-y-2 py-10 text-center">
+          <Card className="col-span-full space-y-2 py-10 text-center">
             <SearchX size={28} strokeWidth={1.75} className="mx-auto text-content-muted" />
             <p className="text-sm font-semibold text-content-primary">{t('No services here yet')}</p>
             <p className="text-xs text-content-secondary">{t('Try another platform or category.')}</p>
@@ -249,11 +251,11 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
       )}
 
       {state.status === 'ready' && platform !== null && !search.active && categoryId !== null && (
-        <div className="space-y-3">
+        <div className={wide ? 'grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3' : 'space-y-3'}>
           {(!page || page.status === 'loading') && [0, 1, 2].map((i) => <SkeletonCard key={i} />)}
 
           {page?.status === 'error' && (
-            <Card className="space-y-3 text-center">
+            <Card className="col-span-full space-y-3 text-center">
               <AlertCircle size={28} strokeWidth={1.75} className="mx-auto text-brand" />
               <p className="text-sm font-medium text-content-secondary">{t("Couldn't load services. Check your connection and retry.")}</p>
               <Button className="w-full" onClick={() => { const id = categoryId; setCategoryId(null); setTimeout(() => setCategoryId(id), 0) }}>{t('Retry')}</Button>
@@ -261,7 +263,7 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
           )}
 
           {page?.status === 'ready' && page.items.length === 0 && (
-            <Card className="space-y-2 py-10 text-center">
+            <Card className="col-span-full space-y-2 py-10 text-center">
               <SearchX size={28} strokeWidth={1.75} className="mx-auto text-content-muted" />
               <p className="text-sm font-semibold text-content-primary">{t('No services here yet')}</p>
               <p className="text-xs text-content-secondary">{t('Try another platform or category.')}</p>
@@ -274,7 +276,7 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
           ))}
 
           {page?.status === 'ready' && page.more && (
-            <Button className="w-full" onClick={loadMore} disabled={page.loadingMore} aria-busy={page.loadingMore}>
+            <Button className="col-span-full w-full" onClick={loadMore} disabled={page.loadingMore} aria-busy={page.loadingMore}>
               {page.loadingMore && <Loader2 size={16} strokeWidth={2} className="animate-spin" />} {t('Show more')}
             </Button>
           )}

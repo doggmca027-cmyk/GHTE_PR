@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useTonWallet } from '@/hooks/useTonWallet'
 import { useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
+import { useWide } from '@/lib/layout-mode'
 import { LEDGER_FILTERS, matchesLedgerFilter } from '@/lib/ledger-view'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
@@ -30,6 +31,7 @@ interface Props {
 
 export function WalletScreen({ session, depositRequest, onRequestHandled }: Props) {
   const t = useT()
+  const wide = useWide()
   const { applyWallet } = useAuth()
   const tonWallet = useTonWallet()
   const [entries, setEntries] = useState<LedgerEntry[] | null>(null)
@@ -94,9 +96,14 @@ export function WalletScreen({ session, depositRequest, onRequestHandled }: Prop
         <TonWalletButton wallet={tonWallet} />
       </div>
 
-      <BalanceCard wallet={session.wallet} onTopUp={() => { haptic.tap(); setInitialAmount(undefined); setDepositOpen(true) }} />
+      {/* the website: the balance on the left (it stays in view), the transactions on the right; the app: one column */}
+      <div className={wide ? 'grid items-start gap-6 lg:grid-cols-[minmax(0,420px)_1fr]' : undefined}>
+      <div className={wide ? 'lg:sticky lg:top-24' : undefined}>
+        <BalanceCard wallet={session.wallet} onTopUp={() => { haptic.tap(); setInitialAmount(undefined); setDepositOpen(true) }} />
+      </div>
 
-      <div className="mb-1 mt-6 flex items-center justify-between">
+      <div>
+      <div className={cn('mb-1 flex items-center justify-between', wide ? 'mt-6 lg:mt-0' : 'mt-6')}>
         <h2 className="text-base font-extrabold text-content-primary">{t('Transactions')}</h2>
         <button
           type="button"
@@ -149,6 +156,8 @@ export function WalletScreen({ session, depositRequest, onRequestHandled }: Prop
 
         {visible.map((entry) => <LedgerRow key={entry.id} entry={entry} />)}
       </ul>
+      </div>
+      </div>
 
       {depositOpen && (
         <DepositModal

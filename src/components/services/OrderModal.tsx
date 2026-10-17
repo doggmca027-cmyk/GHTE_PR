@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { sheetOverlayClass, sheetPanelClass, useWide } from '@/lib/layout-mode'
 import { CheckCircle2, Clock, Gem, Globe, Hourglass, Link2, Loader2, RefreshCw, ShieldCheck, TriangleAlert, X, Zap, type LucideIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -60,6 +61,7 @@ const inputClass = (invalid: boolean) =>
 
 export function OrderModal({ service, platform, platformName, session, onClose, onTopUp, onViewOrders }: Props) {
   const t = useT()
+  const wide = useWide()
   const { lang } = useLanguage()
   const { applyWallet } = useAuth()
   // a website guest prices freely; ordering asks to sign in first (this form stays open, so the order continues right after)
@@ -207,10 +209,10 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
         : t('Top Up Balance (Needs +{amount})', { amount: formatUnits(balance.shortfallUnits) })
 
   return (
-    <div className="absolute inset-0 z-50 flex items-end animate-fade-in" role="dialog" aria-modal="true" aria-label={t('Configure order')}>
+    <div className={sheetOverlayClass(wide)} role="dialog" aria-modal="true" aria-label={t('Configure order')}>
       <button type="button" aria-label={t('Close')} onClick={() => !busy && onClose()} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
 
-      <div className="relative z-10 max-h-[92%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]">
+      <div className={cn('relative z-10 max-h-[92%] w-full animate-sheet-up overflow-y-auto rounded-t-[32px] bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(0,136,204,0.14)]', sheetPanelClass(wide))}>
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-blue-100" />
 
         <div className="mb-4 flex items-center justify-between">
