@@ -30,6 +30,28 @@ describe('the first screen', () => {
   })
 })
 
+describe('rendering and network', () => {
+  it('the API host is preconnected (filled from VITE_SUPABASE_URL by Vite); the site has an icon', () => {
+    const html = src('index.html')
+    expect(html).toContain('<link rel="preconnect" href="%VITE_SUPABASE_URL%" crossorigin />')
+    expect(html).toContain('<link rel="icon" type="image/png" href="/tonconnect-icon.png" />')
+  })
+
+  it('cards of a list are memoised, skip work off screen, and get a stable handler', () => {
+    expect(src('src/components/services/ServiceCard.tsx')).toMatch(/export const ServiceCard = memo\(/)
+    expect(src('src/components/services/ServiceCard.tsx')).toContain('cv-auto')
+    expect(src('src/components/services/VariantCard.tsx')).toMatch(/export const VariantCard = memo\(/)
+    expect(src('src/index.css')).toMatch(/\.cv-auto \{ content-visibility: auto;/)
+    expect(src('src/components/services/ServicesScreen.tsx')).toMatch(/const open = useCallback\(/)
+  })
+
+  it('a category page is answered from one index, in order; the duplicate orders index is gone', () => {
+    const sql = src('supabase/migrations/20261209000000_perf_indexes.sql')
+    expect(sql).toMatch(/on public\.services \(category_id, sort_order, customer_rate_per_1000, id\)\s+where is_active and parent_service_id is null/)
+    expect(sql).toContain('drop index if exists public.idx_orders_sync_inflight')
+  })
+})
+
 describe('the catalogue cache', () => {
   beforeEach(() => clearCatalogCache())
 

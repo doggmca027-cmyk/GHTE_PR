@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Globe, ShieldCheck, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { currentLocale, useLanguage, useT } from '@/i18n'
@@ -13,7 +14,11 @@ interface Props {
   onSelect: (service: ICatalogService) => void
 }
 
-export function ServiceCard({ service, platform, platformName, onSelect }: Props) {
+/**
+ * One service of a list. Memoised: a category can show dozens, and the screen re-renders on every keystroke of the search and every
+ * balance refresh; a card only re-renders when its own service (or the language) changes.
+ */
+export const ServiceCard = memo(function ServiceCard({ service, platform, platformName, onSelect }: Props) {
   const t = useT()
   const { lang } = useLanguage()
   const speed = deriveSpeed(service.name) // from the English name: the speed words are English
@@ -23,7 +28,7 @@ export function ServiceCard({ service, platform, platformName, onSelect }: Props
     <button
       type="button"
       onClick={() => onSelect(service)}
-      className="w-full rounded-3xl border border-blue-100/70 bg-surface p-4 text-start shadow-card transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
+      className="cv-auto w-full rounded-3xl border border-blue-100/70 bg-surface p-4 text-start shadow-card transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
     >
       <div className="flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-light text-brand">
@@ -62,4 +67,4 @@ export function ServiceCard({ service, platform, platformName, onSelect }: Props
       </div>
     </button>
   )
-}
+})

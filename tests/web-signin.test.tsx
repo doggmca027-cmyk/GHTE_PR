@@ -92,11 +92,12 @@ describe('Telegram only (e-mail sign-in switched off, the default)', () => {
     vi.stubEnv('VITE_TWA_RETURN_URL', 'https://t.me/GHTE_PR_BOT')
     const { WebAuthError } = await import('../src/services/api/web-auth')
     api.loginWithTelegramWidget.mockRejectedValue(new WebAuthError('telegram_invalid', 'x'))
+    window.history.replaceState(null, '', `/?id=1&auth_date=1&hash=${'a'.repeat(64)}`)
     const onSignedIn = await mount()
-    await act(async () => { (window as unknown as Record<string, (u: unknown) => void>).__gramHubTelegramAuth({ id: 1, auth_date: 1, hash: 'h'.repeat(64) }) })
     await flush()
     expect(host.querySelector('[role="alert"]')?.textContent).toBe('Telegram sign-in failed. Please try again.')
     expect(onSignedIn).not.toHaveBeenCalled()
+    expect(window.location.search).toBe('') // the signed data never stays in the address
   })
 
   it('no bot known: says so instead of an empty box', async () => {
@@ -184,19 +185,35 @@ describe('the sign-in form', () => {
 describe('the Telegram widget', () => {
   beforeEach(() => { vi.stubEnv('VITE_ENABLE_EMAIL_AUTH', 'true') })
 
-  it('loads Telegram\'s widget for the bot and signs in with what it hands back', async () => {
+  it('loads Telegram\'s widget in redirect mode (no code from a string: the site CSP forbids eval)', async () => {
     vi.stubEnv('VITE_TWA_RETURN_URL', 'https://t.me/GHTE_PR_BOT')
-    api.loginWithTelegramWidget.mockResolvedValue(SESSION)
-    const onSignedIn = await mount()
+    window.history.replaceState(null, '', '/')
+    await mount()
     const script = host.querySelector('[data-testid="telegram-login-widget"] script') as HTMLScriptElement
     expect(script.src).toBe('https://telegram.org/js/telegram-widget.js?22')
     expect(script.getAttribute('data-telegram-login')).toBe('GHTE_PR_BOT')
-    expect(script.getAttribute('data-onauth')).toBe('__gramHubTelegramAuth(user)')
-    const user = { id: 1, first_name: 'A', auth_date: 1, hash: 'h'.repeat(64) }
-    await act(async () => { (window as unknown as Record<string, (u: unknown) => void>).__gramHubTelegramAuth(user) })
+    expect(script.getAttribute('data-auth-url')).toBe(`${window.location.origin}/`)
+    expect(script.hasAttribute('data-onauth')).toBe(false)
+  })
+
+  it('back from Telegram: signs in with the user in the address, then removes it from the address', async () => {
+    vi.stubEnv('VITE_TWA_RETURN_URL', 'https://t.me/GHTE_PR_BOT')
+    api.loginWithTelegramWidget.mockResolvedValue(SESSION)
+    const hash = 'b'.repeat(64)
+    window.history.replaceState(null, '', `/?id=42&first_name=Ann&username=ann&auth_date=1700000000&hash=${hash}&ref=keep`)
+    const onSignedIn = await mount()
     await flush()
-    expect(api.loginWithTelegramWidget).toHaveBeenCalledWith(user)
+    expect(api.loginWithTelegramWidget).toHaveBeenCalledWith({ id: 42, first_name: 'Ann', username: 'ann', auth_date: 1700000000, hash })
     expect(onSignedIn).toHaveBeenCalledWith(SESSION)
+    expect(window.location.search).toBe('?ref=keep') // only the widget's own fields go
+  })
+
+  it('an address without a complete signed user is ignored', async () => {
+    const { widgetUserFromUrl } = await import('../src/components/auth/TelegramLoginWidget')
+    expect(widgetUserFromUrl('?id=1&auth_date=1')).toBeNull()
+    expect(widgetUserFromUrl(`?id=x&auth_date=1&hash=${'a'.repeat(64)}`)).toBeNull()
+    expect(widgetUserFromUrl(`?id=1&auth_date=1&hash=${'z'.repeat(64)}`)).toBeNull()
+    expect(widgetUserFromUrl(`?id=1&auth_date=2&hash=${'a'.repeat(64)}`)).toEqual({ id: 1, auth_date: 2, hash: 'a'.repeat(64) })
   })
 
   it('no bot known: no widget', async () => {

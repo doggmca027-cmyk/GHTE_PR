@@ -90,7 +90,7 @@ export async function resetPassword(email: string, code: string, newPassword: st
   return toSession(await call<SessionBody>({ action: 'RESET_PASSWORD', email, code, newPassword }))
 }
 
-/** The object the Telegram Login Widget hands to its callback (data-onauth). */
+/** The user the Telegram Login Widget hands back (in the address, redirect mode: see TelegramLoginWidget). */
 export interface TelegramWidgetUser {
   id: number
   first_name?: string

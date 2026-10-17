@@ -139,11 +139,12 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
     if (platform && categoryId) track('catalog_view', { platform, category_id: categoryId })
   }, [platform, categoryId])
 
-  const open = (service: ICatalogService) => {
+  // stable, so the memoised cards do not re-render when the screen does
+  const open = useCallback((service: ICatalogService) => {
     haptic.tap()
     setSelected(service)
     void refreshWallet() // make sure the balance check uses a fresh value
-  }
+  }, [refreshWallet])
 
   const selectPlatform = (slug: string) => {
     const own = categories.filter((c) => c.platform === slug)
