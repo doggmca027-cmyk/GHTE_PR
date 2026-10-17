@@ -28,6 +28,7 @@
 //       -> { success, items: [candidate], counts: { status: n }, refreshedAt }   cheaper donor services the matcher found (50 a page)
 //   { action: "DECIDE_CANDIDATE", id, approve }   approve links the offer; reject (also of an automatic link) removes it for good
 //   { action: "RUN_ARBITRAGE_MATCH" }              asks for a matcher run: pg_cron runs it within 5 minutes (otherwise hourly)
+//   { action: "RUN_ORDER_HUB", providerId }        the order hub of that provider, now (sync-order-status { hubProviderId }): the result
 //
 // Key handling: the raw apiKey is read from the POST body, encrypted here with AES-256-GCM (PROVIDER_KEY_SECRET, _shared/secrets.ts,
 // the exact envelope the workers decrypt with), registered with the logger's redactor and then dropped. SQL receives ciphertext only.
@@ -151,6 +152,21 @@ Deno.serve(instrument('admin-providers', async (req: Request, { log }): Promise<
       if ('response' in r) return r.response
       log.info('arbitrage candidate decided', { approve: parsed.approve })
       return json({ success: true, result: r.data })
+    }
+
+    if (parsed.action === 'RUN_ORDER_HUB') {
+      // the order worker holds the provider adapters and the money rules: it runs the queue, this only asks
+      const res = await fetch(`${supabaseUrl}/functions/v1/sync-order-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({ hubProviderId: parsed.providerId }),
+        signal: AbortSignal.timeout(120_000),
+      })
+      const body = (await res.json().catch(() => null)) as Record<string, unknown> | null
+      if (body?.skipped) return fail(409, 'hub_busy', 'This provider\'s queue is already being run.')
+      if (!res.ok || !body || body.error) return fail(res.status === 404 ? 404 : 502, String(body?.error ?? 'hub_failed'), body?.error === 'provider_key_missing' ? 'The provider has no API key.' : 'The queue could not be run.')
+      log.info('order hub run by an admin', { providerId: parsed.providerId })
+      return json({ success: true, result: body })
     }
 
     if (parsed.action === 'RUN_ARBITRAGE_MATCH') {

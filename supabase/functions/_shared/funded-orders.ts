@@ -11,6 +11,7 @@
 //      only for the providers this run can actually talk to (a claimed order that cannot be sent would sit in `processing` until reconciliation).
 //   3. each claimed order is sent; a few at a time.
 import { submitClaimedOrder, type OrderRecord, type PlaceOrderPorts, type PlaceOrderResult } from './place-order-flow.ts'
+import type { HubRunResult } from './order-hub.ts'
 import type { ISMMProviderAdapter } from './types.ts'
 
 /** What claim_funded_orders() returns for an order it handed out. */
@@ -43,10 +44,12 @@ export interface FundedRunReport {
   held: number
   rejected: number
   refundFailed: number
+  /** Sent, but the panel had not enough of our money after all: back in the order hub. */
+  returned: number
   errors: number
 }
 
-export const emptyFundedReport = (): FundedRunReport => ({ expired: 0, expireFailed: 0, claimed: 0, submitted: 0, held: 0, rejected: 0, refundFailed: 0, errors: 0 })
+export const emptyFundedReport = (): FundedRunReport => ({ expired: 0, expireFailed: 0, claimed: 0, submitted: 0, held: 0, rejected: 0, refundFailed: 0, returned: 0, errors: 0 })
 
 /** Orders claimed (and so sent) per run. Each one is a call to a panel that may take its whole timeout: keep the run well inside its budget. */
 export const FUNDED_BATCH = 10
@@ -105,6 +108,7 @@ export async function releaseFundedOrders(ports: FundedPorts, log: Logger = cons
       case 'pending': report.held++; break
       case 'rejected': report.rejected++; break
       case 'refund_failed': report.refundFailed++; break
+      case 'awaiting_funds': report.returned++; break
       default: break
     }
   }
@@ -113,4 +117,44 @@ export async function releaseFundedOrders(ports: FundedPorts, log: Logger = cons
     await Promise.all(claimed.slice(i, i + PARALLEL).map(send))
   }
   return report
+}
+
+/** What a hub run of one provider needs (sync-order-status { hubProviderId }: the admin's "run the queue" in the bot or the admin screen). */
+export interface HubRunPorts {
+  provider: { id: string; name: string }
+  /** The provider's balance read from its panel right now; null when the panel could not be asked. */
+  readBalance(): Promise<number | null>
+  /** Stores it as the provider's known balance (providers.provider_balance / last_balance_sync), like the health monitor does. */
+  saveBalance(balance: number): Promise<void>
+  /** The funded-orders ports, with this provider's adapter only. */
+  funded: FundedPorts
+  /** hub_provider_needed(): what still waits for this provider after the run. */
+  needed(): Promise<{ count: number; needed: number }>
+}
+
+/**
+ * One provider's hub, now: its real balance is read (so a top-up made a moment ago counts at once), then its waiting orders are sent oldest
+ * first while the balance covers them, through the very same claim and submit as the every-minute worker. Never throws.
+ */
+export async function runProviderHub(ports: HubRunPorts, log: Logger = console): Promise<HubRunResult> {
+  let balance: number | null = null
+  try {
+    balance = await ports.readBalance()
+    if (balance !== null) await ports.saveBalance(balance)
+  } catch (e) {
+    log.warn(`order hub: the balance of ${ports.provider.name} could not be read`, e)
+    balance = null
+  }
+  // the hub run sends; refunding what waited too long stays with the every-minute worker
+  const report = await releaseFundedOrders({ ...ports.funded, expire: async () => ({ refunded: 0, failed: 0 }) }, log, 50)
+  let left = { count: 0, needed: 0 }
+  try {
+    left = await ports.needed()
+  } catch (e) {
+    log.warn('order hub: what is still waiting could not be read', e)
+  }
+  return {
+    provider: ports.provider.name, balance, submitted: report.submitted, returned: report.returned, rejected: report.rejected, held: report.held,
+    waiting: left.count, needed: left.needed,
+  }
 }

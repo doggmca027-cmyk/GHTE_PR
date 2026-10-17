@@ -92,6 +92,12 @@ export interface PlaceOrderPorts {
    * (the provider did not create the order). Idempotent. Optional so older callers keep working.
    */
   releaseReservation?(orderId: string): Promise<void>
+  /**
+   * DB function return_order_to_hub(): the panel refused the order for lack of OUR money there (it created nothing), so instead of a refund
+   * the order goes back to the order hub: paid, waiting, reservation released. Resolves null when the hub is switched off (then the usual
+   * refund follows). Optional so older callers keep working.
+   */
+  returnToHub?(orderId: string, reason: string): Promise<OrderRecord | null>
 }
 
 export type PlaceOrderResult =
@@ -201,6 +207,20 @@ export async function submitClaimedOrder(
     ).orderId
   } catch (e) {
     const cls = classifyProviderError(e)
+
+    // "Not enough funds" at the panel: our balance there was lower than we knew. The panel created nothing, so the order is not lost and the
+    // customer is not refunded: it goes back to the order hub on the same provider and is sent once the owner tops it up.
+    if (cls.outcome === 'refund' && e instanceof SMMProviderError && e.code === 'insufficient_provider_balance' && ports.returnToHub) {
+      try {
+        const waiting = await ports.returnToHub(claimed.id, cls.reason)
+        if (waiting) {
+          log.warn(`place-order: order ${claimed.id} back in the order hub: the provider has not enough funds`)
+          return { kind: 'awaiting_funds', order: waiting }
+        }
+      } catch (hubError) {
+        log.error(`place-order: order ${claimed.id} could not go back to the order hub; refunding instead`, hubError)
+      }
+    }
 
     if (cls.outcome === 'hold') {
       log.warn(`place-order: order ${claimed.id} outcome unknown, holding for reconciliation: ${cls.reason}`)

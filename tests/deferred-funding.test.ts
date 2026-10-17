@@ -66,10 +66,10 @@ describe('deferred funding (real SQL)', () => {
     await providerBalance(3) // $3 at the provider: an order costing $10 cannot be paid for
   }, 180_000)
 
-  it('is off by default, the migrations seed it as a closed door with a $200 cap and 24 hours', async () => {
+  it('is on (the order hub, migration 20261218000000) with a $200 cap and 24 hours', async () => {
     const fresh = await world()
     const r = (await fresh.query<Record<string, any>>(`select deferred_orders_enabled, deferred_orders_cap::float8 cap, deferred_orders_ttl_hours ttl from platform_settings`)).rows[0]
-    expect(r).toEqual({ deferred_orders_enabled: false, cap: 200, ttl: 24 })
+    expect(r).toEqual({ deferred_orders_enabled: true, cap: 200, ttl: 24 })
   }, 120_000)
 
   it('refuses as before when the caller does not ask for it, or the switch is off', async () => {

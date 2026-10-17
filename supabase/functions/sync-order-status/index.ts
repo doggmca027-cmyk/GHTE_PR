@@ -1,5 +1,8 @@
 // Supabase Edge Function (Deno): POST /sync-order-status   (call every minute from pg_cron / a scheduler)
 //
+// { hubProviderId: uuid } (the admin's "run the queue": the bot's 🚀 button, the admin screen): only that provider's order hub, now: its balance
+// is read from the panel and its waiting orders are sent oldest first while it covers them (runProviderHub). Answers HubRunResult.
+//
 // First, the funded-orders stage (_shared/funded-orders.ts): orders that were paid while their provider had no money are sent as soon as the
 // provider has been topped up, and refunded when they have waited past the limit. It does nothing (one cheap count) when none is waiting.
 //
@@ -33,7 +36,7 @@ import {
   type SyncOrder,
   type SyncPorts,
 } from '../_shared/order-sync.ts'
-import { emptyFundedReport, releaseFundedOrders, type FundedOrder, type FundedRunReport } from '../_shared/funded-orders.ts'
+import { emptyFundedReport, releaseFundedOrders, runProviderHub, type FundedOrder, type FundedRunReport } from '../_shared/funded-orders.ts'
 import { buildOrderPorts } from '../_shared/order-ports.ts'
 import { recordHeartbeat } from '../_shared/heartbeat.ts'
 import { withWorkerLock } from '../_shared/worker-lock.ts'
@@ -144,6 +147,15 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
   const mockMode = mockModeEnabled(Deno.env)
   const db: Db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
+  // The order hub of one provider, asked for by an admin. Not under the worker's lease (the claim is atomic, so it never races the
+  // every-minute run), but one hub run per provider at a time.
+  const hubProviderId = await req.clone().json().then((b) => (typeof b?.hubProviderId === 'string' ? b.hubProviderId : null), () => null)
+  if (hubProviderId) {
+    const hub = await withWorkerLock(db, `order-hub:${hubProviderId}`, () => runHub(hubProviderId))
+    if (!hub.acquired) return json({ success: true, skipped: 'hub_run_in_progress' })
+    return hub.value
+  }
+
   // Only one run at a time. A second copy (the scheduler fires every minute, a run can take longer) would poll the same orders and,
   // during a provider outage, double the load on a provider that is already failing.
   const locked = await withWorkerLock(db, 'sync-order-status', () => runSync())
@@ -152,6 +164,58 @@ Deno.serve(instrument('sync-order-status', async (req: Request, { log, correlati
     return json({ success: true, skipped: 'another_run_in_progress' })
   }
   return locked.value
+
+  async function providerAdapter(provider: ProviderRow): Promise<IProviderAdapter | null> {
+    let apiKey = ''
+    try {
+      apiKey = await resolveProviderApiKey(provider, Deno.env)
+    } catch (err) {
+      log.error('cannot decrypt the provider key', { err, providerId: provider.id, error_code: 'key_decrypt_failed' })
+    }
+    if (!apiKey && !mockMode) return null
+    registerSecret(apiKey)
+    return createSMMv2Adapter(
+      { id: provider.id, name: provider.name, apiUrl: provider.api_url, apiKey, correlationId, logger: log, capabilities: { supportsDripFeed: true } },
+      { MOCK_MODE: mockModeEnabled(Deno.env) ? 'true' : undefined },
+    )
+  }
+
+  async function runHub(providerId: string): Promise<Response> {
+    const { data: provider, error } = await db.from('providers').select('id, name, api_url, api_key_encrypted').eq('id', providerId).eq('is_active', true).maybeSingle()
+    if (error) return json({ error: 'server_error' }, 500)
+    if (!provider) return json({ error: 'provider_not_found' }, 404)
+    const adapter = await providerAdapter(provider as ProviderRow)
+    if (!adapter) return json({ error: 'provider_key_missing' }, 409)
+    const result = await runProviderHub({
+      provider: { id: provider.id, name: provider.name },
+      async readBalance() {
+        const b = await adapter.getBalance()
+        return Number.isFinite(b.balance) ? b.balance : null
+      },
+      async saveBalance(balance) {
+        const { error: e } = await db.from('providers').update({ provider_balance: balance, last_balance_sync: new Date().toISOString() }).eq('id', providerId)
+        if (e) throw new Error(`save balance: ${e.message}`)
+      },
+      funded: {
+        expire: async () => ({ refunded: 0, failed: 0 }),
+        async claim(limit, providerIds) {
+          const { data, error: e } = await db.rpc('claim_funded_orders', { p_limit: limit, p_provider_ids: providerIds })
+          if (e) throw new Error(`claim_funded_orders: ${e.message}`)
+          return (data ?? []) as FundedOrder[]
+        },
+        adapters: async () => new Map([[providerId, adapter]]),
+        orders: buildOrderPorts(db),
+      },
+      async needed() {
+        const { data, error: e } = await db.rpc('hub_provider_needed', { p_provider_id: providerId })
+        if (e) throw new Error(e.message)
+        const r = data as { count?: number; needed?: number | string } | null
+        return { count: Number(r?.count ?? 0), needed: Number(r?.needed ?? 0) }
+      },
+    }, log)
+    log.info('order hub run', { providerId, ...result })
+    return json({ success: true, ...result })
+  }
 
   /** Orders paid while the provider had no money: send the ones that can go now, refund the ones that waited too long. Never throws. */
   async function runFundedStage(): Promise<FundedRunReport> {

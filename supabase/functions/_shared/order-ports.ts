@@ -52,6 +52,11 @@ export function buildOrderPorts(db: DbLike): PlaceOrderPorts {
     async refund(orderId, comment) {
       return one(await db.rpc('refund_order', { p_order_id: orderId, p_amount: null, p_comment: comment }), 'refund_order')
     },
+    async returnToHub(orderId, reason) {
+      const { data, error } = await db.rpc('return_order_to_hub', { p_order_id: orderId, p_reason: reason })
+      if (error) throw new Error(`return_order_to_hub: ${error.message}`)
+      return (data as OrderRecord | null) ?? null
+    },
     async releaseReservation(orderId) {
       const { error } = await db.rpc('release_provider_reservation', { p_order_id: orderId })
       if (error) throw new PlaceOrderDbError(error.message, error.code)

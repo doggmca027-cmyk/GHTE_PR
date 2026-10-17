@@ -10,11 +10,12 @@
 //   * A cancellation is only announced once its refund is booked; until then the row waits.
 //   * The same dedupe key as the worker's fast path (notification_log) means a customer is never told twice.
 
+import type { HubPayload } from './order-hub.ts'
 import { notifyUser, resolveLang, sendTelegramMessage, type NotifyEvent, type NotifyOutcome, type SendResult } from './telegram-notify.ts'
 
 export interface OutboxRow {
   id: string
-  kind: 'completed' | 'partial' | 'canceled' | 'admin_alert'
+  kind: 'completed' | 'partial' | 'canceled' | 'admin_alert' | 'admin_hub'
   dedupe_key: string
   attempts: number
   /** null for an admin alert (nothing to do with one order). */
@@ -24,8 +25,8 @@ export interface OutboxRow {
   remains: number | null
   charge_amount: number | string | null
   partial_refund_amount: number | string | null
-  /** admin_alert only: { headline, detail }. */
-  payload?: { headline?: unknown; detail?: unknown } | null
+  /** admin_alert: { headline, detail }; admin_hub: the hub fact (order-hub.ts HubPayload). */
+  payload?: Record<string, unknown> | null
   service_name: string | null
   user_id: string
   telegram_id: number | string
@@ -43,6 +44,7 @@ export type Completion =
 
 /** The Telegram message for a row. Amounts come from the order as it is NOW (the refund is booked by the time it is sent). */
 export function eventFor(row: OutboxRow): NotifyEvent {
+  if (row.kind === 'admin_hub') return { type: 'admin_hub', payload: (row.payload ?? {}) as unknown as HubPayload }
   if (row.kind === 'admin_alert') {
     return { type: 'admin_alert', headline: String(row.payload?.headline ?? 'Alert').slice(0, 120), detail: String(row.payload?.detail ?? '').slice(0, 600) }
   }
@@ -57,7 +59,7 @@ export function eventFor(row: OutboxRow): NotifyEvent {
  * (completed / partial are final; a completed or partial order refunded later by an admin was still completed / partial when announced.)
  */
 export function isReady(row: OutboxRow): boolean {
-  if (row.kind === 'admin_alert') return true
+  if (row.kind === 'admin_alert' || row.kind === 'admin_hub') return true
   if (row.kind === 'canceled') return row.order_status === 'refunded'
   if (row.kind === 'partial') return row.order_status === 'partial' || row.order_status === 'refunded'
   return row.order_status === 'completed' || row.order_status === 'refunded'

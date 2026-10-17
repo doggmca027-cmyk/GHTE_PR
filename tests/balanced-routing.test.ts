@@ -274,28 +274,15 @@ describe('get_admin_pricing_view follows Balanced routing', () => {
   })
 })
 
-describe('a provider that cannot pay for the order', () => {
+describe('the balance of a provider is not part of the choice', () => {
   const synced = '2026-10-18T00:00:00Z'
   const center = provider('center', { lastBalanceSync: synced, providerBalance: 3 })
-  const donor = (balance: number) => provider('donor', { lastBalanceSync: synced, providerBalance: balance })
+  const donor = provider('donor', { lastBalanceSync: synced, providerBalance: 0 })
   const offers = [offer('primary', 'center', { costPer1000: 1 }), offer('cheap', 'donor', { costPer1000: 0.4 })]
 
-  it('the cheap donor with $0 (or too little for THIS order) never takes it from the primary provider that can pay', () => {
-    expect(rankOffers(offers, [center, donor(0)], { quantity: 1000 }).map((o) => o.id)).toEqual(['primary', 'cheap'])
-    // 1000 at $0.40 costs $0.40: $0.30 is not enough, $0.40 is
-    expect(rankOffers(offers, [center, donor(0.3)], { quantity: 1000 }).map((o) => o.id)).toEqual(['primary', 'cheap'])
-    expect(rankOffers(offers, [center, donor(0.4)], { quantity: 1000 }).map((o) => o.id)).toEqual(['cheap', 'primary'])
-  })
-
-  it('when nobody can pay, the order of price stays (the balance may be a minute old: the router still tries)', () => {
-    const broke = provider('center', { lastBalanceSync: synced, providerBalance: 0 })
-    expect(rankOffers(offers, [broke, donor(0)], { quantity: 1000 }).map((o) => o.id)).toEqual(['cheap', 'primary'])
-  })
-
-  it('a balance never read is unknown, not empty; without a quantity nothing is reordered', () => {
-    const unknown = provider('donor', { lastBalanceSync: null, providerBalance: 0 })
-    expect(rankOffers(offers, [center, unknown], { quantity: 1000 }).map((o) => o.id)).toEqual(['cheap', 'primary'])
-    expect(rankOffers(offers, [center, donor(0)]).map((o) => o.id)).toEqual(['cheap', 'primary'])
+  it('the cheapest offer always wins (best margin), even at $0: the order waits in the hub for that provider, never goes to a dearer one', () => {
+    expect(rankOffers(offers, [center, donor], { quantity: 1000 }).map((o) => o.id)).toEqual(['cheap', 'primary'])
+    expect(selectBestOffer(offers, [center, donor], { quantity: 1000 }).id).toBe('cheap')
   })
 })
 

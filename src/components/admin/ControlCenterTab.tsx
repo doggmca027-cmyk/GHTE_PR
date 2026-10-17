@@ -143,7 +143,7 @@ export function ControlCenterTab({ session }: { session: AuthSession }) {
         )
       })}
 
-      <UnfundedCard unfunded={data.unfunded} ttlHours={data.deferredOrdersTtlHours} />
+      <UnfundedCard unfunded={data.unfunded} ttlHours={data.deferredOrdersTtlHours} session={session} onRan={reload} />
 
       <p className="px-1 text-xs text-content-secondary">{data.updatedAt ? `Последнее изменение: ${timeAgoRu(data.updatedAt)}.` : 'Ещё не менялось.'}</p>
     </div>

@@ -7,6 +7,7 @@
 //   /start (anything else)    a short welcome with the button that opens the Mini App
 // Texts in English, Russian or Ukrainian after the user's Telegram language.
 
+import { parseHubCallback } from './order-hub.ts'
 import { START_PREFIX, TOKEN_RE, sha256Hex, type BotLoginUser } from './web-auth.ts'
 
 export type BotLang = 'en' | 'ru' | 'uk'
@@ -47,6 +48,14 @@ export interface BotPorts {
   telegram(method: string, body: Record<string, unknown>): Promise<void>
   /** The Mini App's address, for the welcome button (none: no button). */
   webAppUrl: string | null
+  /** The order hub buttons of the admins' messages (order-hub.ts). Without these ports the buttons are refused. */
+  isAdmin?(telegramId: number): Promise<boolean>
+  /** 🚀: read the provider's balance and send its waiting orders; resolves the reply (HTML). */
+  hubRetry?(providerId: string): Promise<string>
+  /** 🔀: move a waiting order to another provider of the card that can pay now, and send it; resolves the reply (HTML). */
+  hubFallback?(orderId: string): Promise<string>
+  /** Runs work after Telegram got its 200 (EdgeRuntime.waitUntil): a queue run can take longer than Telegram waits for a webhook. */
+  later?(work: Promise<unknown>): void
 }
 
 interface TgUser { id: number; is_bot?: boolean; first_name?: string; last_name?: string; username?: string; language_code?: string }
@@ -66,8 +75,32 @@ const userOf = (u: TgUser): BotLoginUser => ({
 const CALLBACK_RE = /^auth_(ok|no):([A-Za-z0-9_-]{32,64})$/
 
 /** What the bot does with one update. Never throws on a strange update: it is ignored (Telegram must get a 200 either way). */
-export async function handleBotUpdate(update: TgUpdate, p: BotPorts): Promise<'challenge' | 'decided' | 'welcome' | 'ignored'> {
+export async function handleBotUpdate(update: TgUpdate, p: BotPorts): Promise<'challenge' | 'decided' | 'welcome' | 'hub' | 'ignored'> {
   const cb = update.callback_query
+  const hub = cb ? parseHubCallback(cb.data) : null
+  if (cb && hub) {
+    // an order hub button: only an admin may press it (the message went to admins only, but a forwarded one has the same buttons)
+    if (cb.from.is_bot || !p.isAdmin || !p.hubRetry || !p.hubFallback || !(await p.isAdmin(cb.from.id))) {
+      await p.telegram('answerCallbackQuery', { callback_query_id: cb.id, text: 'Только для администратора.', show_alert: true })
+      return 'ignored'
+    }
+    await p.telegram('answerCallbackQuery', { callback_query_id: cb.id, text: hub.action === 'retry' ? '⏳ Проверяю баланс и запускаю очередь…' : '⏳ Ищу другого провайдера…' })
+    const chatId = cb.message?.chat?.id ?? cb.from.id
+    const retry = p.hubRetry
+    const fallback = p.hubFallback
+    const work = (async () => {
+      let text: string
+      try {
+        text = hub.action === 'retry' ? await retry(hub.providerId) : await fallback(hub.orderId)
+      } catch {
+        text = '⚠️ Не получилось выполнить. Попробуйте ещё раз через минуту.'
+      }
+      await p.telegram('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' })
+    })()
+    if (p.later) p.later(work)
+    else await work
+    return 'hub'
+  }
   if (cb) {
     const m = CALLBACK_RE.exec(cb.data ?? '')
     const lang = botLang(cb.from.language_code)

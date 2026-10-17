@@ -102,6 +102,28 @@ export async function decideArbitrageCandidate(session: AuthSession, id: string,
 }
 
 /** Asks for a matcher run: the database runs it within 5 minutes (otherwise once an hour). */
+/** What a run of a provider's order hub did (sync-order-status { hubProviderId }). */
+export interface OrderHubRun {
+  provider: string
+  balance: number | null
+  submitted: number
+  returned: number
+  rejected: number
+  held: number
+  waiting: number
+  needed: number
+}
+
+/** Reads the provider's balance from its panel and sends its waiting orders while it covers them. */
+export async function runOrderHub(session: AuthSession, providerId: string): Promise<OrderHubRun> {
+  if (session.isMock) {
+    guardMock(session)
+    return { provider: 'Demo', balance: 0, submitted: 0, returned: 0, rejected: 0, held: 0, waiting: 0, needed: 0 }
+  }
+  const r = await call<{ result: OrderHubRun }>(session, { action: 'RUN_ORDER_HUB', providerId }, 130_000)
+  return r.result
+}
+
 export async function runArbitrageMatch(session: AuthSession): Promise<void> {
   if (session.isMock) {
     guardMock(session)

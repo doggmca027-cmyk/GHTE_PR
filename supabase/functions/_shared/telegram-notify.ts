@@ -7,6 +7,8 @@
 //     can never notify twice.
 //   * All dynamic text is HTML-escaped; the bot token never appears in logs or results.
 
+import { hubMessage, type HubPayload, type InlineButton } from './order-hub.ts'
+
 export type NotifyLang = 'en' | 'uk'
 
 export type NotifyEvent =
@@ -16,6 +18,8 @@ export type NotifyEvent =
   | { type: 'order_partial'; orderId: string; serviceName: string; quantity: number; remains: number; refundAmount: number }
   /** An operational alert for the admins (a stale reconciliation case, notifications that died). Written by notify_admin_anomalies(). */
   | { type: 'admin_alert'; headline: string; detail: string }
+  /** The order hub for the admins (order-hub.ts): a top-up, an order waiting for its provider (with buttons), an order sent. */
+  | { type: 'admin_hub'; payload: HubPayload }
   /** Support answered a ticket of the customer. */
   | { type: 'ticket_reply'; ticketId: string; subject: string }
   /** Admin alert from provider-health-monitor: a provider went down ('unavailable') or came back ('healthy'). */
@@ -65,6 +69,7 @@ const EN: { [K in NotifyEvent['type']]: Template<Extract<NotifyEvent, { type: K 
     `ℹ️ <b>Order partially completed</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\n${int(e.quantity - e.remains)} of ${int(e.quantity)} delivered, ${int(e.remains)} not delivered.\n<b>${formatUsd(e.refundAmount)}</b> was refunded to your balance.`,
   admin_alert: (e) => `🚨 <b>${name(e.headline)}</b>
 ${escapeHtml(clip(e.detail, 600))}`,
+  admin_hub: (e) => hubMessage(e.payload).text,
   ticket_reply: (e) =>
     `💬 <b>Support answered your ticket</b>
 #${shortId(e.ticketId)} · ${name(e.subject)}
@@ -90,6 +95,7 @@ const UK: typeof EN = {
     `ℹ️ <b>Замовлення виконано частково</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nДоставлено ${int(e.quantity - e.remains)} з ${int(e.quantity)}, не доставлено ${int(e.remains)}.\n<b>${formatUsd(e.refundAmount)}</b> повернено на ваш баланс.`,
   admin_alert: (e) => `🚨 <b>${name(e.headline)}</b>
 ${escapeHtml(clip(e.detail, 600))}`,
+  admin_hub: (e) => hubMessage(e.payload).text,
   ticket_reply: (e) =>
     `💬 <b>Підтримка відповіла на ваш запит</b>
 #${shortId(e.ticketId)} · ${name(e.subject)}
@@ -125,6 +131,8 @@ export async function sendTelegramMessage(opts: {
   botToken: string
   chatId: number | string
   text: string
+  /** Inline buttons under the message. */
+  replyMarkup?: { inline_keyboard: InlineButton[][] }
   fetchImpl?: typeof fetch
   timeoutMs?: number
 }): Promise<SendResult> {
@@ -132,7 +140,7 @@ export async function sendTelegramMessage(opts: {
     const res = await (opts.fetchImpl ?? fetch)(`https://api.telegram.org/bot${opts.botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: opts.chatId, text: opts.text, parse_mode: 'HTML', disable_web_page_preview: true }),
+      body: JSON.stringify({ chat_id: opts.chatId, text: opts.text, parse_mode: 'HTML', disable_web_page_preview: true, ...(opts.replyMarkup ? { reply_markup: opts.replyMarkup } : {}) }),
       signal: AbortSignal.timeout(opts.timeoutMs ?? 5000),
     })
     if (res.ok) return { ok: true }
@@ -196,7 +204,8 @@ export async function notifyUser(deps: NotifyDeps, target: NotifyTarget, event: 
 
     if (!(await deps.claim(dedupeKey))) return 'duplicate'
 
-    const result = await (deps.send ?? sendTelegramMessage)({ botToken: deps.botToken, chatId: target.chatId, text })
+    const replyMarkup = event.type === 'admin_hub' ? hubMessage(event.payload).replyMarkup : undefined
+    const result = await (deps.send ?? sendTelegramMessage)({ botToken: deps.botToken, chatId: target.chatId, text, ...(replyMarkup ? { replyMarkup } : {}) })
     if (result.ok) return 'sent'
 
     log.warn(`telegram-notify: ${event.type} not delivered (${result.reason}${result.status ? ` ${result.status}` : ''})`)

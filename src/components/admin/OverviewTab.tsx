@@ -68,7 +68,7 @@ export function OverviewTab({ session, onOpenQueue, onProblemCount }: Props) {
         </button>
       </div>
 
-      {settings && <UnfundedCard unfunded={settings.unfunded} ttlHours={settings.deferredOrdersTtlHours} />}
+      {settings && <UnfundedCard unfunded={settings.unfunded} ttlHours={settings.deferredOrdersTtlHours} session={session} />}
 
       <ProfitPanel session={session} refreshKey={refreshKey} />
 

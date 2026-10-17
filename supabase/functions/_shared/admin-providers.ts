@@ -29,6 +29,8 @@ export type ParsedProviderRequest =
   | { action: 'ARBITRAGE_CANDIDATES'; status: CandidateStatus; offset: number }
   | { action: 'DECIDE_CANDIDATE'; id: string; approve: boolean }
   | { action: 'RUN_ARBITRAGE_MATCH' }
+  /** The order hub of one provider, now (its balance read from the panel, its waiting orders sent while it covers them). */
+  | { action: 'RUN_ORDER_HUB'; providerId: string }
 
 type Obj = Record<string, unknown>
 
@@ -124,6 +126,11 @@ export function parseProviderRequest(body: unknown): ParsedProviderRequest | { e
   const action = typeof b.action === 'string' ? b.action.toUpperCase() : ''
 
   if (action === 'LIST_PROVIDERS' || action === 'ARBITRAGE_STATUS' || action === 'RUN_ARBITRAGE_MATCH') return { action }
+
+  if (action === 'RUN_ORDER_HUB') {
+    if (!isUuid(b.providerId)) return { error: 'providerId must be a UUID.' }
+    return { action, providerId: b.providerId }
+  }
 
   if (action === 'ARBITRAGE_CANDIDATES') {
     const status = b.status === undefined ? 'pending' : b.status

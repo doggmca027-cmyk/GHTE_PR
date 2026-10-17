@@ -200,10 +200,15 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
         adapter,
       )
   }
+  // The order hub (migration 20261218000000): with deferred funding on, the BEST offer is tried first allowing the order to wait. Its provider
+  // can pay: reserved and sent at once. It cannot: the customer is charged, the order waits on that offer (the best margin) until the owner
+  // tops the provider up; it never fails over to a dearer provider for lack of money. Failover stays for everything else (no API key, the
+  // hub's cap reached).
+  const hub = Boolean(settings?.deferredOrdersEnabled) && !existing?.provider_offer_id
   let result: PlaceOrderResult
   try {
     try {
-      result = await firstAcceptingOffer(offers, (offer) => attempt(offer, false))
+      result = await firstAcceptingOffer(offers, (offer) => attempt(offer, hub && offer.id === offers[0].id))
     } catch (e) {
       // Every offer was turned down before anything was charged or sent. If the owner has switched deferred funding on and the reason is the
       // provider's balance, the order is still accepted on the best offer: the customer pays now, the order waits for the provider to be funded
