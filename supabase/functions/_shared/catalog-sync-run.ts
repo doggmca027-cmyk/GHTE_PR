@@ -248,7 +248,9 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
       existing: service,
       basis: serviceCostBasis(offers),
       rules,
-      providerServiceReactivated: offers.some((o) => reactivatedPsIds.has(o.provider_service_id)),
+      // a donor (linked_only) never switches a storefront service back on: one it published was taken off on purpose (migration
+      // 20261207000000), and a reference card is the publishing provider's to bring back
+      providerServiceReactivated: provider.catalog_mode !== 'linked_only' && offers.some((o) => reactivatedPsIds.has(o.provider_service_id)),
       offerLost: offers.some((o) => deactivatedPsIds.has(o.provider_service_id)),
     })
     if (plan.action !== 'update' || !plan.row) continue

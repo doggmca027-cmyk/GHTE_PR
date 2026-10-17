@@ -210,6 +210,20 @@ describe('syncProviderCatalog (through the IProviderAdapter contract)', () => {
     expect(store.services.get('s1')!.is_active).toBe(true)
   })
 
+  it('a donor (linked_only) never switches a storefront service back on', async () => {
+    const store = new MemoryStore()
+    store.addPS('1', { is_active: false })
+    store.addService('s1', 'ps-1', { is_active: false })
+    store.addOffer('o1', 's1', 'ps-1')
+    const report = await syncProviderCatalog({
+      provider: { ...PROVIDER, catalog_mode: 'linked_only' }, adapter: new MockProviderAdapter({ id: PROVIDER.id, name: PROVIDER.name, services: [svc('1')], balance: 1 }),
+      store, rules, log: silentLogger, now: () => new Date('2026-10-08T00:00:00.000Z'),
+    })
+    expect(report.services.reactivated).toBe(0)
+    expect(store.ps.get('ps-1')!.is_active).toBe(true) // the donor's own catalogue is current
+    expect(store.services.get('s1')!.is_active).toBe(false)
+  })
+
   it('re-prices a linked storefront service and propagates cost and limits to its offers', async () => {
     const store = new MemoryStore()
     store.addPS('1')
