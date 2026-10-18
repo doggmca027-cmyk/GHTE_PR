@@ -9,12 +9,14 @@
 // JWT's user. Provider cost and the margin floor are never returned.
 // The order is priced on the offer place-order will route this quantity to (the same router, routing.ts rankOffers) at that offer's
 // retail rate (_shared/order-pricing.ts, migration 20261220000000), so the price shown is the price charged to the cent.
+// volumeRates (the bulk prices) is the card's price ladder (price_ladder, migration 20261221000000): each volume step, and the quantity where
+// another offer takes over (small orders through a dearer retail offer, then "from 250 · $1.19" where the cheapest one starts).
 // Secrets: JWT_SECRET. Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
 import { hasBearer, mapQuoteError, parseQuoteBody, toQuoteDto } from '../_shared/discounts.ts'
-import { loadPriceRules, offerRatePer1000, PRICED_SERVICE_COLUMNS, toPricedService, type PricedServiceRow } from '../_shared/order-pricing.ts'
+import { ladderSteps, loadPriceRules, offerRatePer1000, priceLadder, PRICED_SERVICE_COLUMNS, toPricedService, type PricedServiceRow } from '../_shared/order-pricing.ts'
 import { OFFER_SELECT, buildCandidates, rankOffers, type OfferRow } from '../_shared/routing.ts'
 
 Deno.serve(instrument('quote-order', async (req: Request, { log }): Promise<Response> => {
@@ -56,15 +58,27 @@ Deno.serve(instrument('quote-order', async (req: Request, { log }): Promise<Resp
   const candidates = buildCandidates((offerRows ?? []) as unknown as OfferRow[])
   const offer = rankOffers(candidates.offers, candidates.providers, { quantity, runs })[0]
   if (!offer) return fail(503, 'service_unavailable', 'This service is temporarily unavailable.')
-  const { data, error } = await db.rpc('quote_order_price', {
-    p_user_id: userId, p_service_id: serviceId, p_quantity: quantity, p_promo_code: guest ? null : parsed.value.promoCode,
-    p_runs: runs, p_offer_id: offer.id,
-    p_rate_per_1000: offerRatePer1000(toPricedService(service as unknown as PricedServiceRow), offer.costPer1000, rules),
-  })
+  const priced = toPricedService(service as unknown as PricedServiceRow)
+  const rateOf = (o: { costPer1000: number }) => offerRatePer1000(priced, o.costPer1000, rules)
+  // the ladder of a plain order (a drip-feed order keeps the steps of its own offer)
+  const segments = runs === 1 ? priceLadder({ min: Number(service.min_quantity), max: Number(service.max_quantity) }, candidates.offers, candidates.providers, rateOf) : []
+  const [{ data, error }, ladder] = await Promise.all([
+    db.rpc('quote_order_price', {
+      p_user_id: userId, p_service_id: serviceId, p_quantity: quantity, p_promo_code: guest ? null : parsed.value.promoCode,
+      p_runs: runs, p_offer_id: offer.id, p_rate_per_1000: rateOf(offer),
+    }),
+    segments.length > 0
+      ? db.rpc('price_ladder', { p_segments: segments.map(({ offerId: _offer, ...s }) => s) })
+      : Promise.resolve({ data: null, error: null }),
+  ])
   if (error) {
     const m = mapQuoteError(error.message)
     if (m.status === 500) log.error('quote failed', { err: error, error_code: 'quote_failed' })
     return fail(m.status, m.error, m.message)
   }
-  return json({ success: true, ...toQuoteDto(data as Record<string, unknown>) })
+  const dto = toQuoteDto(data as Record<string, unknown>)
+  // a ladder that could not be read leaves the steps of the quoted offer: the price itself never depends on it
+  if (ladder.error) log.warn('price ladder failed', { err: ladder.error, error_code: 'price_ladder_failed' })
+  const steps = Array.isArray(ladder.data) ? ladderSteps(ladder.data as { min_quantity: number; rate_per_1000: number }[]) : []
+  return json({ success: true, ...dto, ...(steps.length > 0 ? { volumeRates: steps } : {}) })
 }))

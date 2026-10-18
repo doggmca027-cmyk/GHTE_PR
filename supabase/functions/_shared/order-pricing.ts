@@ -7,7 +7,8 @@
 // quantity of the card's range can be sold, and always above its cost. The volume step is then applied on that offer's cost in SQL.
 
 import { priceForBasis } from './catalog-sync.ts'
-import type { Platform, PriceRule } from './types.ts'
+import { rankOffers } from './routing.ts'
+import type { IProvider, IProviderServiceOffer, Platform, PriceRule } from './types.ts'
 
 export interface PricedService {
   id: string
@@ -72,4 +73,54 @@ export async function loadPriceRules(db: DbLike): Promise<PriceRule[]> {
     min_rate: r.min_rate == null ? null : Number(r.min_rate),
     max_rate: r.max_rate == null ? null : Number(r.max_rate),
   })) as PriceRule[]
+}
+
+/** One quantity range of a card and the offer that serves it (price_ladder, migration 20261221000000). */
+export interface LadderSegment {
+  from: number
+  to: number
+  rate_per_1000: number
+  basis_per_1000: number
+  offerId: string
+}
+
+/**
+ * Which offer serves which quantity range of the card, for a plain order (runs = 1): the same router as place-order. The offers that may
+ * take an order change only where one of them starts (min) or stops (max + 1), so the range is cut there; next ranges served by the same
+ * offer are joined, and a range nobody can serve is left out.
+ */
+export function priceLadder(
+  limits: { min: number; max: number },
+  offers: IProviderServiceOffer[],
+  providers: IProvider[],
+  rateOf: (offer: IProviderServiceOffer) => number,
+): LadderSegment[] {
+  const routable = rankOffers(offers, providers)
+  const cuts = new Set<number>([limits.min])
+  for (const o of routable) for (const q of [o.minQuantity, o.maxQuantity + 1]) if (q > limits.min && q <= limits.max) cuts.add(q)
+  const starts = [...cuts].sort((a, b) => a - b)
+  const out: LadderSegment[] = []
+  starts.forEach((from, i) => {
+    const to = i + 1 < starts.length ? starts[i + 1] - 1 : limits.max
+    const offer = rankOffers(routable, providers, { quantity: from })[0]
+    if (!offer) return
+    const last = out[out.length - 1]
+    if (last && last.offerId === offer.id && last.to === from - 1) {
+      last.to = to
+      return
+    }
+    out.push({ from, to, rate_per_1000: rateOf(offer), basis_per_1000: offer.costPer1000, offerId: offer.id })
+  })
+  return out
+}
+
+/** price_ladder's answer as the quote's volume steps: a step at the same rate as the one before it says nothing new and is dropped. */
+export function ladderSteps(rows: { min_quantity: number | string; rate_per_1000: number | string }[]): { minQuantity: number; ratePer1000: number }[] {
+  const out: { minQuantity: number; ratePer1000: number }[] = []
+  for (const r of rows) {
+    const step = { minQuantity: Number(r.min_quantity), ratePer1000: Number(r.rate_per_1000) }
+    if (out.length > 0 && out[out.length - 1].ratePer1000 === step.ratePer1000) continue
+    out.push(step)
+  }
+  return out
 }

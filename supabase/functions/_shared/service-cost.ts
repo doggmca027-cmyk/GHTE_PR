@@ -36,7 +36,11 @@ export const isPriceableOffer = (o: Pick<PricingOffer, 'is_active' | 'provider_s
 export interface CostBasis {
   /** The LOWEST cost_per_1000 among the priceable offers: the number the markup is applied to (the offer the router picks). */
   cost: number
-  /** The smallest min and the largest max among the priceable offers: the widest range any of them can take. */
+  /**
+   * The smallest min among the priceable offers (a small retail order may go through a dearer offer with a lower minimum), and the largest
+   * max among the offers that cost at most MAX_LIMIT_COST_SPREAD more than the cheapest: a quantity only a much dearer offer can take is
+   * not offered at all (it would cost several times the card's price per 1000: 10 000 for $482, 10 001 for $1 963).
+   */
   minQuantity: number
   maxQuantity: number
   /**
@@ -47,14 +51,20 @@ export interface CostBasis {
   offers: number
 }
 
+/** An offer more than this much dearer than the cheapest one does not raise the card's maximum quantity (it still lowers the minimum). */
+export const MAX_LIMIT_COST_SPREAD = 0.3
+
 /** null when no offer can receive an order: the caller must then leave the price alone rather than guess. */
 export function serviceCostBasis(offers: PricingOffer[]): CostBasis | null {
   const usable = offers.filter(isPriceableOffer)
   if (usable.length === 0) return null
+  const cost = Math.min(...usable.map((o) => Number(o.cost_per_1000)))
+  // compared in ten-thousandths, so float noise never decides
+  const near = usable.filter((o) => Math.round(Number(o.cost_per_1000) * 10_000) <= Math.round(cost * (1 + MAX_LIMIT_COST_SPREAD) * 10_000))
   return {
-    cost: Math.min(...usable.map((o) => Number(o.cost_per_1000))),
+    cost,
     minQuantity: Math.min(...usable.map((o) => o.min_quantity)),
-    maxQuantity: Math.max(...usable.map((o) => o.max_quantity)),
+    maxQuantity: Math.max(...near.map((o) => o.max_quantity)),
     refillSupported: usable.every((o) => o.refill_supported),
     offers: usable.length,
   }

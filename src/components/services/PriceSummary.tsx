@@ -24,10 +24,12 @@ interface Props {
   maxQuantity?: number
   /** A website guest has no balance to show. */
   hideBalance?: boolean
+  /** A bulk-price step was tapped: order that quantity. */
+  onPickQuantity?: (quantity: number) => void
 }
 
 /** The price block of the order form: list price, the tier and promo discounts, the final price, and the balance check. */
-export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, balance, sufficient, shortfallUnits, maxQuantity, hideBalance = false }: Props) {
+export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, balance, sufficient, shortfallUnits, maxQuantity, hideBalance = false, onPickQuantity }: Props) {
   const t = useT()
   const { units } = displayedTotalUnits(state, estimateUnits)
   const quote: Quote | null = state.kind === 'ready' ? state.quote : state.kind === 'loading' ? state.previous : null
@@ -41,7 +43,7 @@ export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, bala
           <p className="mt-1 text-[13px] font-medium text-content-secondary">
             {formatInt(quantity)} × ({formatMoneyAmount(quote?.ratePer1000 ?? ratePer1000)} / 1,000)
           </p>
-          {quote?.volumeRates && reachableSteps(quote.volumeRates, maxQuantity).length > 1 && <VolumeRates steps={reachableSteps(quote.volumeRates, maxQuantity)} quantity={quantity} />}
+          {quote?.volumeRates && reachableSteps(quote.volumeRates, maxQuantity).length > 1 && <VolumeRates steps={reachableSteps(quote.volumeRates, maxQuantity)} quantity={quantity} onPick={onPickQuantity} />}
 
           {quote && quote.totalDiscount > 0 && (
             <dl className="mt-2 space-y-1 text-[13px]">
@@ -102,13 +104,16 @@ export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, bala
   )
 }
 
-/** The bulk price list of a service (volume pricing): from N units, this rate per 1000; the step this quantity falls in is marked. */
 /** The volume steps an order can reach: a step that starts above the largest possible order is never shown. */
 export function reachableSteps<T extends { minQuantity: number }>(steps: readonly T[], maxQuantity?: number): T[] {
   return maxQuantity === undefined ? [...steps] : steps.filter((s) => s.minQuantity <= maxQuantity)
 }
 
-export function VolumeRates({ steps, quantity }: { steps: { minQuantity: number; ratePer1000: number }[]; quantity: number }) {
+/**
+ * The bulk price list of a service: from N units, this rate per 1000 (volume steps, and where a cheaper offer takes over); the step this
+ * quantity falls in is marked. With onPick a step is a button that orders its quantity.
+ */
+export function VolumeRates({ steps, quantity, onPick }: { steps: { minQuantity: number; ratePer1000: number }[]; quantity: number; onPick?: (quantity: number) => void }) {
   const t = useT()
   const current = [...steps].reverse().find((s) => quantity >= s.minQuantity)?.minQuantity
   return (
@@ -119,9 +124,15 @@ export function VolumeRates({ steps, quantity }: { steps: { minQuantity: number;
           <li
             key={s.minQuantity}
             aria-current={s.minQuantity === current ? 'true' : undefined}
-            className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold', s.minQuantity === current ? 'bg-brand text-white' : 'bg-surface text-content-secondary')}
+            className={cn('rounded-full text-[11px] font-semibold', s.minQuantity === current ? 'bg-brand text-white' : 'bg-surface text-content-secondary')}
           >
-            {t('from {n}', { n: formatInt(Math.max(s.minQuantity, 1)) })} · {formatMoneyAmount(s.ratePer1000)}
+            {onPick && s.minQuantity !== current ? (
+              <button type="button" onClick={() => onPick(Math.max(s.minQuantity, 1))} className="rounded-full px-2.5 py-1 active:scale-95">
+                {t('from {n}', { n: formatInt(Math.max(s.minQuantity, 1)) })} · {formatMoneyAmount(s.ratePer1000)}
+              </button>
+            ) : (
+              <span className="block px-2.5 py-1">{t('from {n}', { n: formatInt(Math.max(s.minQuantity, 1)) })} · {formatMoneyAmount(s.ratePer1000)}</span>
+            )}
           </li>
         ))}
       </ul>

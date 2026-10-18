@@ -121,4 +121,18 @@ describe('quote and display', () => {
     expect(items.findIndex((li) => li.getAttribute('aria-current') === 'true')).toBe(2)
     act(() => root.unmount())
   })
+
+  it('a step is a button that orders its quantity (the current one is not)', async () => {
+    const { VolumeRates } = await import('../src/components/services/PriceSummary')
+    const host = document.createElement('div')
+    const root = createRoot(host)
+    const picked: number[] = []
+    act(() => root.render(createElement(VolumeRates, { quantity: 100, onPick: (q: number) => picked.push(q),
+      steps: [{ minQuantity: 10, ratePer1000: 4.9032 }, { minQuantity: 250, ratePer1000: 1.188 }, { minQuantity: 1000, ratePer1000: 0.924 }] })))
+    const buttons = [...host.querySelectorAll('button')]
+    expect(buttons.map((b) => b.textContent)).toEqual(['from 250 · $1.188', 'from 1,000 · $0.924'])
+    act(() => buttons[0].click())
+    expect(picked).toEqual([250])
+    act(() => root.unmount())
+  })
 })

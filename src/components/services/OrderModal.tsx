@@ -323,6 +323,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
               sufficient={balance.sufficient}
               shortfallUnits={balance.shortfallUnits}
               hideBalance={guest}
+              onPickQuantity={busy ? undefined : (q) => { haptic.select(); setQuantity(String(q)); edited() }}
             />
 
             {phase.kind === 'error' && (
