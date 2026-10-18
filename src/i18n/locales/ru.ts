@@ -472,7 +472,7 @@ const ru: Record<string, string> = {
   'Every order is on the Orders tab with its status and progress, updated automatically. If something goes wrong, report it from the order in one tap.': 'Каждый заказ есть во вкладке «Заказы» со статусом и прогрессом, которые обновляются автоматически. Если что-то пошло не так, сообщите о проблеме из заказа в одно касание.',
   'What if an order cannot be completed?': 'Что если заказ не может быть выполнен?',
   'If an order is canceled or delivered only in part, the unused amount returns to your balance automatically.': 'Если заказ отменён или выполнен частично, неиспользованная сумма автоматически возвращается на баланс.',
-  'No refill': 'Без гарантии',
+  'No refill': 'Без восстановления',
   'Lifetime': 'Навсегда',
   'lifetime': 'навсегда',
   'Real': 'Живые',

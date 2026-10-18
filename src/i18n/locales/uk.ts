@@ -472,7 +472,7 @@ const uk: Record<string, string> = {
   'Every order is on the Orders tab with its status and progress, updated automatically. If something goes wrong, report it from the order in one tap.': 'Кожне замовлення є у вкладці «Замовлення» зі статусом і прогресом, що оновлюються автоматично. Якщо щось пішло не так, повідомте про проблему із замовлення одним дотиком.',
   'What if an order cannot be completed?': 'Що як замовлення не може бути виконано?',
   'If an order is canceled or delivered only in part, the unused amount returns to your balance automatically.': 'Якщо замовлення скасовано або виконано частково, невикористана сума автоматично повертається на баланс.',
-  'No refill': 'Без гарантії',
+  'No refill': 'Без відновлення',
   'Lifetime': 'Назавжди',
   'lifetime': 'назавжди',
   'Real': 'Живі',
