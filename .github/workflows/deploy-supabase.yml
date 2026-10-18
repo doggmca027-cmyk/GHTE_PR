@@ -80,10 +80,12 @@ jobs:
         if: steps.secrets.outputs.ready == 'true'
         run: npm run check:supabase
 
+      # A pinned version: "latest" is resolved through the GitHub API, whose shared runner quota ran out twice (2026-10-18, "Failed to
+      # resolve latest Supabase CLI release: rate limit exceeded") and stopped the deploy before anything was applied. Raise it by hand.
       - uses: supabase/setup-cli@v1
         if: steps.secrets.outputs.ready == 'true'
         with:
-          version: latest
+          version: 2.116.0
 
       # The CLI's error is copied into an annotation (secrets masked) so a failure explains itself on the run page.
       - name: Link project
