@@ -4,7 +4,8 @@
 //   Drip-feed: quantity is the TOTAL, delivered in `runs` parts of quantity / runs, `interval` minutes apart; it is priced on the total and
 //   routed only to drip-feed capable offers whose limits take one part.
 //   The price is built by the database (list price - tier discount - promo discount, never under provider cost + minimum margin);
-//   see supabase/migrations/20261105000000_discount_engine.sql and the quote-order function.
+//   see supabase/migrations/20261105000000_discount_engine.sql and the quote-order function. It is the retail rate of the offer routing
+//   picks for this quantity (_shared/order-pricing.ts, migration 20261220000000), the same offer and rate quote-order shows.
 //
 // Flow: verify JWT -> validate -> load the service's provider offers -> route (selectBestOffer, see
 //       _shared/routing.ts) -> place_order() (validates + snapshots the offer, atomic debit)
@@ -38,6 +39,7 @@ import {
   resolveOffer,
   type OfferRow,
 } from '../_shared/routing.ts'
+import { loadPriceRules, offerRatePer1000, PRICED_SERVICE_COLUMNS, toPricedService, type PricedServiceRow } from '../_shared/order-pricing.ts'
 import { assertSwitchOn, loadPlatformSettings } from '../_shared/platform-settings.ts'
 import { resolveProviderApiKey } from '../_shared/secrets.ts'
 import { corsHeaders, instrument, readBoundedText } from '../_shared/http.ts'
@@ -111,7 +113,7 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   // 3b. Everything that determines price and routing comes from the database.
   const [settings, { data: service, error: serviceError }] = await Promise.all([
     loadPlatformSettings(db, log),
-    db.from('services').select('id, is_active, min_quantity, max_quantity, customer_rate_per_1000').eq('id', input.serviceId).maybeSingle(),
+    db.from('services').select(PRICED_SERVICE_COLUMNS).eq('id', input.serviceId).maybeSingle(),
   ])
   try {
     assertSwitchOn(settings, 'orders')
@@ -136,20 +138,24 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   // A retry of an order that already exists keeps going to the provider it was charged for.
   const { data: existing } = await db.from('orders').select('provider_offer_id').eq('idempotency_key', idempotencyKey).maybeSingle()
 
-  const { data: offerRows, error: offersError } = await db.from('provider_service_offers').select(OFFER_SELECT).eq('service_id', input.serviceId)
-  if (offersError) {
-    log.error('offer lookup failed', { err: offersError, error_code: 'offer_lookup_failed', serviceId: input.serviceId })
+  const [{ data: offerRows, error: offersError }, rules] = await Promise.all([
+    db.from('provider_service_offers').select(OFFER_SELECT).eq('service_id', input.serviceId),
+    loadPriceRules(db).catch((e: unknown) => e as Error),
+  ])
+  if (offersError || rules instanceof Error) {
+    log.error('offer lookup failed', { err: offersError ?? rules, error_code: 'offer_lookup_failed', serviceId: input.serviceId })
     return fail(500, 'internal_error', 'Something went wrong. You were not charged.')
   }
   const candidates = buildCandidates((offerRows ?? []) as unknown as OfferRow[])
 
   // Refuse BEFORE charging anything if no healthy provider can fulfil the order. A replay of an existing order keeps
-  // its pinned offer (never re-routed); a new order gets every eligible offer, best first.
+  // its pinned offer (never re-routed); a new order gets every eligible offer, best first. Every offer may be chosen: the order is priced
+  // on the one that takes it (below), so a dearer offer that alone takes this quantity sells above its cost too.
   let offers: IProviderServiceOffer[]
   try {
     offers = existing?.provider_offer_id
       ? [resolveOffer(candidates.offers, candidates.providers, { quantity: input.quantity, runs, pinnedOfferId: existing.provider_offer_id })]
-      : rankOffers(candidates.offers, candidates.providers, { quantity: input.quantity, runs, maxCostPer1000: Number(service.customer_rate_per_1000) })
+      : rankOffers(candidates.offers, candidates.providers, { quantity: input.quantity, runs })
   } catch (e) {
     if (e instanceof ServiceUnavailableError) return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
     throw e
@@ -159,6 +165,9 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
     return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
   }
   const mockMode = mockModeEnabled(Deno.env)
+  // The price: the retail rate of the first offer, exactly what quote-order showed. A fall-over to another offer pays the same price.
+  const priced = offers[0]
+  const ratePer1000 = offerRatePer1000(toPricedService(service as unknown as PricedServiceRow), priced.costPer1000, rules)
 
   // 4. Execute. Failover to the next offer happens ONLY on a refusal before anything was sent or charged (no API key,
   //    provider balance cannot cover the cost). Once a request reached a provider, its outcome is final for this call:
@@ -194,6 +203,8 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
           allowUnfunded,
           runs,
           interval,
+          pricedOfferId: priced.id,
+          ratePer1000,
           externalServiceId: details.externalServiceId,
         },
         buildOrderPorts(db),

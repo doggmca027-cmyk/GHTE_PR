@@ -7,11 +7,15 @@
 // minus the tier discount, minus the promo discount, with the discounts reduced when they would take the price under the
 // provider cost plus the platform's minimum margin. Nothing is written and no promo use is consumed. The caller is always the
 // JWT's user. Provider cost and the margin floor are never returned.
+// The order is priced on the offer place-order will route this quantity to (the same router, routing.ts rankOffers) at that offer's
+// retail rate (_shared/order-pricing.ts, migration 20261220000000), so the price shown is the price charged to the cent.
 // Secrets: JWT_SECRET. Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
 import { hasBearer, mapQuoteError, parseQuoteBody, toQuoteDto } from '../_shared/discounts.ts'
+import { loadPriceRules, offerRatePer1000, PRICED_SERVICE_COLUMNS, toPricedService, type PricedServiceRow } from '../_shared/order-pricing.ts'
+import { OFFER_SELECT, buildCandidates, rankOffers, type OfferRow } from '../_shared/routing.ts'
 
 Deno.serve(instrument('quote-order', async (req: Request, { log }): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
@@ -36,9 +40,26 @@ Deno.serve(instrument('quote-order', async (req: Request, { log }): Promise<Resp
   if (!parsed.ok) return fail(400, 'invalid_input', parsed.message)
 
   const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
+  const { serviceId, quantity } = parsed.value
+  const runs = parsed.value.runs ?? 1
+  const [{ data: service, error: serviceError }, { data: offerRows, error: offersError }, rules] = await Promise.all([
+    db.from('services').select(PRICED_SERVICE_COLUMNS).eq('id', serviceId).maybeSingle(),
+    db.from('provider_service_offers').select(OFFER_SELECT).eq('service_id', serviceId),
+    loadPriceRules(db).catch((e: unknown) => e as Error),
+  ])
+  if (serviceError || offersError || rules instanceof Error) {
+    log.error('quote lookup failed', { err: serviceError ?? offersError ?? rules, error_code: 'quote_failed' })
+    return fail(500, 'server_error', 'Something went wrong. Please try again.')
+  }
+  if (!service || !service.is_active) return fail(404, 'service_unavailable', 'This service is no longer available.')
+  // the offer place-order will take for this quantity: the same router with the same inputs
+  const candidates = buildCandidates((offerRows ?? []) as unknown as OfferRow[])
+  const offer = rankOffers(candidates.offers, candidates.providers, { quantity, runs })[0]
+  if (!offer) return fail(503, 'service_unavailable', 'This service is temporarily unavailable.')
   const { data, error } = await db.rpc('quote_order_price', {
-    p_user_id: userId, p_service_id: parsed.value.serviceId, p_quantity: parsed.value.quantity, p_promo_code: guest ? null : parsed.value.promoCode,
-    p_runs: parsed.value.runs ?? 1,
+    p_user_id: userId, p_service_id: serviceId, p_quantity: quantity, p_promo_code: guest ? null : parsed.value.promoCode,
+    p_runs: runs, p_offer_id: offer.id,
+    p_rate_per_1000: offerRatePer1000(toPricedService(service as unknown as PricedServiceRow), offer.costPer1000, rules),
   })
   if (error) {
     const m = mapQuoteError(error.message)

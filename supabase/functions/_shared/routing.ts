@@ -13,9 +13,9 @@
 // Who may be chosen at all:
 //   1. only active offers whose provider is active, routing-enabled and healthy (degraded / unavailable / disabled providers never
 //      receive new orders)
-//   2. when the caller knows the price (maxCostPer1000 = services.customer_rate_per_1000), never an offer that costs more than the
-//      customer pays: the price is built on the CHEAPEST offer, so a pricier one (taken for a quantity the cheapest cannot deliver) must
-//      not sell at a loss
+//   2. when the caller passes a price (maxCostPer1000), never an offer that costs more than that. place-order and quote-order pass none:
+//      an order is priced on the offer that takes it (order-pricing.ts), so a pricier one taken for a quantity the cheapest cannot
+//      deliver still sells above its cost
 //   3. only offers whose own limits take the quantity. A drip-feed order (runs > 1) is `runs` deliveries of quantity / runs each,
 //      and a panel checks its min/max against ONE delivery, so the limits are compared with quantity / runs (a total that does
 //      not split into whole deliveries fits no offer). The price stays on the total quantity.

@@ -195,15 +195,15 @@ describe('place_order: drip-feed', () => {
     for (const role of ['anon', 'authenticated']) {
       expect(await num(`select has_column_privilege('${role}', 'public.services', 'dripfeed_available', 'select')::int`)).toBe(1)
       expect(await num(`select has_function_privilege('${role}', 'public.refresh_service_dripfeed()', 'execute')::int`)).toBe(0)
-      expect(await num(`select has_function_privilege('${role}', 'public.quote_order_price(uuid, uuid, integer, text, integer)', 'execute')::int`)).toBe(0)
+      expect(await num(`select has_function_privilege('${role}', 'public.quote_order_price(uuid, uuid, integer, text, integer, uuid, numeric)', 'execute')::int`)).toBe(0)
     }
   })
 
   it('only the service role may call it', async () => {
     for (const role of ['anon', 'authenticated']) {
-      expect(await num(`select has_function_privilege('${role}', 'public.place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text, boolean, integer, integer)', 'execute')::int`)).toBe(0)
+      expect(await num(`select has_function_privilege('${role}', 'public.place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text, boolean, integer, integer, uuid, numeric)', 'execute')::int`)).toBe(0)
     }
-    expect(await num(`select has_function_privilege('service_role', 'public.place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text, boolean, integer, integer)', 'execute')::int`)).toBe(1)
+    expect(await num(`select has_function_privilege('service_role', 'public.place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text, boolean, integer, integer, uuid, numeric)', 'execute')::int`)).toBe(1)
     expect(await num(`select count(*) from pg_proc where proname = 'place_order'`)).toBe(1)
   })
 })

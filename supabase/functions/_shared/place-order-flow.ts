@@ -71,6 +71,12 @@ export interface PlaceOrderArgs {
   /** Drip-feed (default 1 / 0 = a plain order). quantity stays the total; place_order checks the limits per run. */
   runs?: number
   interval?: number
+  /**
+   * The price of the order (migration 20261220000000): the offer the quote showed (routing's first choice for this quantity) and its retail
+   * rate per 1000 (order-pricing.ts). A refusal before sending moves the order to the next offer at the same price. Unset: the card's rate.
+   */
+  pricedOfferId?: string
+  ratePer1000?: number
 }
 
 /** The drip-feed part of a createOrder request for a stored order: nothing for a plain order. */
@@ -158,6 +164,8 @@ export interface PlaceOrderRequest {
   allowUnfunded?: boolean
   runs?: number
   interval?: number
+  pricedOfferId?: string
+  ratePer1000?: number
   /** The provider's own id for the service, read from the database (never from the client). */
   externalServiceId: string
 }
@@ -328,11 +336,12 @@ export class PreSendRejection extends Error {
 /**
  * True only for refusals that happen BEFORE the provider call, with the customer's charge rolled back:
  * the provider's cached balance cannot cover the cost (place_order refused the reservation, its whole transaction
- * rolled back), or the attempt could not start. Never true for anything that happened after the request was sent.
+ * rolled back), an offer that is not the quoted one would not keep the minimum margin at the quoted price, or the attempt
+ * could not start. Never true for anything that happened after the request was sent.
  */
 export function isPreSendRejection(e: unknown): boolean {
   if (e instanceof PreSendRejection) return true
-  return e instanceof PlaceOrderDbError && /insufficient_provider_balance/.test(e.message)
+  return e instanceof PlaceOrderDbError && /insufficient_provider_balance|offer_below_price/.test(e.message)
 }
 
 /**

@@ -27,6 +27,8 @@ export function buildOrderPorts(db: DbLike): PlaceOrderPorts {
           p_allow_unfunded: a.allowUnfunded === true,
           p_runs: a.runs ?? 1,
           p_interval: a.interval ?? 0,
+          p_priced_offer_id: a.pricedOfferId ?? null,
+          p_rate_per_1000: a.ratePer1000 ?? null,
         }),
         'place_order',
       )

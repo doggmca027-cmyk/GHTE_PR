@@ -214,7 +214,7 @@ describe('deferred funding (real SQL)', () => {
       expect((await q(`select has_function_privilege('service_role', 'public.${fn}', 'execute') ok`))[0].ok, fn).toBe(true)
     }
     for (const role of ['anon', 'authenticated']) {
-      expect((await q(`select has_function_privilege('${role}', 'public.place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text, boolean, integer, integer)', 'execute') ok`))[0].ok).toBe(false)
+      expect((await q(`select has_function_privilege('${role}', 'public.place_order(uuid, uuid, text, integer, uuid, uuid, uuid, numeric, text, text, boolean, integer, integer, uuid, numeric)', 'execute') ok`))[0].ok).toBe(false)
     }
     expect((await q(`select has_column_privilege('authenticated', 'public.orders', 'awaiting_funds_since', 'select') ok`))[0].ok).toBe(true)
     expect((await q(`select has_column_privilege('anon', 'public.orders', 'awaiting_funds_since', 'select') ok`))[0].ok).toBe(false)
