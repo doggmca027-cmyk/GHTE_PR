@@ -130,8 +130,8 @@ describe('the quote is the charge, on every quantity of the card (real SQL)', ()
       expect(Number(order.list_price_amount), `quantity ${qty}`).toBe(Number(quoted.list_price))
       expect(Number(order.profit_amount), `quantity ${qty}`).toBeGreaterThan(0)
     }
-    // the step is scaled on the serving offer's own cost: 50 000 at 0.40 x 1.25
-    expect(await quote(50_000, W)).toMatchObject({ rate_per_1000: 0.5, list_price: 25 })
+    // the step is scaled on the serving offer's own cost (50 000 at 0.40 x 1.25 = 0.50), never under its floor 0.40 x 1.35 = 0.54
+    expect(await quote(50_000, W)).toMatchObject({ rate_per_1000: 0.54, list_price: 27 })
   })
 
   it('a fall-over to another offer pays the quoted price; one that would not keep the minimum margin is refused before charging', async () => {

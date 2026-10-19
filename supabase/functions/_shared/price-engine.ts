@@ -96,7 +96,8 @@ export function selectPriceRule(
  * - fixed:      rate + value
  * - tier:       percentage markup, only inside [min_rate, max_rate]
  * - no rule:    rate (then the margin floor applies)
- * The result is never below providerRate + minMargin, and is rounded UP to 4 decimals.
+ * A rule may also set a minimum: min_markup (the price is at least rate + min_markup) and min_price (at least min_price), so a cascade
+ * "max(cost x 5, cost + 0.10, 0.12)" is one tier rule. The result is never below providerRate + minMargin, and is rounded UP to 4 decimals.
  */
 export function calculateCustomerRate(
   providerRate: number,
@@ -128,6 +129,12 @@ export function calculateCustomerRate(
       // percentage / tier: value has 2 decimals -> hundredths of a percent
       const hundredths = toFixedPoint(rule.value, 2)
       candidateNum = rate * (PERCENT_DEN + hundredths)
+    }
+    for (const [name, min] of [['min_markup', rule.min_markup], ['min_price', rule.min_price]] as const) {
+      if (min == null) continue
+      if (!Number.isFinite(min) || min < 0) throw new RangeError(`Rule ${rule.id} has an invalid ${name}: ${min}`)
+      const minNum = (name === 'min_markup' ? rate + toFixedPoint(min, SCALE) : toFixedPoint(min, SCALE)) * PERCENT_DEN
+      if (minNum > candidateNum) candidateNum = minNum
     }
   }
 

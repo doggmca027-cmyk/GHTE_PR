@@ -48,7 +48,7 @@ import type { Platform, PriceRule } from '../_shared/types.ts'
 // deno-lint-ignore no-explicit-any
 type Db = SupabaseClient<any, 'public', any>
 
-const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, name_all, name_any, priority, is_active'
+const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, min_markup, min_price, name_all, name_any, priority, is_active'
 
 function must<T>(res: { data: T | null; error: { message: string } | null }, what: string): T {
   if (res.error) throw new Error(`${what}: ${res.error.message}`)
@@ -61,6 +61,8 @@ const toRule = (r: Record<string, unknown>): PriceRule => ({
   value: Number(r.value),
   min_rate: r.min_rate == null ? null : Number(r.min_rate),
   max_rate: r.max_rate == null ? null : Number(r.max_rate),
+  min_markup: r.min_markup == null ? null : Number(r.min_markup),
+  min_price: r.min_price == null ? null : Number(r.min_price),
 })
 
 Deno.serve(instrument('admin-catalog-mapping', async (req: Request, { log }): Promise<Response> => {

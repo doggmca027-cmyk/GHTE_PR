@@ -102,7 +102,7 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
 
   async function loadRules(): Promise<PriceRule[]> {
     return (must(
-      await db.from('price_rules').select('id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, name_all, name_any, priority, is_active').eq('is_active', true),
+      await db.from('price_rules').select('id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, min_markup, min_price, name_all, name_any, priority, is_active').eq('is_active', true),
       'load price_rules',
     ) as unknown as (Omit<PriceRule, 'platform'> & { platform: { slug: string } | null })[]).map((r) => ({
       ...r,
@@ -110,6 +110,8 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
       value: Number(r.value),
       min_rate: r.min_rate == null ? null : Number(r.min_rate),
       max_rate: r.max_rate == null ? null : Number(r.max_rate),
+      min_markup: r.min_markup == null ? null : Number(r.min_markup),
+      min_price: r.min_price == null ? null : Number(r.min_price),
     }))
   }
 

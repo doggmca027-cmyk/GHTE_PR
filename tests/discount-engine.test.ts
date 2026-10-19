@@ -96,6 +96,8 @@ describe('discount engine (SQL)', () => {
       grant usage on schema public, auth to anon, authenticated, service_role;`)
     const dir = path.resolve(__dirname, '../supabase/migrations')
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.sql')).sort()) await db.exec(fs.readFileSync(path.join(dir, f), 'utf8'))
+    // the minimum order charge and the volume floor (migration 20261222000000) are tested in tiered-markup.test.ts; off here
+    await db.exec(`update platform_settings set min_order_charge = 0, volume_floor_multiplier = 1, volume_floor_markup = 0 where id = 1`)
 
     admin = await newUser({ admin: true, funds: 0 })
     provider = await one<string>(`insert into providers(name, api_url) values ('P', 'https://p.invalid') returning id v`)

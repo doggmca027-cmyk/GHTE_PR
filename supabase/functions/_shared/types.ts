@@ -195,6 +195,10 @@ export interface PriceRule {
    */
   name_all?: string[] | null
   name_any?: string[] | null
+  /** The rule's price is at least cost + this per 1000 (the markup never earns less than this; null: no such minimum). */
+  min_markup?: number | null
+  /** The rule's price is at least this per 1000, whatever the cost (null: no such minimum). */
+  min_price?: number | null
   priority: number
   is_active?: boolean
 }

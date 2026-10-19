@@ -29,6 +29,8 @@ describe('volume pricing (SQL)', () => {
       grant usage on schema public, auth to anon, authenticated, service_role;`)
     const dir = path.resolve(__dirname, '../supabase/migrations')
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.sql')).sort()) await db.exec(fs.readFileSync(path.join(dir, f), 'utf8'))
+    // the minimum order charge and the volume floor (migration 20261222000000) are tested in tiered-markup.test.ts; off here
+    await db.exec(`update platform_settings set min_order_charge = 0, volume_floor_multiplier = 1, volume_floor_markup = 0 where id = 1`)
     await db.exec(`
       insert into providers(id, name, api_url) values ('00000000-0000-4000-8000-0000000000a1', 'A', 'https://a');
       insert into categories(id, platform_id, name, slug) values ('00000000-0000-4000-8000-0000000000c1', (select id from platforms where slug = 'telegram'), 'V', 'v');

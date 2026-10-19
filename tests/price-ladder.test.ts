@@ -84,7 +84,7 @@ describe('price_ladder (real SQL)', () => {
       { from: 10, to: 249, rate_per_1000: 4.9032, basis_per_1000: 2.724 },
       { from: 250, to: 15000, rate_per_1000: 1.188, basis_per_1000: 0.66 },
     ])
-    expect(rows.map((r) => [r.min_quantity, Number(r.rate_per_1000)])).toEqual([[10, 4.9032], [250, 1.188], [1000, 0.924], [10000, 0.825]])
+    expect(rows.map((r) => [r.min_quantity, Number(r.rate_per_1000)])).toEqual([[10, 4.9032], [250, 1.188], [1000, 0.924], [10000, 0.891]]) // 0.825 lifted to the floor 0.66 x 1.35
   })
 
   it('without volume pricing: one step per range', async () => {

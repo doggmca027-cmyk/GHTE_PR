@@ -21,7 +21,7 @@ import type { Platform, PriceRule } from '../_shared/types.ts'
 type Db = SupabaseClient<any, 'public', any>
 
 // platform is the joined slug: the pricing engine and the reprice logic keep working with the slug
-const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, name_all, name_any, priority, is_active'
+const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, min_markup, min_price, name_all, name_any, priority, is_active'
 const WRITE_CHUNK = 500
 const ALL_OFFERS_ABOVE = 300
 const OFFER_ID_CHUNK = 100
@@ -38,6 +38,8 @@ const toRule = (r: Record<string, unknown>): PriceRule => ({
   value: Number(r.value),
   min_rate: r.min_rate == null ? null : Number(r.min_rate),
   max_rate: r.max_rate == null ? null : Number(r.max_rate),
+  min_markup: r.min_markup == null ? null : Number(r.min_markup),
+  min_price: r.min_price == null ? null : Number(r.min_price),
 })
 
 /** Active services with their platform, a page at a time (PostgREST cuts a response at 1000 rows). */
