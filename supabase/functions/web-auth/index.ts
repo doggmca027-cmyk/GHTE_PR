@@ -9,10 +9,13 @@
 //   { action: "RESET_PASSWORD", email, code, newPassword }               -> { success, token, expiresAt, user, wallet, passwordChanged }
 //   { action: "TELEGRAM_WIDGET_LOGIN", widget: { id, first_name?, last_name?, username?, photo_url?, auth_date, hash } }
 //                                                                        -> { success, token, expiresAt, user, wallet }
-//   { action: "BOT_LOGIN_INIT" }  -> { success, link: https://t.me/<bot>?start=auth_<token>, pollToken, expiresInSeconds, pollSeconds }
-//   { action: "BOT_LOGIN_POLL", pollToken } -> { success, status: pending | opened | cancelled | expired | consumed | unknown }
-//                                            or { success, status: "confirmed", token, expiresAt, user, wallet } (once)
-//   The confirmation itself happens in the bot (telegram-bot function): /start auth_<token>, then Confirm.
+//     Telegram's own Login Widget (oauth.telegram.org): the user confirms the sign-in in Telegram, which shows the device and the place of
+//     the attempt; the signed payload comes back to the website and its HMAC-SHA-256 (key SHA-256(bot token)) is checked here.
+//   Connected accounts, for a signed-in profile (Authorization: Bearer <its JWT>; migration 20261223000000):
+//   { action: "LINK_TELEGRAM", widget }                                  -> { success, token, expiresAt, user, wallet, linked: "telegram" }
+//   { action: "LINK_EMAIL_REQUEST", email, lang? }                       -> { success, codeSent, email, expiresInSeconds }
+//   { action: "LINK_EMAIL_VERIFY", email, code, password? }              -> { success, token, expiresAt, user, wallet, linked: "email" }
+//     409 telegram_taken / email_taken: that account already has its own profile (never merged); 409 already_linked.
 //
 // The token is the same HS256 JWT telegram-auth issues (sub = users.id, role/aud = authenticated), so every other function, RLS
 // policy and RPC works unchanged for web users. "Code sent" answers are identical whether or not the address has an account.
@@ -25,24 +28,10 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { parseAdminIds } from '../_shared/admin.ts'
 import { emailConfigured, sendCodeEmail } from '../_shared/email-sender.ts'
-import { corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
+import { authenticate, corsHeaders, fail, instrument, json, readJson } from '../_shared/http.ts'
 import { signJwt } from '../_shared/jwt.ts'
 import { signupGate } from '../_shared/signup-gate.ts'
-import { WEB_TOKEN_TTL_SECONDS, clientKey, handleWebAuth, parseWebAuthRequest, publicUser, type BotLoginPoll, type WebAuthPorts, type WebUser } from '../_shared/web-auth.ts'
-
-/** The bot's username: TELEGRAM_BOT_USERNAME, else asked from Telegram once per worker (getMe) and kept. */
-let botNameCache: string | null = null
-async function botUsername(token: string | null): Promise<string | null> {
-  const configured = Deno.env.get('TELEGRAM_BOT_USERNAME')?.trim().replace(/^@/, '')
-  if (configured) return configured
-  if (botNameCache || !token) return botNameCache
-  try {
-    const r = await fetch(`https://api.telegram.org/bot${token}/getMe`, { signal: AbortSignal.timeout(5000) })
-    const j = await r.json() as { ok?: boolean; result?: { username?: string } }
-    botNameCache = j.ok && j.result?.username ? j.result.username : null
-  } catch { /* the sign-in answers 503 until Telegram answers */ }
-  return botNameCache
-}
+import { LINK_ACTIONS, WEB_TOKEN_TTL_SECONDS, clientKey, handleWebAuth, parseWebAuthRequest, publicUser, type LinkResult, type WebAuthPorts, type WebUser } from '../_shared/web-auth.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = SupabaseClient<any, 'public', any>
@@ -106,7 +95,7 @@ Deno.serve(instrument('web-auth', async (req: Request, { log }): Promise<Respons
     },
     async session(user: WebUser, method) {
       let isAdmin = user.is_admin === true
-      // the ADMIN_TELEGRAM_IDS bootstrap only for an identity Telegram itself just proved (widget signature, or the bot's own update)
+      // the ADMIN_TELEGRAM_IDS bootstrap only for an identity Telegram itself just proved (the widget signature)
       if (!isAdmin && method !== 'email' && user.telegram_id !== null && adminIds.has(Number(user.telegram_id))) {
         const { error } = await db.from('users').update({ is_admin: true }).eq('id', user.id)
         if (!error) isAdmin = true
@@ -121,13 +110,17 @@ Deno.serve(instrument('web-auth', async (req: Request, { log }): Promise<Respons
       log.info('signed in', { method })
       return { token, expiresAt, user: publicUser(user, isAdmin), wallet: { balance: Number(wallet.balance), currency: wallet.currency } }
     },
-    async createBotLogin(a) {
-      must(await db.rpc('bot_login_create', { p_start_hash: a.startHash, p_poll_hash: a.pollHash, p_ttl_seconds: a.ttlSeconds }), 'create bot login')
+    // the connected accounts act on the profile of the request's own JWT, never on an id from the body
+    userId: LINK_ACTIONS.has(parsed.action) ? await authenticate(req, jwtSecret) : null,
+    async linkTelegram(userId, w) {
+      return must(await db.rpc('web_link_telegram', { p_user_id: userId, p_telegram_id: w.id, p_username: w.username ?? null, p_first_name: w.first_name ?? null }), 'link telegram') as LinkResult
     },
-    async pollBotLogin(pollHash) {
-      return must(await db.rpc('bot_login_poll', { p_poll_hash: pollHash }), 'poll bot login') as BotLoginPoll
+    async issueLinkCode(a) {
+      return must(await db.rpc('web_link_email_issue', { p_user_id: a.userId, p_email: a.email, p_code_hash: a.codeHash, p_ttl_seconds: a.ttlSeconds }), 'link email code') as LinkResult
     },
-    botUsername: parsed.action === 'BOT_LOGIN_INIT' ? await botUsername(botToken) : null,
+    async verifyLinkCode(a) {
+      return must(await db.rpc('web_link_email_verify', { p_user_id: a.userId, p_email: a.email, p_code_hash: a.codeHash, p_password_hash: a.passwordHash }), 'link email') as LinkResult
+    },
     sendEmail: (m) => sendCodeEmail(m, { env: Deno.env, log }),
     emailReady: emailConfigured(Deno.env),
     codeSecret: Deno.env.get('EMAIL_CODE_SECRET') ?? jwtSecret,

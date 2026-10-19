@@ -23,7 +23,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const CODE_RE = /^\d{6}$/
 
 /** What the customer reads for each refusal of the server (in their language). */
-const ERRORS: Record<WebAuthErrorCode, string> = {
+export const ERRORS: Record<WebAuthErrorCode, string> = {
   invalid_input: tr('Please check what you entered.'),
   invalid_credentials: tr('Wrong e-mail or password.'),
   code_invalid: tr('Wrong code.'),
@@ -38,6 +38,10 @@ const ERRORS: Record<WebAuthErrorCode, string> = {
   email_failed: tr('We could not send the e-mail. Please try again.'),
   telegram_invalid: tr('Telegram sign-in failed. Please try again.'),
   telegram_unavailable: tr('Telegram sign-in is not available right now.'),
+  telegram_taken: tr('This Telegram account already has its own profile.'),
+  email_taken: tr('This e-mail already has its own profile.'),
+  already_linked: tr('This profile already has one connected.'),
+  unauthorized: tr('Please sign in again.'),
   network: tr('Could not reach the server. Check your connection and retry.'),
   server: tr('Something went wrong. Please try again.'),
 }
@@ -54,11 +58,29 @@ const inputClass =
   'w-full rounded-2xl border border-blue-100/70 bg-surface-sub px-4 py-3 text-[15px] font-medium text-content-primary outline-none transition-colors placeholder:text-content-muted focus:border-brand focus:bg-surface disabled:opacity-60'
 
 /**
- * Sign-in for the website (the app opened in a regular browser, outside Telegram): e-mail + password, a 6-digit code instead of the
- * password, sign-up with a confirmed e-mail, a password reset, and the Telegram Login Widget. Every way ends with the same session.
+ * Sign-in for the website (the app opened in a regular browser, outside Telegram): Telegram's Login Widget (oauth.telegram.org: confirmed
+ * in Telegram, which shows the device and the place of the attempt) and, when the e-mails can be sent, e-mail + password, a 6-digit code
+ * instead of the password, sign-up with a confirmed e-mail and a password reset. Every way ends with the same session.
+ * SignInPanel is the sign-in itself (the guest's sign-in dialog shows it); WebSignIn is the same as a whole page.
  */
+export function SignInPanel({ onSignedIn }: { onSignedIn: (session: AuthSession) => void }) {
+  return (
+    <>
+      {emailAuthEnabled() ? <EmailSignIn onSignedIn={onSignedIn} /> : <TelegramSignIn onSignedIn={onSignedIn} />}
+      <LegalFooter />
+    </>
+  )
+}
+
 export function WebSignIn({ onSignedIn }: { onSignedIn: (session: AuthSession) => void }) {
-  return emailAuthEnabled() ? <EmailSignIn onSignedIn={onSignedIn} /> : <TelegramSignIn onSignedIn={onSignedIn} />
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-b from-screen to-screen-end px-4 py-8">
+      <main className="w-full max-w-sm space-y-5">
+        <Brand />
+        <SignInPanel onSignedIn={onSignedIn} />
+      </main>
+    </div>
+  )
 }
 
 /**
@@ -66,6 +88,12 @@ export function WebSignIn({ onSignedIn }: { onSignedIn: (session: AuthSession) =
  * Until then the website signs in with Telegram only, so no field is shown that cannot work.
  */
 export const emailAuthEnabled = (env: Record<string, unknown> = import.meta.env): boolean => env.VITE_ENABLE_EMAIL_AUTH === 'true'
+
+/** Under the Telegram button: what happens when it is pressed. */
+export function WidgetHint() {
+  const t = useT()
+  return <p className="text-[12px] text-content-muted">{t('Telegram asks you to confirm the sign-in and shows the device and the place it comes from.')}</p>
+}
 
 function Brand() {
   const t = useT()
@@ -77,7 +105,7 @@ function Brand() {
   )
 }
 
-function LegalFooter() {
+export function LegalFooter() {
   const t = useT()
   const { lang } = useLanguage()
   return (
@@ -111,30 +139,27 @@ function TelegramSignIn({ onSignedIn }: { onSignedIn: (session: AuthSession) => 
   }
 
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-b from-screen to-screen-end px-4 py-8">
-      <main className="w-full max-w-sm space-y-5">
-        <Brand />
-        <section className="space-y-4 rounded-3xl bg-surface p-6 text-center shadow-card" aria-labelledby="signin-title">
-          <div className="space-y-1.5">
-            <h1 id="signin-title" className="text-lg font-extrabold text-content-primary">{t('Sign in with Telegram')}</h1>
-            <p className="text-[13px] text-content-secondary">{t('One tap with your Telegram account: no password. The first sign-in creates your account.')}</p>
-          </div>
-          {bot ? (
-            <TelegramLoginWidget bot={bot} onAuth={(user) => void signIn(user)} />
-          ) : (
-            <p role="status" className="rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-medium text-amber-800">{t('Telegram sign-in is not available right now.')}</p>
-          )}
-          {busy && <p className="flex items-center justify-center gap-2 text-[13px] text-content-secondary"><Loader2 size={16} className="animate-spin" /> {t('Signing you in…')}</p>}
-          {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-[13px] font-medium text-rose-700">{error}</p>}
-          {bot && (
-            <p className="text-[12px] text-content-muted">
-              {t('Prefer the app?')} <a className="font-semibold text-brand" href={`https://t.me/${bot}`}>{t('Open in Telegram')}</a>
-            </p>
-          )}
-        </section>
-        <LegalFooter />
-      </main>
-    </div>
+    <section className="space-y-4 rounded-3xl bg-surface p-6 text-center shadow-card" aria-labelledby="signin-title">
+      <div className="space-y-1.5">
+        <h1 id="signin-title" className="text-lg font-extrabold text-content-primary">{t('Sign in with Telegram')}</h1>
+        <p className="text-[13px] text-content-secondary">{t('One tap with your Telegram account: no password. The first sign-in creates your account.')}</p>
+      </div>
+      {bot ? (
+        <>
+          <TelegramLoginWidget bot={bot} onAuth={(user) => void signIn(user)} />
+          <WidgetHint />
+        </>
+      ) : (
+        <p role="status" className="rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-medium text-amber-800">{t('Telegram sign-in is not available right now.')}</p>
+      )}
+      {busy && <p className="flex items-center justify-center gap-2 text-[13px] text-content-secondary"><Loader2 size={16} className="animate-spin" /> {t('Signing you in…')}</p>}
+      {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-[13px] font-medium text-rose-700">{error}</p>}
+      {bot && (
+        <p className="text-[12px] text-content-muted">
+          {t('Prefer the app?')} <a className="font-semibold text-brand" href={`https://t.me/${bot}`}>{t('Open in Telegram')}</a>
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -224,81 +249,74 @@ function EmailSignIn({ onSignedIn }: { onSignedIn: (session: AuthSession) => voi
           : t('Sign in')
 
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-b from-screen to-screen-end px-4 py-8">
-      <main className="w-full max-w-sm space-y-5">
-        <Brand />
+    <section className="space-y-4 rounded-3xl bg-surface p-5 shadow-card" aria-labelledby="signin-title">
+      <div className="flex items-center gap-2">
+        {mode.kind !== 'signin' && (
+          <button type="button" onClick={() => go({ kind: 'signin' })} aria-label={t('Back')} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-sub text-content-secondary">
+            <ArrowLeft size={16} strokeWidth={2} />
+          </button>
+        )}
+        <h1 id="signin-title" className="text-lg font-extrabold text-content-primary">{title}</h1>
+      </div>
 
-        <section className="space-y-4 rounded-3xl bg-surface p-5 shadow-card" aria-labelledby="signin-title">
-          <div className="flex items-center gap-2">
-            {mode.kind !== 'signin' && (
-              <button type="button" onClick={() => go({ kind: 'signin' })} aria-label={t('Back')} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-sub text-content-secondary">
-                <ArrowLeft size={16} strokeWidth={2} />
-              </button>
+      <form className="space-y-3" onSubmit={(e) => void submit(e)} noValidate>
+        {mode.kind === 'verify' ? (
+          <>
+            <p className="flex items-start gap-2 rounded-2xl bg-brand-light/60 px-3 py-2.5 text-[13px] font-medium text-brand-text">
+              <Mail size={16} strokeWidth={2} className="mt-0.5 shrink-0" /> {t('We sent a 6-digit code to {email}.', { email: mode.email })}
+            </p>
+            <input className={inputClass} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder={t('6-digit code')}
+              aria-label={t('6-digit code')} value={code} disabled={busy} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+            {mode.purpose === 'reset_password' && (
+              <input className={inputClass} type="password" autoComplete="new-password" placeholder={t('New password (at least 8 characters)')}
+                aria-label={t('New password (at least 8 characters)')} value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} />
             )}
-            <h1 id="signin-title" className="text-lg font-extrabold text-content-primary">{title}</h1>
+          </>
+        ) : (
+          <>
+            <input className={inputClass} type="email" autoComplete="email" placeholder={t('E-mail')} aria-label={t('E-mail')}
+              value={email} disabled={busy} onChange={(e) => setEmail(e.target.value)} />
+            {(mode.kind === 'signin' || mode.kind === 'signup') && (
+              <input className={inputClass} type="password" autoComplete={mode.kind === 'signup' ? 'new-password' : 'current-password'}
+                placeholder={mode.kind === 'signup' ? t('Password (at least 8 characters)') : t('Password')}
+                aria-label={mode.kind === 'signup' ? t('Password (at least 8 characters)') : t('Password')}
+                value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} />
+            )}
+          </>
+        )}
+
+        {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-[13px] font-medium text-rose-700">{error}</p>}
+
+        <button type="submit" disabled={busy} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand text-[15px] font-bold text-white active:scale-[0.98] disabled:opacity-60">
+          {busy && <Loader2 size={18} className="animate-spin" />} {cta}
+        </button>
+      </form>
+
+      <div className="space-y-1.5 text-center text-[13px] font-semibold">
+        {mode.kind === 'signin' && (
+          <>
+            <button type="button" className="block w-full text-brand" onClick={() => go({ kind: 'code' })}>{t('Sign in with a code instead')}</button>
+            <button type="button" className="block w-full text-content-secondary" onClick={() => go({ kind: 'reset' })}>{t('Forgot password?')}</button>
+            <button type="button" className="block w-full text-content-secondary" onClick={() => go({ kind: 'signup' })}>{t('No account yet? Create one')}</button>
+          </>
+        )}
+        {mode.kind === 'signup' && <button type="button" className="block w-full text-content-secondary" onClick={() => go({ kind: 'signin' })}>{t('Already have an account? Sign in')}</button>}
+        {mode.kind === 'verify' && (
+          <button type="button" className={cn('block w-full', cooldown > 0 ? 'text-content-muted' : 'text-brand')} disabled={cooldown > 0 || busy} onClick={() => void resend()}>
+            {cooldown > 0 ? t('Send the code again in {s} s', { s: cooldown }) : t('Send the code again')}
+          </button>
+        )}
+      </div>
+
+      {bot && mode.kind !== 'verify' && (
+        <>
+          <div className="flex items-center gap-3 text-[11px] font-bold uppercase tracking-wide text-content-muted">
+            <span className="h-px flex-1 bg-blue-100" /> {t('or')} <span className="h-px flex-1 bg-blue-100" />
           </div>
-
-          <form className="space-y-3" onSubmit={(e) => void submit(e)} noValidate>
-            {mode.kind === 'verify' ? (
-              <>
-                <p className="flex items-start gap-2 rounded-2xl bg-brand-light/60 px-3 py-2.5 text-[13px] font-medium text-brand-text">
-                  <Mail size={16} strokeWidth={2} className="mt-0.5 shrink-0" /> {t('We sent a 6-digit code to {email}.', { email: mode.email })}
-                </p>
-                <input className={inputClass} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder={t('6-digit code')}
-                  aria-label={t('6-digit code')} value={code} disabled={busy} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
-                {mode.purpose === 'reset_password' && (
-                  <input className={inputClass} type="password" autoComplete="new-password" placeholder={t('New password (at least 8 characters)')}
-                    aria-label={t('New password (at least 8 characters)')} value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} />
-                )}
-              </>
-            ) : (
-              <>
-                <input className={inputClass} type="email" autoComplete="email" placeholder={t('E-mail')} aria-label={t('E-mail')}
-                  value={email} disabled={busy} onChange={(e) => setEmail(e.target.value)} />
-                {(mode.kind === 'signin' || mode.kind === 'signup') && (
-                  <input className={inputClass} type="password" autoComplete={mode.kind === 'signup' ? 'new-password' : 'current-password'}
-                    placeholder={mode.kind === 'signup' ? t('Password (at least 8 characters)') : t('Password')}
-                    aria-label={mode.kind === 'signup' ? t('Password (at least 8 characters)') : t('Password')}
-                    value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} />
-                )}
-              </>
-            )}
-
-            {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-[13px] font-medium text-rose-700">{error}</p>}
-
-            <button type="submit" disabled={busy} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand text-[15px] font-bold text-white active:scale-[0.98] disabled:opacity-60">
-              {busy && <Loader2 size={18} className="animate-spin" />} {cta}
-            </button>
-          </form>
-
-          <div className="space-y-1.5 text-center text-[13px] font-semibold">
-            {mode.kind === 'signin' && (
-              <>
-                <button type="button" className="block w-full text-brand" onClick={() => go({ kind: 'code' })}>{t('Sign in with a code instead')}</button>
-                <button type="button" className="block w-full text-content-secondary" onClick={() => go({ kind: 'reset' })}>{t('Forgot password?')}</button>
-                <button type="button" className="block w-full text-content-secondary" onClick={() => go({ kind: 'signup' })}>{t('No account yet? Create one')}</button>
-              </>
-            )}
-            {mode.kind === 'signup' && <button type="button" className="block w-full text-content-secondary" onClick={() => go({ kind: 'signin' })}>{t('Already have an account? Sign in')}</button>}
-            {mode.kind === 'verify' && (
-              <button type="button" className={cn('block w-full', cooldown > 0 ? 'text-content-muted' : 'text-brand')} disabled={cooldown > 0 || busy} onClick={() => void resend()}>
-                {cooldown > 0 ? t('Send the code again in {s} s', { s: cooldown }) : t('Send the code again')}
-              </button>
-            )}
-          </div>
-
-          {bot && mode.kind !== 'verify' && (
-            <>
-              <div className="flex items-center gap-3 text-[11px] font-bold uppercase tracking-wide text-content-muted">
-                <span className="h-px flex-1 bg-blue-100" /> {t('or')} <span className="h-px flex-1 bg-blue-100" />
-              </div>
-              <TelegramLoginWidget bot={bot} onAuth={(user) => void run(async () => onSignedIn(await loginWithTelegramWidget(user)))} />
-            </>
-          )}
-        </section>
-
-        <LegalFooter />
-      </main>
-    </div>
+          <TelegramLoginWidget bot={bot} onAuth={(user) => void run(async () => onSignedIn(await loginWithTelegramWidget(user)))} />
+          <WidgetHint />
+        </>
+      )}
+    </section>
   )
 }

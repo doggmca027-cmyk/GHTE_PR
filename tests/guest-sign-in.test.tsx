@@ -1,17 +1,21 @@
 // @vitest-environment jsdom
 // The website without a sign-in wall: a guest sees the whole site, the header's "Sign in" button and the personal tabs' prompt open the
-// bot sign-in, and that dialog signs in by itself once the customer presses Confirm in the bot (the server is asked every 2 s).
+// sign-in sheet (Telegram's Login Widget, e-mail when on); a signed-in profile connects its Telegram and an e-mail in Settings.
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const api = vi.hoisted(() => ({ startBotLogin: vi.fn(), pollBotLogin: vi.fn() }))
+const api = vi.hoisted(() => ({ linkTelegram: vi.fn(), requestLinkEmail: vi.fn(), verifyLinkEmail: vi.fn() }))
 vi.mock('../src/services/api/web-auth', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...api }))
 
 const SESSION = { token: 'jwt', expiresAt: 9e9, isMock: false, wallet: { balance: 3, currency: 'USD' }, user: { id: 'u', telegramId: 42, email: null, username: 'ann', firstName: 'Ann', languageCode: 'en', isAdmin: false } }
-const START = { link: 'https://t.me/GHTE_PR_BOT?start=auth_abc', pollToken: 'p'.repeat(43), expiresInSeconds: 300, pollSeconds: 2 }
+const type = (el: Element | null, value: string) => {
+  const input = el as HTMLInputElement
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+  act(() => { setter.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })) })
+}
 
 let host: HTMLDivElement
 let root: Root
@@ -19,8 +23,7 @@ const flush = () => act(async () => { for (let i = 0; i < 4; i++) await Promise.
 const buttonWith = (text: string) => [...host.querySelectorAll('button')].find((b) => b.textContent?.includes(text)) as HTMLButtonElement | undefined
 
 beforeEach(() => {
-  api.startBotLogin.mockReset()
-  api.pollBotLogin.mockReset()
+  for (const fn of Object.values(api)) fn.mockReset()
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -33,65 +36,94 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-describe('the bot sign-in dialog', () => {
-  it('opens the bot link, asks every 2 s and signs in on "confirmed", without a reload', async () => {
-    vi.useFakeTimers()
-    const open = vi.fn(() => ({}) as Window)
-    vi.stubGlobal('open', open)
-    api.startBotLogin.mockResolvedValue(START)
-    api.pollBotLogin.mockResolvedValueOnce({ status: 'pending' }).mockResolvedValueOnce({ status: 'opened' }).mockResolvedValueOnce({ status: 'confirmed', session: SESSION })
-    const { BotLoginModal } = await import('../src/components/auth/BotLoginModal')
-    const onSignedIn = vi.fn()
+describe('the sign-in sheet', () => {
+  it('Telegram\'s Login Widget with what it does, the legal links, and it closes on Escape or the backdrop', async () => {
+    vi.stubEnv('VITE_TWA_RETURN_URL', 'https://t.me/GHTE_PR_BOT')
+    const { SignInModal } = await import('../src/components/auth/SignInModal')
     const onClose = vi.fn()
-    act(() => root.render(createElement(BotLoginModal, { onSignedIn, onClose })))
-    await flush()
-    expect(api.startBotLogin).toHaveBeenCalledWith('en')
-    expect(open).toHaveBeenCalledWith(START.link, '_blank', 'noopener')
-    expect(host.querySelector('[data-testid="bot-login-waiting"]')?.textContent).toContain('Open @GHTE_PR_BOT in Telegram')
-    expect(host.querySelector(`a[href="${START.link}"]`)?.textContent?.trim()).toBe('Open Telegram')
+    act(() => root.render(createElement(SignInModal, { onSignedIn: () => {}, onClose })))
+    expect(host.querySelector('[role="dialog"]')?.getAttribute('aria-labelledby')).toBe('signin-title')
+    expect(host.querySelector('#signin-title')?.textContent).toBe('Sign in with Telegram')
+    expect(host.querySelector('[data-testid="telegram-login-widget"] script')?.getAttribute('data-telegram-login')).toBe('GHTE_PR_BOT')
+    expect(host.textContent).toContain('Telegram asks you to confirm the sign-in and shows the device and the place it comes from.')
+    expect(host.textContent).toContain('Terms of Service')
+    expect(host.textContent).not.toMatch(/Confirm» in the bot|Waiting for confirmation/) // the bot sign-in is gone
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
-    expect(api.pollBotLogin).toHaveBeenCalledTimes(1)
-    expect(api.pollBotLogin).toHaveBeenLastCalledWith(START.pollToken)
-    expect(onSignedIn).not.toHaveBeenCalled()
-    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
-    expect(api.pollBotLogin).toHaveBeenCalledTimes(3)
-    expect(onSignedIn).toHaveBeenCalledWith(SESSION)
-    expect(host.textContent).toContain('You are signed in.')
-    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
-    expect(onClose).toHaveBeenCalled()
-    await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
-    expect(api.pollBotLogin).toHaveBeenCalledTimes(3) // stops asking once signed in
+describe('connected accounts (Settings)', () => {
+  const mount = async (user: { telegramId?: number | null; username?: string | null; email?: string | null }, onSessionChange = vi.fn()) => {
+    const { ConnectedAccounts } = await import('../src/components/settings/ConnectedAccounts')
+    act(() => root.render(createElement(ConnectedAccounts, { session: { ...SESSION, user: { ...SESSION.user, ...user } }, onSessionChange })))
+    return onSessionChange
+  }
+
+  it('shows what is connected; a profile without Telegram gets the widget on the website', async () => {
+    vi.stubEnv('VITE_TWA_RETURN_URL', 'https://t.me/GHTE_PR_BOT')
+    await mount({ telegramId: 42, username: 'ann', email: 'ann@example.com' })
+    expect(host.textContent).toContain('@ann')
+    expect(host.textContent).toContain('ann@example.com')
+    expect(host.querySelector('[data-testid="telegram-login-widget"]')).toBeNull()
+    act(() => root.render(createElement('div')))
+    await mount({ telegramId: null, username: null, email: 'ann@example.com' })
+    expect(host.querySelector('[data-testid="telegram-login-widget"] script')).not.toBeNull()
   })
 
-  it('a Cancel in the bot or an expired request ends the wait and offers a fresh start', async () => {
-    vi.useFakeTimers()
-    vi.stubGlobal('open', vi.fn(() => null)) // a blocked pop-up: the "Open Telegram" button is still there
-    api.startBotLogin.mockResolvedValue(START)
-    api.pollBotLogin.mockResolvedValueOnce({ status: 'cancelled' }).mockResolvedValueOnce({ status: 'expired' })
-    const { BotLoginModal } = await import('../src/components/auth/BotLoginModal')
-    const onSignedIn = vi.fn()
-    act(() => root.render(createElement(BotLoginModal, { onSignedIn, onClose: () => {} })))
+  it('back from Telegram: connects the account and hands the new session up', async () => {
+    vi.stubEnv('VITE_TWA_RETURN_URL', 'https://t.me/GHTE_PR_BOT')
+    const next = { ...SESSION, token: 'jwt2' }
+    api.linkTelegram.mockResolvedValue(next)
+    const hash = 'c'.repeat(64)
+    window.history.replaceState(null, '', `/?id=42&username=ann&auth_date=1700000000&hash=${hash}`)
+    const onSessionChange = await mount({ telegramId: null, username: null, email: 'ann@example.com' })
     await flush()
-    expect(host.querySelector(`a[href="${START.link}"]`)).not.toBeNull()
-    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
-    expect(host.querySelector('[role="alert"]')?.textContent).toBe('The sign-in was cancelled in Telegram.')
-    act(() => buttonWith('Try again')!.click())
-    await flush()
-    expect(api.startBotLogin).toHaveBeenCalledTimes(2)
-    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
-    expect(host.querySelector('[role="alert"]')?.textContent).toBe('The sign-in request has expired.')
-    expect(onSignedIn).not.toHaveBeenCalled()
+    expect(api.linkTelegram).toHaveBeenCalledWith(expect.objectContaining({ token: 'jwt' }), { id: 42, username: 'ann', auth_date: 1700000000, hash })
+    expect(onSessionChange).toHaveBeenCalledWith(next)
+    expect(host.textContent).toContain('Telegram is connected.')
+    expect(window.location.search).toBe('')
   })
 
-  it('a refusal to start reads as a sentence', async () => {
+  it('a Telegram account with its own profile is refused with a sentence', async () => {
+    vi.stubEnv('VITE_TWA_RETURN_URL', 'https://t.me/GHTE_PR_BOT')
     const { WebAuthError } = await import('../src/services/api/web-auth')
-    api.startBotLogin.mockRejectedValue(new WebAuthError('rate_limited', 'x'))
-    const { BotLoginModal } = await import('../src/components/auth/BotLoginModal')
-    act(() => root.render(createElement(BotLoginModal, { onSignedIn: () => {}, onClose: () => {} })))
+    api.linkTelegram.mockRejectedValue(new WebAuthError('telegram_taken', 'x'))
+    window.history.replaceState(null, '', `/?id=42&auth_date=1700000000&hash=${'d'.repeat(64)}`)
+    const onSessionChange = await mount({ telegramId: null, username: null, email: 'ann@example.com' })
     await flush()
-    expect(host.querySelector('[role="alert"]')?.textContent).toBe('Too many attempts. Please try again later.')
-    expect(api.pollBotLogin).not.toHaveBeenCalled()
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('This Telegram account already has its own profile.')
+    expect(onSessionChange).not.toHaveBeenCalled()
+  })
+
+  it('e-mail: an address, then the code and an optional password; the new session goes up', async () => {
+    vi.stubEnv('VITE_ENABLE_EMAIL_AUTH', 'true')
+    api.requestLinkEmail.mockResolvedValue({ codeSent: true, email: 'ann@example.com', expiresInSeconds: 600 })
+    const next = { ...SESSION, user: { ...SESSION.user, email: 'ann@example.com' } }
+    api.verifyLinkEmail.mockResolvedValue(next)
+    const onSessionChange = await mount({ email: null })
+    type(host.querySelector('input[type="email"]'), 'ann@example.com')
+    act(() => (host.querySelector('form') as HTMLFormElement).requestSubmit())
+    await flush()
+    expect(api.requestLinkEmail).toHaveBeenCalledWith(expect.objectContaining({ token: 'jwt' }), 'ann@example.com', 'en')
+    expect(host.textContent).toContain('We sent a 6-digit code to ann@example.com.')
+    type(host.querySelector('input[inputmode="numeric"]'), '123456')
+    type(host.querySelector('input[type="password"]'), 'short')
+    act(() => (host.querySelector('form') as HTMLFormElement).requestSubmit())
+    await flush()
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('Password must be at least 8 characters.')
+    type(host.querySelector('input[type="password"]'), '')
+    act(() => (host.querySelector('form') as HTMLFormElement).requestSubmit())
+    await flush()
+    expect(api.verifyLinkEmail).toHaveBeenCalledWith(expect.objectContaining({ token: 'jwt' }), 'ann@example.com', '123456', undefined)
+    expect(onSessionChange).toHaveBeenCalledWith(next)
+    expect(host.textContent).toContain('The e-mail is connected.')
+  })
+
+  it('without e-mail sending (the default) it says so instead of a form that cannot work', async () => {
+    await mount({ email: null })
+    expect(host.querySelector('input[type="email"]')).toBeNull()
+    expect(host.textContent).toContain('Connecting an e-mail will be available soon.')
   })
 })
 

@@ -12,6 +12,7 @@ import type { SupportRequest } from '@/components/support/SupportScreen'
 import { useAuth } from '@/context/AuthContext'
 import { SignInContext } from '@/context/SignInContext'
 import { GuestPrompt } from '@/components/auth/GuestPrompt'
+import { widgetUserFromUrl } from '@/components/auth/TelegramLoginWidget'
 import { tr, useT } from '@/i18n'
 import { tm } from '@/i18n/messages'
 import { bindAnalytics, track } from '@/lib/analytics-client'
@@ -31,8 +32,8 @@ const WalletRoute = lazy(loadWallet)
 const OrdersScreen = lazy(() => loadOrders().then((m) => ({ default: m.OrdersScreen })))
 const SupportScreen = lazy(() => loadSupport().then((m) => ({ default: m.SupportScreen })))
 const SettingsScreen = lazy(() => loadSettings().then((m) => ({ default: m.SettingsScreen })))
-// The website guest's sign-in (confirmed in the Telegram bot): its own chunk, loaded when a guest asks to sign in.
-const BotLoginModal = lazy(() => import('@/components/auth/BotLoginModal').then((m) => ({ default: m.BotLoginModal })))
+// The website guest's sign-in (Telegram's Login Widget, e-mail when on): its own chunk, loaded when a guest asks to sign in.
+const SignInModal = lazy(() => import('@/components/auth/SignInModal').then((m) => ({ default: m.SignInModal })))
 // Admin code is split into its own chunk: regular users never download it.
 const AdminScreen = lazy(() => import('@/components/admin/AdminScreen').then((m) => ({ default: m.AdminScreen })))
 
@@ -93,6 +94,15 @@ export default function App() {
   }, [tab, session?.token]) // eslint-disable-line react-hooks/exhaustive-deps
   // the other tabs' code, once the first screen is up
   useEffect(() => { if (state.status === 'authenticated') prefetchTabs() }, [state.status]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Back from Telegram's Login Widget (redirect mode: the signed user is in the address): the widget that finishes it is shown again,
+  // the sign-in sheet for a guest, the connected accounts in Settings for a signed-in profile that connects its Telegram.
+  const widgetReturn = useRef(!insideTelegram() && widgetUserFromUrl(window.location.search) !== null)
+  useEffect(() => {
+    if (state.status !== 'authenticated' || !widgetReturn.current) return
+    widgetReturn.current = false
+    if (state.session.isGuest) setSigningIn(true)
+    else setTab('settings')
+  }, [state.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Jump to the wallet and open the deposit drawer (suggesting at least the missing amount, if known). */
   const topUp = (shortfallUsd?: number) => {
@@ -156,7 +166,7 @@ export default function App() {
       ) : tab === 'admin' && user.isAdmin ? (
         <AdminScreen session={state.session} />
       ) : tab === 'settings' ? (
-        readable(<SettingsScreen session={state.session} onSignOut={signOut} />)
+        readable(<SettingsScreen session={state.session} onSignOut={signOut} onSessionChange={signInWeb} />)
       ) : tab === 'support' ? (
         readable(<SupportScreen session={state.session} request={supportRequest} onRequestHandled={clearSupportRequest} />)
       ) : tab === 'orders' ? (
@@ -179,7 +189,7 @@ export default function App() {
       </Suspense>
       {signingIn && guest && (
         <Suspense fallback={null}>
-          <BotLoginModal onSignedIn={(s) => { setSigningIn(false); signInWeb(s) }} onClose={closeSignIn} />
+          <SignInModal onSignedIn={(s) => { setSigningIn(false); signInWeb(s) }} onClose={closeSignIn} />
         </Suspense>
       )}
     </Layout>

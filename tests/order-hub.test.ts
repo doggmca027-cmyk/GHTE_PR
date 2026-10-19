@@ -236,7 +236,7 @@ describe('the admins\' messages and buttons', () => {
   it('in the bot: an admin\'s 🚀 runs the queue and the result is sent back; anyone else is refused', async () => {
     const calls: [string, Record<string, unknown>][] = []
     const ports: BotPorts = {
-      openLogin: vi.fn(), decideLogin: vi.fn(), webAppUrl: null,
+      webAppUrl: null,
       telegram: async (method, body) => { calls.push([method, body]) },
       isAdmin: async (id) => id === 500,
       hubRetry: async (providerId) => `ran ${providerId}`,

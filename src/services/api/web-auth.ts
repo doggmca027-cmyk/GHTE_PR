@@ -1,5 +1,6 @@
 // Client of the web-auth Edge Function: e-mail + password + 6-digit code, and the Telegram Login Widget, for the app opened in a
-// regular browser. A successful sign-in returns the same session shape as telegram-auth (the same JWT, so every API works).
+// regular browser; and the connected accounts of a signed-in profile (Telegram, e-mail). A successful sign-in or link returns the same
+// session shape as telegram-auth (the same JWT, so every API works).
 //
 // Where the session is kept: in a regular browser it is remembered in localStorage (a desktop user must not be signed out by a
 // refresh; the token expires on its own after 7 days and every server call re-checks bans). Inside Telegram nothing is stored:
@@ -16,6 +17,7 @@ export const WEB_SESSION_KEY = 'web_session_v1'
 export type WebAuthErrorCode =
   | 'invalid_input' | 'invalid_credentials' | 'code_invalid' | 'code_expired' | 'code_locked' | 'code_cooldown' | 'already_registered'
   | 'rate_limited' | 'user_banned' | 'signups_paused' | 'email_unavailable' | 'email_failed' | 'telegram_invalid' | 'telegram_unavailable'
+  | 'telegram_taken' | 'email_taken' | 'already_linked' | 'unauthorized'
   | 'network' | 'server'
 
 export class WebAuthError extends Error {
@@ -35,15 +37,17 @@ export class WebAuthError extends Error {
 const KNOWN = new Set<WebAuthErrorCode>([
   'invalid_input', 'invalid_credentials', 'code_invalid', 'code_expired', 'code_locked', 'code_cooldown', 'already_registered', 'rate_limited',
   'user_banned', 'signups_paused', 'email_unavailable', 'email_failed', 'telegram_invalid', 'telegram_unavailable',
+  'telegram_taken', 'email_taken', 'already_linked', 'unauthorized',
 ])
 
-async function call<T>(body: Record<string, unknown>): Promise<T> {
+/** token: the signed-in profile's JWT (the connected accounts); a sign-in sends none. */
+async function call<T>(body: Record<string, unknown>, token?: string): Promise<T> {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new WebAuthError('server', 'Backend is not configured.')
   let res: Response
   try {
     res = await fetch(`${SUPABASE_URL}/functions/v1/web-auth`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
@@ -105,30 +109,20 @@ export async function loginWithTelegramWidget(widget: TelegramWidgetUser): Promi
   return toSession(await call<SessionBody>({ action: 'TELEGRAM_WIDGET_LOGIN', widget }))
 }
 
-// ---- sign-in confirmed in the Telegram bot ----------------------------------------------------------------------------------
+// ---- connected accounts (a signed-in profile) ---------------------------------------------------------------------------------
 
-export interface BotLoginStart {
-  /** https://t.me/<bot>?start=auth_<token>: opens the bot, which asks to Confirm. */
-  link: string
-  /** Kept by this browser only: the poll collects the session with it. */
-  pollToken: string
-  expiresInSeconds: number
-  pollSeconds: number
-}
-export type BotLoginState =
-  | { status: 'pending' | 'opened' | 'cancelled' | 'expired' | 'consumed' | 'unknown' }
-  | { status: 'confirmed'; session: AuthSession }
-
-export async function startBotLogin(lang?: string): Promise<BotLoginStart> {
-  const r = await call<BotLoginStart>({ action: 'BOT_LOGIN_INIT', lang: lang ?? null })
-  return { link: r.link, pollToken: r.pollToken, expiresInSeconds: r.expiresInSeconds, pollSeconds: r.pollSeconds }
+/** Connects the Telegram account of the widget to this profile: the new session (its JWT carries the Telegram id). */
+export async function linkTelegram(session: AuthSession, widget: TelegramWidgetUser): Promise<AuthSession> {
+  return toSession(await call<SessionBody>({ action: 'LINK_TELEGRAM', widget }, session.token))
 }
 
-export async function pollBotLogin(pollToken: string): Promise<BotLoginState> {
-  const r = await call<SessionBody & { status: string }>({ action: 'BOT_LOGIN_POLL', pollToken })
-  if (r.status === 'confirmed') return { status: 'confirmed', session: toSession(r) }
-  const known = ['pending', 'opened', 'cancelled', 'expired', 'consumed', 'unknown'] as const
-  return { status: (known as readonly string[]).includes(r.status) ? (r.status as (typeof known)[number]) : 'unknown' }
+/** Step 1 of connecting an e-mail: a 6-digit code to the address. */
+export const requestLinkEmail = (session: AuthSession, email: string, lang?: string) =>
+  call<CodeSent>({ action: 'LINK_EMAIL_REQUEST', email, lang: lang ?? null }, session.token)
+
+/** Step 2: the code (and an optional password for signing in with it later) -> the new session. */
+export async function verifyLinkEmail(session: AuthSession, email: string, code: string, password?: string): Promise<AuthSession> {
+  return toSession(await call<SessionBody>({ action: 'LINK_EMAIL_VERIFY', email, code, ...(password ? { password } : {}) }, session.token))
 }
 
 // ---- remembering the session in a regular browser ---------------------------------------------------------------------------

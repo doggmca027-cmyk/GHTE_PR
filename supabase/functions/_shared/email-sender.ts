@@ -15,7 +15,7 @@ const RESEND_URL = 'https://api.resend.com/emails'
 const TIMEOUT_MS = 10_000
 
 export type EmailLang = 'en' | 'ru' | 'uk'
-export type CodeEmailPurpose = 'register_verify' | 'login_code' | 'reset_password'
+export type CodeEmailPurpose = 'register_verify' | 'login_code' | 'reset_password' | 'link_email'
 
 export interface CodeEmail {
   to: string
@@ -29,20 +29,20 @@ export type SendOutcome = 'sent' | 'mock_logged' | 'unconfigured' | 'failed'
 
 const TEXT: Record<EmailLang, { subject: Record<CodeEmailPurpose, string>; lead: Record<CodeEmailPurpose, string>; valid: string; ignore: string }> = {
   en: {
-    subject: { register_verify: 'Your GRAM Hub sign-up code', login_code: 'Your GRAM Hub sign-in code', reset_password: 'Reset your GRAM Hub password' },
-    lead: { register_verify: 'Enter this code to finish creating your account:', login_code: 'Enter this code to sign in:', reset_password: 'Enter this code to set a new password:' },
+    subject: { register_verify: 'Your GRAM Hub sign-up code', login_code: 'Your GRAM Hub sign-in code', reset_password: 'Reset your GRAM Hub password', link_email: 'Connect this e-mail to GRAM Hub' },
+    lead: { register_verify: 'Enter this code to finish creating your account:', login_code: 'Enter this code to sign in:', reset_password: 'Enter this code to set a new password:', link_email: 'Enter this code to connect this e-mail to your account:' },
     valid: 'The code is valid for {m} minutes. Never share it with anyone, including support.',
     ignore: 'If you did not ask for it, ignore this e-mail: nothing changes without the code.',
   },
   ru: {
-    subject: { register_verify: 'Код регистрации GRAM Hub', login_code: 'Код входа в GRAM Hub', reset_password: 'Сброс пароля GRAM Hub' },
-    lead: { register_verify: 'Введите этот код, чтобы завершить регистрацию:', login_code: 'Введите этот код для входа:', reset_password: 'Введите этот код, чтобы задать новый пароль:' },
+    subject: { register_verify: 'Код регистрации GRAM Hub', login_code: 'Код входа в GRAM Hub', reset_password: 'Сброс пароля GRAM Hub', link_email: 'Подключение почты к GRAM Hub' },
+    lead: { register_verify: 'Введите этот код, чтобы завершить регистрацию:', login_code: 'Введите этот код для входа:', reset_password: 'Введите этот код, чтобы задать новый пароль:', link_email: 'Введите этот код, чтобы подключить эту почту к вашему аккаунту:' },
     valid: 'Код действует {m} минут. Никому его не сообщайте, даже поддержке.',
     ignore: 'Если вы его не запрашивали, просто проигнорируйте письмо: без кода ничего не изменится.',
   },
   uk: {
-    subject: { register_verify: 'Код реєстрації GRAM Hub', login_code: 'Код входу в GRAM Hub', reset_password: 'Скидання пароля GRAM Hub' },
-    lead: { register_verify: 'Введіть цей код, щоб завершити реєстрацію:', login_code: 'Введіть цей код для входу:', reset_password: 'Введіть цей код, щоб задати новий пароль:' },
+    subject: { register_verify: 'Код реєстрації GRAM Hub', login_code: 'Код входу в GRAM Hub', reset_password: 'Скидання пароля GRAM Hub', link_email: 'Підключення пошти до GRAM Hub' },
+    lead: { register_verify: 'Введіть цей код, щоб завершити реєстрацію:', login_code: 'Введіть цей код для входу:', reset_password: 'Введіть цей код, щоб задати новий пароль:', link_email: 'Введіть цей код, щоб підключити цю пошту до вашого акаунта:' },
     valid: 'Код дійсний {m} хвилин. Нікому його не повідомляйте, навіть підтримці.',
     ignore: 'Якщо ви його не запитували, просто проігноруйте лист: без коду нічого не зміниться.',
   },

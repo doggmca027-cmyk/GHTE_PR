@@ -1,5 +1,6 @@
 import { Check, ExternalLink, FileText, Languages, LogOut, Monitor, Moon, Send, ShieldCheck, Sun, type LucideIcon } from 'lucide-react'
 import { useSignIn } from '@/context/SignInContext'
+import { ConnectedAccounts } from './ConnectedAccounts'
 import { insideTelegram } from '@/services/api/web-auth'
 import { Card } from '@/components/ui/Card'
 import { LANGUAGES, tr, useLanguage, useT } from '@/i18n'
@@ -112,7 +113,7 @@ function ThemeCard() {
   )
 }
 
-export function SettingsScreen({ session, onSignOut }: { session: AuthSession; onSignOut?: () => void }) {
+export function SettingsScreen({ session, onSignOut, onSessionChange }: { session: AuthSession; onSignOut?: () => void; onSessionChange?: (s: AuthSession) => void }) {
   const t = useT()
   const { lang } = useLanguage()
   const { user, isMock } = session
@@ -139,6 +140,9 @@ export function SettingsScreen({ session, onSignOut }: { session: AuthSession; o
         {isMock && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">{t('Dev mock account: nothing here is real.')}</p>}
       </Card>
       )}
+
+      {/* the website only: inside Telegram the Mini App is signed in by Telegram itself, there is nothing to connect */}
+      {!session.isGuest && !isMock && onSessionChange && !insideTelegram() && <ConnectedAccounts session={session} onSessionChange={onSessionChange} />}
 
       <ThemeCard />
 

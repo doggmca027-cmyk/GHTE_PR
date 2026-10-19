@@ -1,6 +1,5 @@
 // Supabase Edge Function (Deno): POST /telegram-bot   the bot's webhook (Telegram calls it; nobody else can: see the secret below)
 //
-//   /start auth_<token>  -> the website sign-in question with [Confirm] / [Cancel]; the button decides it (logic: _shared/telegram-bot.ts)
 //   /start               -> a welcome with the button that opens the Mini App (WEB_APP_URL)
 //   hub_retry:<provider> / hub_fallback:<order>  -> the order hub buttons of the admins' messages (admins only): the provider's queue is run
 //                           through sync-order-status { hubProviderId }, or the order moves to another provider of its card first
@@ -46,8 +45,6 @@ Deno.serve(instrument('telegram-bot', async (req: Request, { log }): Promise<Res
     return hubRunReply(body)
   }
   const ports: BotPorts = {
-    openLogin: (startHash, user) => rpc('bot_login_open', { p_start_hash: startHash, p_telegram_id: user.id, p_user: user }),
-    decideLogin: (startHash, telegramId, approve) => rpc('bot_login_decide', { p_start_hash: startHash, p_telegram_id: telegramId, p_approve: approve }),
     async telegram(method, body) {
       const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
         method: 'POST',
