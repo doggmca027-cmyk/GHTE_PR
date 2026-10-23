@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { sheetOverlayClass, sheetPanelClass, useWide } from '@/lib/layout-mode'
 import { CheckCircle2, Clock, Gem, Globe, Hourglass, Link2, Loader2, RefreshCw, ShieldCheck, TriangleAlert, X, Zap, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -36,13 +36,15 @@ import { PlatformIcon } from './PlatformIcon'
 import { PriceSummary, displayedTotalUnits } from './PriceSummary'
 import { PromoField } from './PromoField'
 
+// the top-up for a missing amount opens over this form (TON Connect is loaded only then)
+const DepositSheet = lazy(() => import('@/components/wallet/DepositSheet'))
+
 interface Props {
   service: ICatalogService
   platform: Platform
   platformName?: string
   session: AuthSession
   onClose: () => void
-  onTopUp: (shortfallUsd: number) => void
   onViewOrders: () => void
 }
 
@@ -58,7 +60,7 @@ const inputClass = (invalid: boolean) =>
     invalid ? 'border-rose-300 focus:border-rose-400' : 'border-blue-100/70 focus:border-brand',
   )
 
-export function OrderModal({ service, platform, platformName, session, onClose, onTopUp, onViewOrders }: Props) {
+export function OrderModal({ service, platform, platformName, session, onClose, onViewOrders }: Props) {
   const t = useT()
   const wide = useWide()
   const { lang } = useLanguage()
@@ -67,6 +69,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
   const guest = session.isGuest === true
   const signIn = useSignIn()
   const wallet = session.wallet
+  const [topUpUsd, setTopUpUsd] = useState<number | null>(null)
 
   const [link, setLink] = useState('')
   const [quantity, setQuantity] = useState(String(service.minQuantity))
@@ -182,7 +185,8 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
     }
     if (!balance.sufficient) {
       haptic.tap()
-      onTopUp(balance.shortfallUnits / 10_000)
+      // exactly the missing amount, in whole cents rounded up (the deposit drawer raises it to its 0.1 TON minimum if needed)
+      setTopUpUsd(Math.ceil(balance.shortfallUnits / 100) / 100)
       return
     }
     setLinkTouched(true)
@@ -346,6 +350,11 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
         )}
       </div>
       <Toast message={toast} onDismiss={() => setToast(null)} />
+      {topUpUsd !== null && (
+        <Suspense fallback={null}>
+          <DepositSheet session={session} amountUsd={topUpUsd} onClose={() => setTopUpUsd(null)} />
+        </Suspense>
+      )}
     </div>
   )
 }

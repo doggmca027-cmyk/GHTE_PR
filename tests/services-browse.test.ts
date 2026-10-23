@@ -139,7 +139,7 @@ describe('browsing the services', () => {
 
   const flush = async () => { for (let i = 0; i < 6; i++) await act(async () => { await Promise.resolve() }) }
   const mount = async () => {
-    act(() => root.render(createElement(ServicesScreen, { session, onTopUp: () => {}, onViewOrders: () => {} })))
+    act(() => root.render(createElement(ServicesScreen, { session, onViewOrders: () => {} })))
     await flush()
   }
   const click = async (el: Element | null | undefined) => { if (!el) throw new Error('nothing to click'); act(() => (el as HTMLElement).click()); await flush() }
@@ -259,7 +259,7 @@ describe('browsing the services', () => {
       }
       return fakeFetch(input)
     })
-    act(() => root.render(createElement(SignInContext.Provider, { value: signIn }, createElement(ServicesScreen, { session: GUEST_SESSION, onTopUp: () => {}, onViewOrders: () => {} }))))
+    act(() => root.render(createElement(SignInContext.Provider, { value: signIn }, createElement(ServicesScreen, { session: GUEST_SESSION, onViewOrders: () => {} }))))
     await flush()
     await click(buttonWith('Instagram'))
     await click(host.querySelector('h3')?.closest('button'))

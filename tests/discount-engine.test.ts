@@ -282,6 +282,18 @@ describe('discount engine (SQL)', () => {
       expect(num(await one(`select current_uses v from promo_codes where code = 'PERUSER'`))).toBe(2)
     })
 
+    it('a personal code: only its owner can apply it, up to max_uses times, and it takes its percent off the markup', async () => {
+      await promo('MINE70', 'percentage', 70, { max: 2 })
+      const owner = await newUser({ tier: 'bronze' }), other = await newUser()
+      await db.query(`update promo_codes set owner_user_id = $1, of_markup = true where code = 'MINE70'`, [owner])
+      await expect(place(other, { promo: 'MINE70' })).rejects.toThrow(/promo_not_found/)
+      // price 4, cost 2: 70% of the markup 2 is 1.4 -> the owner pays cost + 30% of the markup
+      expect(await place(owner, { promo: 'MINE70' })).toMatchObject({ charge_amount: '2.6000', promo_discount_amount: '1.4000' })
+      expect(await place(owner, { promo: 'MINE70' })).toMatchObject({ charge_amount: '2.6000' })
+      await expect(place(owner, { promo: 'MINE70' })).rejects.toThrow(/promo_exhausted/)
+      expect(num(await one(`select count(*) v from promo_code_redemptions r join promo_codes c on c.id = r.promo_code_id where c.code = 'MINE70'`))).toBe(2)
+    })
+
     it('a retry of the same order (idempotency key) neither charges nor redeems twice', async () => {
       await promo('RETRY', 'fixed', 0.5)
       const u = await newUser()

@@ -4,10 +4,12 @@ import { buildCommentBocBase64 } from '../../supabase/functions/_shared/ton.ts'
 export {
   DEPOSIT_VALIDITY_SECONDS,
   MAX_DEPOSIT_USD,
+  MIN_DEPOSIT_TON,
   MIN_DEPOSIT_USD,
   buildCommentBocBase64,
   formatBaseUnits,
   generateMemo,
+  minDepositUsd,
   parseUsdInput,
   quoteDeposit,
   validateDepositAmountUsd,

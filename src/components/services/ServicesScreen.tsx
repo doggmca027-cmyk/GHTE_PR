@@ -29,7 +29,6 @@ type Page = { categoryId: string; items: ICatalogService[]; status: 'loading' | 
 
 interface Props {
   session: AuthSession
-  onTopUp: (shortfallUsd?: number) => void
   onViewOrders: () => void
   /** Open straight on this platform (a tile of the Home screen was tapped). */
   initialPlatform?: string | null
@@ -65,7 +64,7 @@ export function platformEntries(platforms: PlatformInfo[], categories: ReadonlyA
     .map(({ slug, name, count }) => ({ slug, name, count }))
 }
 
-export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform = null }: Props) {
+export function ServicesScreen({ session, onViewOrders, initialPlatform = null }: Props) {
   const t = useT()
   const wide = useWide()
   const { lang } = useLanguage()
@@ -295,7 +294,6 @@ export function ServicesScreen({ session, onTopUp, onViewOrders, initialPlatform
           platformName={current?.name}
           session={session}
           onClose={() => setSelected(null)}
-          onTopUp={(shortfall) => { setSelected(null); onTopUp(shortfall) }}
           onViewOrders={() => { setSelected(null); onViewOrders() }}
         />
       )}

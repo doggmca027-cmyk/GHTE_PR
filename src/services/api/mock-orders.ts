@@ -5,7 +5,7 @@
 
 import { MOCK_CATALOG, MOCK_SESSION } from '@/constants/dev'
 import { calcPartialRefund, checkBalance, toUnits, UNITS_PER_CURRENCY, validateQuantity, validateTargetUrl } from '@/lib/order-calc'
-import { DEPOSIT_VALIDITY_SECONDS, generateMemo, quoteDeposit, validateDepositAmountUsd } from '@/lib/ton'
+import { DEPOSIT_VALIDITY_SECONDS, generateMemo, minDepositUsd, quoteDeposit, validateDepositAmountUsd } from '@/lib/ton'
 import { buildMessage, type NotifyEvent } from '../../../supabase/functions/_shared/telegram-notify.ts'
 import type { MetricOrder } from '../../../supabase/functions/_shared/admin-metrics.ts'
 import type { CreateOrderPayload, CreateOrderResult, IOrderView } from '@/types/orders'
@@ -173,7 +173,7 @@ export function createMockBackend(
     if (!amount.ok) throw new DepositApiError('invalid_input', amount.error)
     if (asset !== 'TON') throw new DepositApiError('asset_unavailable', 'USDT deposits are not available yet. Please use TON.')
     const q = quoteDeposit(amountUsd, MOCK_TON_USD_RATE, 'TON')
-    return { asset, amountUsd: q.amountUsd, amountCrypto: q.amountCrypto, amountNano: q.amountBase.toString(), rateUsd: q.rateUsd, network: 'testnet' }
+    return { asset, amountUsd: q.amountUsd, amountCrypto: q.amountCrypto, amountNano: q.amountBase.toString(), rateUsd: q.rateUsd, network: 'testnet', minUsd: minDepositUsd(q.rateUsd) }
   }
 
   return {

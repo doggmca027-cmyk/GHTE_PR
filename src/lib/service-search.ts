@@ -67,9 +67,17 @@ export function countryCodes(text: string): string[] {
   return countryIndex().get(normalizeQuery(text)) ?? []
 }
 
+/**
+ * Lower case, punctuation -> spaces, "ё" folded to "е". Unlike normalizeQuery, letters keep their marks: the database compares the
+ * names as they are written, and stripping the breve turned "дней" into "днеи", which no name contains.
+ */
+function searchText(text: string): string {
+  return text.toLowerCase().replace(/ё/g, 'е').normalize('NFC').replace(/[^\p{L}\p{M}\p{N}.]+/gu, ' ').trim()
+}
+
 /** Words -> terms. Up to three words in a row are tried as a country first ("south korea"), so they stay together. */
 export function parseServiceQuery(raw: string): SearchTerm[] {
-  const words = normalizeQuery(raw).split(' ').filter(Boolean).map((w) => w.slice(0, MAX_WORD))
+  const words = searchText(raw).split(' ').filter(Boolean).map((w) => w.slice(0, MAX_WORD))
   const terms: SearchTerm[] = []
   for (let i = 0; i < words.length && terms.length < MAX_TERMS;) {
     let taken = 0
@@ -90,12 +98,13 @@ export function parseServiceQuery(raw: string): SearchTerm[] {
 
 /**
  * The value of PostgREST's `and=` parameter for these terms, or null when there is nothing to search for.
- * Terms only hold letters, digits, spaces and dots (normalizeQuery), so they cannot break the filter's syntax.
+ * Terms only hold letters, digits, spaces and dots (searchText), so they cannot break the filter's syntax. An "е" becomes the
+ * one-character wildcard `_`, so it also finds a name written with "ё" ("дешево" finds "дёшево").
  */
 export function serviceSearchFilter(terms: readonly SearchTerm[]): string | null {
   if (terms.length === 0) return null
   const groups = terms.map((term) => {
-    const like = `*${term.text}*`
+    const like = `*${term.text.replace(/е/g, '_')}*`
     const parts = [`name.ilike.${like}`, `name_i18n->>ru.ilike.${like}`, `description.ilike.${like}`]
     for (const iso of term.geo) parts.push(`attributes->>geo.ilike.*"${iso}"*`)
     return `or(${parts.join(',')})`
@@ -110,7 +119,7 @@ interface Searchable {
   attributes?: { geo?: string[] }
 }
 
-const has = (haystack: string | null | undefined, needle: string) => !!haystack && normalizeQuery(haystack).includes(needle)
+const has = (haystack: string | null | undefined, needle: string) => !!haystack && searchText(haystack).includes(needle)
 
 /** The same decision the filter makes, in memory. */
 export function serviceMatches(service: Searchable, terms: readonly SearchTerm[]): boolean {

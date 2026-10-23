@@ -8,7 +8,7 @@ import { tr, useT } from '@/i18n'
 import { tm } from '@/i18n/messages'
 import { haptic } from '@/lib/haptics'
 import { formatMoneyAmount } from '@/lib/order-calc'
-import { DEPOSIT_PRESETS_USD, MAX_DEPOSIT_USD, MIN_DEPOSIT_USD, buildTransactionRequest, parseUsdInput, trimCrypto, validateDepositAmountUsd } from '@/lib/ton'
+import { DEPOSIT_PRESETS_USD, MAX_DEPOSIT_USD, MIN_DEPOSIT_TON, buildTransactionRequest, parseUsdInput, trimCrypto, validateDepositAmountUsd } from '@/lib/ton'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
 import { DepositApiError } from '@/services/api/deposit-errors'
@@ -51,6 +51,10 @@ export function DepositModal({ session, wallet, initialAmount, onClose, onCredit
   const [asset, setAsset] = useState<DepositAsset>('TON')
   const [quote, setQuote] = useState<DepositQuote | null>(null)
   const [quoteError, setQuoteError] = useState<string | null>(null)
+  /** The smallest deposit in USD (0.1 TON at the live rate), learnt from the server's quote. */
+  const [minUsd, setMinUsd] = useState<number | null>(null)
+  /** An amount handed in by the order form is raised to the minimum once, so a small shortfall can still be paid. */
+  const raiseToMin = useRef(initialAmount !== undefined)
   const [phase, setPhase] = useState<Phase>({ kind: 'form' })
   const cancelled = useRef(false)
   const busyRef = useRef(false)
@@ -59,8 +63,10 @@ export function DepositModal({ session, wallet, initialAmount, onClose, onCredit
 
   const parsed = parseUsdInput(amountText)
   const amount = parsed === null ? ({ ok: false, error: 'Enter a deposit amount' } as const) : validateDepositAmountUsd(parsed)
-  const amountError = amountText !== '' && !amount.ok ? amount.error : null
   const usd = amount.ok ? amount.value / 100 : null
+  const belowMin = usd !== null && minUsd !== null && usd < minUsd
+  const amountError = amountText !== '' && !amount.ok ? amount.error
+    : belowMin ? `Minimum deposit is ${MIN_DEPOSIT_TON} TON (~${formatMoneyAmount(minUsd)})` : null
 
   // Debounced live quote (display only: the server quotes again, and locks the rate, on pay).
   useEffect(() => {
@@ -70,7 +76,15 @@ export function DepositModal({ session, wallet, initialAmount, onClose, onCredit
     let stale = false
     const timer = setTimeout(() => {
       quoteDeposit(session, { amountUsd: usd, asset }).then(
-        (q) => { if (!stale) setQuote(q) },
+        (q) => {
+          if (stale) return
+          setQuote(q)
+          if (q.minUsd !== undefined) {
+            setMinUsd(q.minUsd)
+            if (raiseToMin.current && usd < q.minUsd) setAmountText(String(q.minUsd))
+          }
+          raiseToMin.current = false
+        },
         (e) => { if (!stale) setQuoteError(e instanceof DepositApiError ? tm(e.message) : t('Could not get a rate right now.')) },
       )
     }, 350)
@@ -112,7 +126,7 @@ export function DepositModal({ session, wallet, initialAmount, onClose, onCredit
       wallet.connect()
       return
     }
-    if (usd === null || busyRef.current) return
+    if (usd === null || belowMin || busyRef.current) return
     busyRef.current = true
     haptic.tap()
     try {
@@ -231,10 +245,10 @@ export function DepositModal({ session, wallet, initialAmount, onClose, onCredit
               <input
                 type="text"
                 inputMode="decimal"
-                placeholder={t('Custom amount ({min}-{max})', { min: MIN_DEPOSIT_USD, max: MAX_DEPOSIT_USD })}
+                placeholder={t('Custom amount ({min}-{max})', { min: `${MIN_DEPOSIT_TON} TON`, max: `$${MAX_DEPOSIT_USD}` })}
                 value={amountText}
                 disabled={busy}
-                onChange={(e) => { setAmountText(e.target.value.replace(/[^\d.]/g, '').slice(0, 9)); if (phase.kind === 'error') setPhase({ kind: 'form' }) }}
+                onChange={(e) => { setAmountText(e.target.value.replace(/,/g, '.').replace(/[^\d.]/g, '').slice(0, 9)); if (phase.kind === 'error') setPhase({ kind: 'form' }) }}
                 aria-invalid={amountError !== null}
                 className={cn('w-full rounded-2xl border bg-surface-sub px-4 py-3.5 text-[15px] font-medium outline-none transition-colors placeholder:text-content-muted focus:bg-surface', amountError ? 'border-rose-300' : 'border-blue-100/70 focus:border-brand')}
               />
@@ -270,8 +284,8 @@ export function DepositModal({ session, wallet, initialAmount, onClose, onCredit
             )}
 
             <Button
-              className={cn('mt-5 h-14 w-full text-[15px]', (usd === null || !quote || busy) && wallet.connected && 'cursor-not-allowed opacity-60 hover:bg-brand')}
-              disabled={busy || (wallet.connected && (usd === null || !quote))}
+              className={cn('mt-5 h-14 w-full text-[15px]', (usd === null || belowMin || !quote || busy) && wallet.connected && 'cursor-not-allowed opacity-60 hover:bg-brand')}
+              disabled={busy || (wallet.connected && (usd === null || belowMin || !quote))}
               aria-busy={busy}
               onClick={() => void pay()}
             >

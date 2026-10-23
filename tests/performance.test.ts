@@ -11,7 +11,10 @@ describe('the first screen', () => {
     expect(src('src/main.tsx')).not.toMatch(/@tonconnect/)
     expect(src('src/App.tsx')).not.toMatch(/import\s*\{[^}]*\}\s*from\s*'@\/components\/wallet\/(WalletScreen|WalletRoute)'/)
     expect(src('src/App.tsx')).toContain("import('@/components/wallet/WalletRoute')")
-    expect(src('src/components/wallet/WalletRoute.tsx')).toContain('TonConnectUIProvider')
+    expect(src('src/components/wallet/WalletRoute.tsx')).toContain('TonProvider')
+    expect(src('src/components/wallet/TonProvider.tsx')).toContain('TonConnectUIProvider')
+    // the top-up opened from an order brings TON Connect only when it opens
+    expect(src('src/components/services/OrderModal.tsx')).toContain("lazy(() => import('@/components/wallet/DepositSheet'))")
   })
 
   it('tabs other than Home and the catalogue are their own chunks, fetched when the browser is idle', () => {

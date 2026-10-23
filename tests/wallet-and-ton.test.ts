@@ -14,6 +14,7 @@ import {
   normalizeToncenterTransactions,
   parseCoinGeckoTonUsd,
   parseTonAddress,
+  minDepositUsd,
   parseUsdInput,
   quoteDeposit,
   toRawAddress,
@@ -45,8 +46,8 @@ const HD = Buffer.alloc(32, 0xd).toString('base64')
 
 describe('deposit amount validation', () => {
   it.each([
-    [1, true], [10, true], [12.5, true], [499.99, true], [500, true],
-    [0.99, false], [0, false], [-5, false], [500.01, false], [1000, false],
+    [1, true], [10, true], [12.5, true], [499.99, true], [500, true], [0.99, true], [0.01, true],
+    [0.001, false], [0, false], [-5, false], [500.01, false], [1000, false],
     [10.005, false], [1.234, false], [Number.NaN, false], [Number.POSITIVE_INFINITY, false],
   ])('$%s -> ok=%s', (usd, ok) => {
     expect(validateDepositAmountUsd(usd).ok).toBe(ok)
@@ -61,8 +62,16 @@ describe('deposit amount validation', () => {
   it('parses user input', () => {
     expect(parseUsdInput('10')).toBe(10)
     expect(parseUsdInput('$12.50')).toBe(12.5)
-    expect(parseUsdInput(' 1,000 ')).toBe(1000)
-    for (const bad of ['', 'abc', '1.2.3', '-5', '.5']) expect(parseUsdInput(bad)).toBeNull()
+    expect(parseUsdInput('0,48')).toBe(0.48) // a comma is a decimal point (phone keyboards in many languages)
+    expect(parseUsdInput('.5')).toBe(0.5)
+    expect(parseUsdInput('2.')).toBe(2)
+    for (const bad of ['', 'abc', '1.2.3', '1,2,3', '-5', '.']) expect(parseUsdInput(bad)).toBeNull()
+  })
+
+  it('the minimum is 0.1 TON at the live rate, rounded up to a cent', () => {
+    expect(minDepositUsd(1.5)).toBe(0.15)
+    expect(minDepositUsd(3.123)).toBe(0.32)
+    expect(minDepositUsd(2)).toBe(0.2)
   })
 })
 
@@ -112,7 +121,7 @@ describe('quoteDeposit: USD -> crypto in exact base units', () => {
   })
 
   it('rejects out-of-range amounts and bad rates', () => {
-    expect(() => quoteDeposit(0.5, 5)).toThrow(RangeError)
+    expect(() => quoteDeposit(0.001, 5)).toThrow(RangeError)
     expect(() => quoteDeposit(MAX_DEPOSIT_USD + 1, 5)).toThrow(RangeError)
     expect(() => quoteDeposit(10, 0)).toThrow(RangeError)
     expect(() => quoteDeposit(10, -1)).toThrow(RangeError)
@@ -492,7 +501,7 @@ describe('mock backend: deposits and ledger', () => {
   it('quotes at the fixed dev rate and rejects invalid input / USDT', () => {
     const b = createMockBackend(memory())
     expect(b.quoteDeposit(10, 'TON')).toMatchObject({ amountCrypto: '2.000000000', amountNano: '2000000000', rateUsd: MOCK_TON_USD_RATE })
-    expect(() => b.quoteDeposit(0.5, 'TON')).toThrow(DepositApiError)
+    expect(() => b.quoteDeposit(0.001, 'TON')).toThrow(DepositApiError)
     expect(() => b.quoteDeposit(10, 'USDT')).toThrow(/not available/)
   })
 

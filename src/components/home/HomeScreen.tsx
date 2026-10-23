@@ -249,7 +249,6 @@ export function HomeScreen({ session, onBrowse, onTopUp, onViewOrders }: Props) 
           platformName={selected.platformName}
           session={session}
           onClose={() => setSelected(null)}
-          onTopUp={(shortfall) => { setSelected(null); onTopUp(shortfall) }}
           onViewOrders={() => { setSelected(null); onViewOrders() }}
         />
       )}

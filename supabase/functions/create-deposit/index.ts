@@ -19,6 +19,8 @@ import {
   DEPOSIT_VALIDITY_SECONDS,
   MAX_PENDING_DEPOSITS,
   generateMemo,
+  MIN_DEPOSIT_TON,
+  minDepositUsd,
   parseCoinGeckoTonUsd,
   parseTonAddress,
   quoteDeposit,
@@ -97,6 +99,8 @@ Deno.serve(instrument('create-deposit', async (req: Request, { log }): Promise<R
   }
   if (!rate) return fail(503, 'rate_unavailable', 'Could not get a live exchange rate. Please try again in a minute.')
   const quote = quoteDeposit(amount.value / 100, rate, asset)
+  // the minimum is 0.1 TON at the live rate: the quote tells the app what that is in USD, a deposit under it is refused
+  const minUsd = minDepositUsd(rate)
 
   const quotePayload = {
     asset,
@@ -105,8 +109,10 @@ Deno.serve(instrument('create-deposit', async (req: Request, { log }): Promise<R
     amountNano: quote.amountBase.toString(),
     rateUsd: quote.rateUsd,
     network,
+    minUsd,
   }
   if (body.quoteOnly === true) return json({ success: true, quote: quotePayload })
+  if (amount.value < Math.round(minUsd * 100)) return fail(400, 'invalid_input', `Minimum deposit is ${MIN_DEPOSIT_TON} TON`)
 
   const { data: user } = await db.from('users').select('is_banned').eq('id', userId).maybeSingle()
   if (!user) return fail(401, 'unauthorized', 'Please reopen the app and try again.')

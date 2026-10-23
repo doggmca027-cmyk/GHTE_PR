@@ -52,6 +52,11 @@ describe('the database filter', () => {
     expect(f).not.toContain('%')
     expect(serviceSearchFilter([])).toBeNull()
   })
+
+  it('keeps "й" (the database has "дней", not "днеи") and lets "е" find "ё"', () => {
+    expect(parseServiceQuery('60 Дней')).toEqual([{ text: '60', geo: [] }, { text: 'дней', geo: [] }])
+    expect(serviceSearchFilter(parseServiceQuery('дешево'))).toContain('name.ilike.*д_ш_во*')
+  })
 })
 
 describe('matching in memory (the same decision as the filter)', () => {

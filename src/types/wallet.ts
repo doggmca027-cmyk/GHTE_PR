@@ -31,6 +31,8 @@ export interface DepositQuote {
   /** USD per 1 whole asset. */
   rateUsd: number
   network: 'mainnet' | 'testnet'
+  /** The smallest deposit in USD at this rate (0.1 TON); absent from an older server. */
+  minUsd?: number
 }
 
 export interface DepositIntent extends DepositQuote {

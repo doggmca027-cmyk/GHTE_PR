@@ -9,8 +9,11 @@ export type DepositAsset = 'TON' | 'USDT'
 /** Base units per whole asset: TON has 9 decimals (nanoton), USDT on TON (jetton) has 6. */
 export const ASSET_DECIMALS: Record<DepositAsset, number> = { TON: 9, USDT: 6 }
 
-export const MIN_DEPOSIT_USD = 1
+/** The real minimum is in TON (MIN_DEPOSIT_TON, priced at the live rate by minDepositUsd); this is only a floor for the amount itself. */
+export const MIN_DEPOSIT_USD = 0.01
 export const MAX_DEPOSIT_USD = 500
+/** The smallest TON deposit (owner, 2026-10-23). */
+export const MIN_DEPOSIT_TON = 0.1
 /** How long a quote (and its memo) accepts payments. */
 export const DEPOSIT_VALIDITY_SECONDS = 30 * 60
 export const MAX_PENDING_DEPOSITS = 5
@@ -29,10 +32,15 @@ export function validateDepositAmountUsd(amountUsd: unknown): Validation<number>
   return { ok: true, value: cents }
 }
 
-/** Parses user text such as "12", "12.5", "$12.50" into a number for validateDepositAmountUsd. */
+/** The USD amount worth MIN_DEPOSIT_TON at this rate, rounded up to a cent. */
+export function minDepositUsd(rateUsd: number): number {
+  return Math.ceil(Math.round(MIN_DEPOSIT_TON * rateUsd * 1e6) / 1e4) / 100
+}
+
+/** Parses user text such as "12", "12.5", "12,5", "$12.50" into a number for validateDepositAmountUsd. A comma is a decimal point. */
 export function parseUsdInput(raw: string): number | null {
-  const t = raw.replace(/[$,\s]/g, '')
-  return /^\d+(\.\d{1,})?$/.test(t) ? Number(t) : null
+  const t = raw.replace(/[$\s]/g, '').replace(',', '.')
+  return /^(\d+(\.\d*)?|\.\d+)$/.test(t) ? Number(t) : null
 }
 
 // ---------------------------------------------------------------------------

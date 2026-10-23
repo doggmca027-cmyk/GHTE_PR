@@ -106,7 +106,7 @@ export default function App() {
 
   /** Jump to the wallet and open the deposit drawer (suggesting at least the missing amount, if known). */
   const topUp = (shortfallUsd?: number) => {
-    setDepositRequest({ amount: shortfallUsd ? Math.max(1, Math.ceil(shortfallUsd)) : undefined })
+    setDepositRequest({ amount: shortfallUsd ? Math.ceil(shortfallUsd * 100) / 100 : undefined })
     setTab('wallet')
   }
 
@@ -154,7 +154,7 @@ export default function App() {
     >
       <Suspense fallback={<Loader2 size={28} strokeWidth={2} className="mx-auto mt-16 animate-spin text-brand" aria-label={t('Loading')} />}>
       {tab === 'services' ? (
-        <ServicesScreen session={state.session} onTopUp={topUp} onViewOrders={() => changeTab('orders')} initialPlatform={servicesPlatform} />
+        <ServicesScreen session={state.session} onViewOrders={() => changeTab('orders')} initialPlatform={servicesPlatform} />
       ) : guest && (tab === 'wallet' || tab === 'orders' || tab === 'support') ? (
         // a guest's personal tabs: why to sign in, and the button
         <GuestPrompt
