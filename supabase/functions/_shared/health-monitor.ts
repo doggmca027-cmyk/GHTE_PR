@@ -4,8 +4,8 @@
 // Rules:
 //   * One provider throwing can never stop the others (each runs in its own try/catch under allSettled).
 //   * A ping is bounded by PING_TIMEOUT_MS here even if the port itself hangs.
-//   * A HEALTHY provider is declared unavailable only after two checks in a row failed (previousCheckFailed): SMM Center's panel answers 502 for
-//     a few seconds about once an hour, which is not an outage worth an alert and a minute of traffic going elsewhere. The first failure is
+//   * A HEALTHY provider is declared unavailable only after two checks in a row failed (previousCheckFailed): a panel that answers 502 for
+//     a few seconds about once an hour is not an outage worth an alert and a minute of traffic going elsewhere. The first failure is
 //     logged and the status stays; a real outage is declared one minute later.
 //   * A transient failure (5xx, timeout, network) is retried once before it counts as a failed check at all: a panel that answers
 //     502 for a second would otherwise flip to unavailable, alert the admins and push traffic to the fallback for a minute.
