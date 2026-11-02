@@ -243,7 +243,7 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
         total.updated += r.services_updated
         total.categories += r.categories_changed
       }
-      report.published = { ...total, skipped: candidates.length - candidates.filter(sellable).length, untranslatedServices: built.untranslatedServices, untranslatedCategories: built.untranslatedCategories, backlog }
+      report.published = { ...total, skipped: candidates.length - candidates.filter(isPublishable).length, untranslatedServices: built.untranslatedServices, untranslatedCategories: built.untranslatedCategories, backlog }
     } catch (e) {
       log.error('publishing the catalogue failed', { err: e, providerId: provider.id, error_code: 'catalog_publish_failed' })
       report.warning = [report.warning, `publishing failed: ${e instanceof Error ? e.message : 'unknown error'}`].filter(Boolean).join('; ')

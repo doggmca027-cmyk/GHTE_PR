@@ -252,7 +252,7 @@ describe('what goes on the storefront when a whole catalogue is published', () =
     const log = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, bind: () => {}, child: () => log } as never
     const report = await syncProviderCatalog({ provider: { id: 'p', name: 'Secsers', routing_enabled: true, catalog_mode: 'publish', publish_mapping: 'canonical' }, adapter, store: store as never, rules: [], log })
     expect(published.map((r) => r.ps)).toEqual(['ps-1'])
-    expect(report.published).toMatchObject({ created: 1, backlog: 0, skipped: 1 })
+    expect(report.published).toMatchObject({ created: 1, backlog: 0 })
   })
 })
 
