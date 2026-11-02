@@ -1,10 +1,12 @@
 // What a storefront service costs us and what it can deliver, derived from its provider offers. Pure, no I/O.
 //
 // This is the single basis for pricing (sync-catalog, admin-pricing and the bundle editor all call it): the base cost of a service is the
-// CHEAPEST offer that can actually receive an order, whichever provider it belongs to (every provider is an equal partner, there is no
-// primary one). The router sends an order to that same cheapest offer, and when its provider has no money yet the order waits for the
+// CHEAPEST offer that can actually receive an order, among the best-scoring ones when the card promises quality (offer-quality.ts). The router
+// sends an order to that same offer, and when its provider has no money yet the order waits for the
 // top-up in the order hub instead of going to a dearer provider (migration 20261218000000). A dearer offer is only used for a quantity the
 // cheapest cannot take, and never when it costs more than the customer pays (routing.ts maxCostPer1000, hub_reroute_order).
+
+import { qualityScorer } from './offer-quality.ts'
 
 /** One offer of a service together with the three facts that decide whether it can receive an order. */
 export interface PricingOffer {
@@ -24,6 +26,9 @@ export interface PricingOffer {
   provider_active: boolean
   /** providers.routing_enabled: until it is on, the provider receives no orders, so its cost is not a base for the price. */
   routing_enabled: boolean
+  /** The panel's name of the service and providers.is_premium: how well the offer keeps a quality card's promise. Absent: unknown, scores 0. */
+  panel_name?: string | null
+  provider_premium?: boolean
 }
 
 /**
@@ -34,7 +39,7 @@ export const isPriceableOffer = (o: Pick<PricingOffer, 'is_active' | 'provider_s
   o.is_active && o.provider_service_active && o.provider_active && o.routing_enabled
 
 export interface CostBasis {
-  /** The LOWEST cost_per_1000 among the priceable offers: the number the markup is applied to (the offer the router picks). */
+  /** The LOWEST cost_per_1000 among the priceable offers of the best quality score: the number the markup is applied to (the offer the router picks). */
   cost: number
   /**
    * The smallest min among the priceable offers (a small retail order may go through a dearer offer with a lower minimum), and the largest
@@ -55,10 +60,13 @@ export interface CostBasis {
 export const MAX_LIMIT_COST_SPREAD = 0.3
 
 /** null when no offer can receive an order: the caller must then leave the price alone rather than guess. */
-export function serviceCostBasis(offers: PricingOffer[]): CostBasis | null {
+export function serviceCostBasis(offers: PricingOffer[], serviceName?: string): CostBasis | null {
   const usable = offers.filter(isPriceableOffer)
   if (usable.length === 0) return null
-  const cost = Math.min(...usable.map((o) => Number(o.cost_per_1000)))
+  const scorer = qualityScorer(serviceName)
+  const scoreOf = (o: PricingOffer) => scorer(o.panel_name, o.provider_premium)
+  const best = Math.max(...usable.map(scoreOf))
+  const cost = Math.min(...usable.filter((o) => scoreOf(o) === best).map((o) => Number(o.cost_per_1000)))
   // compared in ten-thousandths, so float noise never decides
   const near = usable.filter((o) => Math.round(Number(o.cost_per_1000) * 10_000) <= Math.round(cost * (1 + MAX_LIMIT_COST_SPREAD) * 10_000))
   return {
@@ -84,7 +92,7 @@ export function groupByService(offers: PricingOffer[]): Map<string, PricingOffer
 /** PostgREST embedded shape for a services query: `offers:provider_service_offers(<OFFER_PRICING_COLUMNS>)`. */
 export const OFFER_PRICING_COLUMNS =
   'id, service_id, provider_id, provider_service_id, cost_per_1000, min_quantity, max_quantity, refill_supported, is_active, ' +
-  'provider_service:provider_services(is_active), provider:providers(is_active, routing_enabled)'
+  'provider_service:provider_services(is_active, name), provider:providers(is_active, routing_enabled, is_premium)'
 
 export interface PricingOfferRow {
   id: string
@@ -96,8 +104,8 @@ export interface PricingOfferRow {
   max_quantity: number
   refill_supported: boolean
   is_active: boolean
-  provider_service: { is_active: boolean } | null
-  provider: { is_active: boolean; routing_enabled: boolean } | null
+  provider_service: { is_active: boolean; name?: string | null } | null
+  provider: { is_active: boolean; routing_enabled: boolean; is_premium?: boolean } | null
 }
 
 /** A row selected with OFFER_PRICING_COLUMNS -> PricingOffer. A missing join counts as "cannot receive orders". */
@@ -115,5 +123,7 @@ export function toPricingOffer(r: PricingOfferRow): PricingOffer {
     provider_service_active: r.provider_service?.is_active === true,
     provider_active: r.provider?.is_active === true,
     routing_enabled: r.provider?.routing_enabled === true,
+    panel_name: r.provider_service?.name ?? null,
+    provider_premium: r.provider?.is_premium === true,
   }
 }

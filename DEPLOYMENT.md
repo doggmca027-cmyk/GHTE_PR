@@ -197,6 +197,12 @@ update providers set routing_enabled = true, health_status = 'healthy' where nam
 -- take a provider out of rotation again: update providers set routing_enabled = false where name = 'Secsers';
 ```
 
+A premium panel (Secsers, MoreThanPanel: offers first on a card that promises quality, `providers.is_premium`) goes through
+`npm run sync-services`: it registers both with routing off, and imports the catalogue of each one that has a key. Save the key in the
+admin panel (or `npm run secrets:rotate -- provider-key --provider <name> --store db --apply`), run the script, switch routing on in the admin panel
+and run the script again: their services are published as cards (`catalog_mode = 'publish'`), without what the order form cannot deliver
+(`isCatalogueService`), and the matcher links the rest to the cards they match.
+
 The catalogue sync creates a service's offer automatically and keeps its cost in step with the provider's price.
 Each order stores which offer served it (`orders.provider_offer_id`, `cost_amount`, `profit_amount`, `routing_score_snapshot`).
 

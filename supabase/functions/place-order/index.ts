@@ -155,7 +155,7 @@ Deno.serve(instrument('place-order', async (req: Request, { log, correlationId }
   try {
     offers = existing?.provider_offer_id
       ? [resolveOffer(candidates.offers, candidates.providers, { quantity: input.quantity, runs, pinnedOfferId: existing.provider_offer_id })]
-      : rankOffers(candidates.offers, candidates.providers, { quantity: input.quantity, runs })
+      : rankOffers(candidates.offers, candidates.providers, { quantity: input.quantity, runs, serviceName: service.name })
   } catch (e) {
     if (e instanceof ServiceUnavailableError) return fail(503, 'service_unavailable', 'This service is temporarily unavailable. You were not charged.')
     throw e

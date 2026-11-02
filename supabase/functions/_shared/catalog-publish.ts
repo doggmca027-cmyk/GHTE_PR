@@ -369,6 +369,20 @@ export function canonicalPlace(c: Pick<PublishCandidate, 'categoryRaw' | 'name'>
   return { platform, action: detectAction(actionType, c.categoryRaw, c.name) }
 }
 
+// What a panel sells besides services a link and a quantity can order: accounts, licence keys, game currency and the like (the panel hands them
+// over on its own site, the order form has nowhere to show them), and attacks on somebody else (mass reports, one-star reviews).
+const NOT_A_SERVICE = /account sales|old date accounts?|active accounts|game accounts?|game key|licen[cs]e key|morethan(?:design|movies|licence|mail|edu|ai|proxy|seo|music)|\breports?\b|\b1[ -]?stars?\b/i
+
+/**
+ * Does this service belong in a panel's main catalogue on the storefront? It must sell an action on a known platform: most of the goods above name
+ * neither (Netflix, ChatGPT, Robux, a Steam key), the rest are named. It is a filter for what is published as a whole catalogue; a service an admin
+ * links by hand, or one that fills a gap, is decided elsewhere.
+ */
+export function isCatalogueService(c: Pick<PublishCandidate, 'categoryRaw' | 'name' | 'serviceType'>, knownSlugs: ReadonlySet<string>): boolean {
+  const { platform, action } = canonicalPlace(c, knownSlugs)
+  return platform.slug !== OTHER_PLATFORM && action.key !== OTHER_ACTION.key && !NOT_A_SERVICE.test(`${c.categoryRaw} ${c.name}`)
+}
+
 export function buildCanonicalPublishRows(
   candidates: readonly PublishCandidate[],
   knownSlugs: ReadonlySet<string>,

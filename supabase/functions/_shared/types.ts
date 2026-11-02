@@ -75,6 +75,8 @@ export interface IProvider {
    * that much cheaper to win. Never changes what an order is charged or what its snapshot records.
    */
   reliabilityPenalty?: number
+  /** A premium panel (providers.is_premium): its offers go first on a card that promises quality (offer-quality.ts). */
+  premium?: boolean
 }
 
 /**
@@ -89,6 +91,8 @@ export interface IProviderServiceOffer {
   providerId: string
   /** The provider's service this offer uses (provider_services.id). */
   providerServiceId: string
+  /** The panel's name of that service (provider_services.name): it can say refill, HQ or non-drop (offer-quality.ts). */
+  panelName?: string
   /** What the provider charges us per 1000 units, in the provider's currency. */
   costPer1000: number
   minQuantity: number

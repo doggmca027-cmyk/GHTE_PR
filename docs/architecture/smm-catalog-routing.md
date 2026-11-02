@@ -100,11 +100,12 @@ An order points at what actually served it: `service_id` (what was bought), `pro
    * `refill_supported` only when every such offer supports it.
    * the service is switched off when this run took away its last usable offer, and back on when a panel service returns.
 2. **Routing** (`place-order`, mode **BALANCED**): loads the offers of the service and keeps those that are active, whose provider is
-   active, routing-enabled and healthy, whose limits take the quantity and whose cost does not exceed the customer's price. Ranks by
-   `effective_cost = cost_per_1000 x reliability_penalty x (1 - min(routing_score, 1000) / 10000)`: the score is worth 0.01 % of the
-   price per point (100 = 1 %, cap 1000 = 10 %). Equal: higher score, then lowest offer id. The first accepting offer in that order
-   gets the order; an offer that refuses before anything is sent hands over to the next. The price is built on the cheapest offer, so
-   the "cost <= price" rule is what keeps a score-preferred, dearer offer from selling at a loss.
+   active, routing-enabled and healthy and whose limits take the quantity. On a card whose name promises refill, HQ, real, organic or non-drop
+   (`offer-quality.ts`; "no refill" or "bot" takes that back) an offer of a premium panel (`providers.is_premium`) goes first, then one whose
+   own name makes such a promise, then the rest, however cheap. Within a group, and on every other card, the offers rank by
+   `effective_cost = cost_per_1000 x reliability_penalty`; equal: higher `routing_score`, then lowest offer id. The first accepting offer in
+   that order gets the order; an offer that refuses before anything is sent hands over to the next. The card's price is built on the offer
+   this picks (`service-cost.ts`), and an order on the offer that serves its quantity (`order-pricing.ts`), so the price is always above the cost.
 3. **`place_order()`** (database function, one transaction) validates the chosen offer, debits the customer, reserves the
    provider balance, and writes the order with its snapshots. If the provider refuses before anything is sent, the next offer is
    tried; once a request reached a provider the outcome is final for that call.

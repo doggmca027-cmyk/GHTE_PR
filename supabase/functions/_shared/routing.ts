@@ -1,11 +1,14 @@
 // Provider routing: pick which provider offer fulfils an order. Pure functions, no I/O.
 //
-// Mode BALANCED (Phase 7). Every provider is an equal partner (there is no primary provider and no donors): offers are ranked by
+// Mode BALANCED (Phase 7). Offers are ranked by quality first (only on a card that promises it), then by
 //
 //   effective_cost = cost_per_1000 x reliability_penalty
 //
 //   * cost_per_1000        what the provider charges us (the price of the offer)
 //   * reliability_penalty  >= 1, set by the provider health monitor: a flaky provider must be that much cheaper to win
+//   quality (offer-quality.ts): when the caller names the card (serviceName) and the name promises refill, HQ, real, organic or non-drop, an offer
+//   of a premium panel beats one whose own name says so, and that beats the rest, however cheap: bots at $0.05 never serve a card sold as HQ.
+//   Such a card still sells through its other offers when no better one takes the quantity. On every other card the cheapest wins.
 //   routing_score only breaks a tie: it used to be worth 0.01 % of the price per point, and since the offer a card was published from
 //   carries 100 by default that gave the publishing provider a 1 % edge over every linked one. Equal effective cost: the higher
 //   routingScore wins; still equal: the lowest offer id, so the choice is deterministic.
@@ -24,6 +27,7 @@
 //   yet waits in the order hub on that offer (place-order, migration 20261218000000) until the owner tops the provider up.
 // The caller refuses the order BEFORE charging when nothing qualifies, and tries the next offer when one refuses before sending.
 
+import { qualityScorer } from './offer-quality.ts'
 import type { HealthStatus, IProvider, IProviderServiceOffer } from './types.ts'
 
 export class ServiceUnavailableError extends Error {
@@ -61,6 +65,8 @@ export interface SelectOptions {
   runs?: number
   /** The customer's price per 1000 for this service: offers costing more than this are dropped (never sell at a loss). */
   maxCostPer1000?: number
+  /** The card's name: when it promises quality, offers that keep the promise go first. Absent: cost only. */
+  serviceName?: string
 }
 
 /** Offers that may receive a NEW order, best first. */
@@ -73,12 +79,14 @@ export function rankOffers(offers: IProviderServiceOffer[], providers: IProvider
   if (!Number.isInteger(runs) || runs < 1) return []
   const perRun = opts.quantity === undefined ? undefined : opts.quantity / runs
   if (runs > 1 && perRun !== undefined && !Number.isInteger(perRun)) return []
+  const scorer = qualityScorer(opts.serviceName)
+  const quality = (o: IProviderServiceOffer) => scorer(o.panelName, eligible.get(o.providerId)?.premium)
   return offers
     .filter((o) => o.isActive && eligible.has(o.providerId))
     .filter((o) => runs === 1 || o.dripfeedSupported === true)
     .filter((o) => perRun === undefined || (perRun >= o.minQuantity && perRun <= o.maxQuantity))
     .filter((o) => opts.maxCostPer1000 === undefined || round4(o.costPer1000) <= round4(opts.maxCostPer1000))
-    .sort((a, b) => ec(a, eligible) - ec(b, eligible) || b.routingScore - a.routingScore || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .sort((a, b) => quality(b) - quality(a) || ec(a, eligible) - ec(b, eligible) || b.routingScore - a.routingScore || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
 export function selectBestOffer(offers: IProviderServiceOffer[], providers: IProvider[], opts: SelectOptions = {}): IProviderServiceOffer {
@@ -125,7 +133,7 @@ export interface OfferRow {
   routing_score: number
   created_at: string
   updated_at: string
-  provider_service: { external_service_id: string; is_active: boolean; is_dripfeed_enabled?: boolean | null } | null
+  provider_service: { external_service_id: string; is_active: boolean; is_dripfeed_enabled?: boolean | null; name?: string | null } | null
   provider: {
     id: string
     name: string
@@ -141,14 +149,15 @@ export interface OfferRow {
     currency: string
     priority: number
     reliability_penalty_multiplier?: number | string
+    is_premium?: boolean
   } | null
 }
 
 /** Select list matching OfferRow (PostgREST embedded resources). */
 export const OFFER_SELECT =
   'id, service_id, provider_id, provider_service_id, cost_per_1000, min_quantity, max_quantity, refill_supported, cancel_supported, is_active, routing_score, created_at, updated_at, ' +
-  'provider_service:provider_services(external_service_id, is_active, is_dripfeed_enabled), ' +
-  'provider:providers(id, name, api_url, api_key_encrypted, api_version, is_active, routing_enabled, health_status, last_health_check, last_balance_sync, provider_balance, currency, priority, reliability_penalty_multiplier)'
+  'provider_service:provider_services(external_service_id, is_active, is_dripfeed_enabled, name), ' +
+  'provider:providers(id, name, api_url, api_key_encrypted, api_version, is_active, routing_enabled, health_status, last_health_check, last_balance_sync, provider_balance, currency, priority, reliability_penalty_multiplier, is_premium)'
 
 export interface RoutingCandidates {
   offers: IProviderServiceOffer[]
@@ -169,6 +178,7 @@ export function buildCandidates(rows: OfferRow[]): RoutingCandidates {
       serviceId: r.service_id,
       providerId: r.provider_id,
       providerServiceId: r.provider_service_id,
+      panelName: r.provider_service.name ?? undefined,
       costPer1000: Number(r.cost_per_1000),
       minQuantity: r.min_quantity,
       maxQuantity: r.max_quantity,
@@ -201,6 +211,7 @@ export function buildCandidates(rows: OfferRow[]): RoutingCandidates {
       currency: p.currency,
       priority: p.priority,
       reliabilityPenalty: p.reliability_penalty_multiplier == null ? 1 : Number(p.reliability_penalty_multiplier),
+      premium: p.is_premium === true,
     })
   }
   return { offers, providers: [...providers.values()], details }

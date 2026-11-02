@@ -2,11 +2,12 @@
 // admin-catalog-mapping Edge Function stays thin and every rule here is unit-testable.
 //
 //   * the ORDER the router will use (same rules as routing.ts rankOffers: eligible offers by effective cost, then the rest, with why)
-//   * the PRICE of the bundle: priced on its CHEAPEST usable offer (service-cost.ts), the one the router sends to; a dearer offer only
+//   * the PRICE of the bundle: priced on the usable offer the router sends to (service-cost.ts: the cheapest of the best quality score); a dearer offer only
 //     takes an order while it still costs less than the customer pays
 //   * LINK_BY_EXTERNAL_ID: "link panel service #881 of provider P to my service X" with the panel's CURRENT cost and limits
 
 import { priceForBasis } from './catalog-sync.ts'
+import { qualityScorer } from './offer-quality.ts'
 import { effectiveCost } from './routing.ts'
 import { serviceCostBasis, toPricingOffer, type PricingOfferRow } from './service-cost.ts'
 import type { IProviderService, Platform, PriceRule } from './types.ts'
@@ -14,7 +15,7 @@ import type { IProviderService, Platform, PriceRule } from './types.ts'
 export const BUNDLE_OFFER_COLUMNS =
   'id, service_id, provider_id, provider_service_id, cost_per_1000, min_quantity, max_quantity, refill_supported, is_active, routing_score, ' +
   'anomaly_detected, anomaly_reason, provider_service:provider_services(external_service_id, name, is_active), ' +
-  'provider:providers(id, name, is_active, routing_enabled, health_status, provider_balance, reliability_penalty_multiplier, catalog_mode)'
+  'provider:providers(id, name, is_active, routing_enabled, health_status, provider_balance, reliability_penalty_multiplier, catalog_mode, is_premium)'
 
 export interface BundleOfferRow {
   id: string
@@ -39,6 +40,7 @@ export interface BundleOfferRow {
     provider_balance: number | string
     reliability_penalty_multiplier: number | string | null
     catalog_mode?: string
+    is_premium?: boolean
   } | null
 }
 
@@ -77,7 +79,9 @@ function blockOf(r: BundleOfferRow, customerRate: number): OfferBlock | null {
 }
 
 /** The bundle in routing order: what can take an order (best first, exactly like rankOffers), then the rest by cost. */
-export function bundleOffers(rows: BundleOfferRow[], customerRate: number): BundleOffer[] {
+export function bundleOffers(rows: BundleOfferRow[], customerRate: number, serviceName?: string): BundleOffer[] {
+  const scorer = qualityScorer(serviceName)
+  const score = new Map(rows.map((r) => [r.id, scorer(r.provider_service?.name, r.provider?.is_premium)]))
   const all = rows.map((r): BundleOffer => {
     const penalty = r.provider?.reliability_penalty_multiplier == null ? 1 : Number(r.provider.reliability_penalty_multiplier)
     const cost = Number(r.cost_per_1000)
@@ -99,7 +103,7 @@ export function bundleOffers(rows: BundleOfferRow[], customerRate: number): Bund
   })
   const routable = all
     .filter((o) => o.blockedBy === null)
-    .sort((a, b) => a.effectiveCost - b.effectiveCost || b.routingScore - a.routingScore || (a.offerId < b.offerId ? -1 : a.offerId > b.offerId ? 1 : 0))
+    .sort((a, b) => (score.get(b.offerId) ?? 0) - (score.get(a.offerId) ?? 0) || a.effectiveCost - b.effectiveCost || b.routingScore - a.routingScore || (a.offerId < b.offerId ? -1 : a.offerId > b.offerId ? 1 : 0))
   routable.forEach((o, i) => { o.rank = i + 1 })
   const rest = all.filter((o) => o.blockedBy !== null).sort((a, b) => a.costPer1000 - b.costPer1000)
   return [...routable, ...rest]
@@ -114,7 +118,7 @@ export interface BundleServiceRow {
 }
 
 export interface BundlePrice {
-  /** The cost the price is built on: the cheapest usable offer (null: no offer can take an order, the price is left alone). */
+  /** The cost the price is built on: the offer the router picks (null: no offer can take an order, the price is left alone). */
   basisCost: number | null
   currentRate: number
   newRate: number
@@ -124,7 +128,7 @@ export interface BundlePrice {
 /** The bundle's storefront price under the current rules: the same step the catalogue sync applies. */
 export function bundlePrice(service: BundleServiceRow, rows: BundleOfferRow[], rules: PriceRule[]): BundlePrice {
   const current = Number(service.customer_rate_per_1000)
-  const basis = serviceCostBasis(rows.map((r) => toPricingOffer(r as unknown as PricingOfferRow)))
+  const basis = serviceCostBasis(rows.map((r) => toPricingOffer(r as unknown as PricingOfferRow)), service.name)
   if (!basis) return { basisCost: null, currentRate: current, newRate: current, changed: false }
   const newRate = priceForBasis(current, basis.cost, rules, { serviceId: service.id, categoryId: service.category_id, platform: service.platform, serviceName: service.name })
   return { basisCost: basis.cost, currentRate: current, newRate, changed: r4(newRate) !== r4(current) }

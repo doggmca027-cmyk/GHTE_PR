@@ -96,6 +96,7 @@ export function priceLadder(
   offers: IProviderServiceOffer[],
   providers: IProvider[],
   rateOf: (offer: IProviderServiceOffer) => number,
+  serviceName?: string,
 ): LadderSegment[] {
   const routable = rankOffers(offers, providers)
   const cuts = new Set<number>([limits.min])
@@ -104,7 +105,7 @@ export function priceLadder(
   const out: LadderSegment[] = []
   starts.forEach((from, i) => {
     const to = i + 1 < starts.length ? starts[i + 1] - 1 : limits.max
-    const offer = rankOffers(routable, providers, { quantity: from })[0]
+    const offer = rankOffers(routable, providers, { quantity: from, serviceName })[0]
     if (!offer) return
     const last = out[out.length - 1]
     if (last && last.offerId === offer.id && last.to === from - 1) {

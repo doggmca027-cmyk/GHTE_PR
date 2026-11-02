@@ -56,12 +56,12 @@ Deno.serve(instrument('quote-order', async (req: Request, { log }): Promise<Resp
   if (!service || !service.is_active) return fail(404, 'service_unavailable', 'This service is no longer available.')
   // the offer place-order will take for this quantity: the same router with the same inputs
   const candidates = buildCandidates((offerRows ?? []) as unknown as OfferRow[])
-  const offer = rankOffers(candidates.offers, candidates.providers, { quantity, runs })[0]
+  const offer = rankOffers(candidates.offers, candidates.providers, { quantity, runs, serviceName: service.name })[0]
   if (!offer) return fail(503, 'service_unavailable', 'This service is temporarily unavailable.')
   const priced = toPricedService(service as unknown as PricedServiceRow)
   const rateOf = (o: { costPer1000: number }) => offerRatePer1000(priced, o.costPer1000, rules)
   // the ladder of a plain order (a drip-feed order keeps the steps of its own offer)
-  const segments = runs === 1 ? priceLadder({ min: Number(service.min_quantity), max: Number(service.max_quantity) }, candidates.offers, candidates.providers, rateOf) : []
+  const segments = runs === 1 ? priceLadder({ min: Number(service.min_quantity), max: Number(service.max_quantity) }, candidates.offers, candidates.providers, rateOf, service.name) : []
   const [{ data, error }, ladder] = await Promise.all([
     db.rpc('quote_order_price', {
       p_user_id: userId, p_service_id: serviceId, p_quantity: quantity, p_promo_code: guest ? null : parsed.value.promoCode,

@@ -20,6 +20,7 @@
     "check": "npm run scan:secrets && npm run check:supabase && npm test && npm run build",
     "secrets:push": "node --disable-warning=ExperimentalWarning scripts/push-secrets.ts",
     "test:concurrency": "node --disable-warning=ExperimentalWarning scripts/concurrency-test.ts",
+    "sync-services": "node --disable-warning=ExperimentalWarning scripts/sync-services.ts",
     "e2e:provider": "node --disable-warning=ExperimentalWarning scripts/provider-e2e.ts",
     "test:ton": "node --disable-warning=ExperimentalWarning scripts/ton-e2e.ts",
     "secrets:rotate": "node --disable-warning=ExperimentalWarning scripts/rotate-secrets.ts",

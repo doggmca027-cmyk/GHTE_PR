@@ -10,7 +10,7 @@
 //      (is_active, routing_score and the anomaly flags are never touched).
 //   4. Soft delete: provider_services missing from the response get is_active = false (never deleted).
 //   5. Storefront services that sell through this provider (they have an offer from it) are re-priced and re-limited from ALL their
-//      offers: the base cost is the cheapest offer that can receive an order (service-cost.ts), not the legacy primary. A service
+//      offers: the base cost is the offer the router would pick (service-cost.ts), not the legacy primary. A service
 //      whose last usable offer was lost in this run is switched off; one whose provider service came back is switched on.
 //      NEW provider services are NOT put on the storefront: they wait in provider_services until an admin links them
 //      (admin-catalog-mapping).
@@ -34,7 +34,7 @@ import {
   type ProviderSyncReport,
   type ServiceRow,
 } from './catalog-sync.ts'
-import { buildCanonicalPublishRows, buildPublishRows, chooseGapFillers, isPublishable, referenceCells, type ExistingCategory, type PublishCandidate, type PublishRow } from './catalog-publish.ts'
+import { buildCanonicalPublishRows, buildPublishRows, chooseGapFillers, isCatalogueService, isPublishable, referenceCells, type ExistingCategory, type PublishCandidate, type PublishRow } from './catalog-publish.ts'
 import type { Logger } from './logger.ts'
 import type { IProviderAdapter } from './providers/contract.ts'
 import { groupByService, serviceCostBasis, type PricingOffer } from './service-cost.ts'
@@ -212,6 +212,9 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
         const id = idByExternal.get(s.externalServiceId)
         return id ? [{ id, name: s.name, categoryRaw: s.categoryRaw, serviceType: s.type ?? null, rate: s.ratePer1000, min: s.minQuantity, max: s.maxQuantity, description: s.description ?? null }] : []
       })
+      const slugs = new Set(await store.loadPlatformSlugs())
+      // an English catalogue is published as a whole: without what the order form cannot deliver
+      const sellable = (c: PublishCandidate) => isPublishable(c) && (provider.publish_mapping !== 'canonical' || isCatalogueService(c, slugs))
       // What needs doing: what is new or changed (changes first), within the budget; a manual slice overrides this.
       const onStorefront = new Set(providerOffers.map((o) => o.provider_service_id))
       const changedIds = new Set<string>()
@@ -222,15 +225,14 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
       let chosen: PublishCandidate[]
       let backlog = 0
       if (input.republish) {
-        chosen = candidates.filter(isPublishable).slice(input.republish.offset, input.republish.offset + input.republish.limit)
+        chosen = candidates.filter(sellable).slice(input.republish.offset, input.republish.offset + input.republish.limit)
       } else {
-        const wanted = candidates.filter((c) => (!onStorefront.has(c.id) || changedIds.has(c.id)) && isPublishable(c))
+        const wanted = candidates.filter((c) => (!onStorefront.has(c.id) || changedIds.has(c.id)) && sellable(c))
         const ordered = [...wanted.filter((c) => changedIds.has(c.id)), ...wanted.filter((c) => !changedIds.has(c.id))]
         chosen = ordered.slice(0, PUBLISH_BUDGET)
         backlog = ordered.length - chosen.length
       }
       // an English donor catalogue goes into the storefront's platform + action categories (no near-duplicate categories)
-      const slugs = new Set(await store.loadPlatformSlugs())
       const built = provider.publish_mapping === 'canonical' && store.loadCategories
         ? buildCanonicalPublishRows(chosen, slugs, await store.loadCategories())
         : buildPublishRows(chosen, slugs)
@@ -241,7 +243,7 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
         total.updated += r.services_updated
         total.categories += r.categories_changed
       }
-      report.published = { ...total, skipped: candidates.length - candidates.filter(isPublishable).length, untranslatedServices: built.untranslatedServices, untranslatedCategories: built.untranslatedCategories, backlog }
+      report.published = { ...total, skipped: candidates.length - candidates.filter(sellable).length, untranslatedServices: built.untranslatedServices, untranslatedCategories: built.untranslatedCategories, backlog }
     } catch (e) {
       log.error('publishing the catalogue failed', { err: e, providerId: provider.id, error_code: 'catalog_publish_failed' })
       report.warning = [report.warning, `publishing failed: ${e instanceof Error ? e.message : 'unknown error'}`].filter(Boolean).join('; ')
@@ -302,7 +304,7 @@ async function priceLinkedServices(
     const offers = offersByService.get(service.id) ?? []
     const plan = planService({
       existing: service,
-      basis: serviceCostBasis(offers),
+      basis: serviceCostBasis(offers, service.name),
       rules,
       // a donor (linked_only) never switches a storefront service back on: one it published was taken off on purpose (migration
       // 20261207000000), and a reference card is the publishing provider's to bring back

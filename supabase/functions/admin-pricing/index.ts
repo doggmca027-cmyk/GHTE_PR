@@ -157,7 +157,7 @@ Deno.serve(instrument('admin-pricing', async (req: Request, { log }): Promise<Re
     const offerRows = inScope.length === 0 ? [] : await loadOffers(db, inScope.map((r) => r.id))
     const offersByService = groupByService(offerRows.map(toPricingOffer))
     const services: RepriceService[] = inScope.flatMap((r) => {
-      const basis = serviceCostBasis(offersByService.get(r.id) ?? [])
+      const basis = serviceCostBasis(offersByService.get(r.id) ?? [], r.name)
       // no offer can receive an order: there is no cost to mark up, so the price is left alone
       return basis ? [{ id: r.id, category_id: r.category_id, name: r.name, platform: r.category.platform.slug, customer_rate_per_1000: Number(r.customer_rate_per_1000), provider_rate: basis.cost }] : []
     })

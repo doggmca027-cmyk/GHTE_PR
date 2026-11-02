@@ -125,7 +125,7 @@ Deno.serve(instrument('admin-catalog-mapping', async (req: Request, { log }): Pr
       if (!service) return null
       const offers = await loadOffers(serviceId)
       const price = bundlePrice(service, offers, await loadRules())
-      return { service: { id: service.id, name: service.name, platform: service.platform, customerRatePer1000: service.customer_rate_per_1000 }, price, offers: bundleOffers(offers, service.customer_rate_per_1000) }
+      return { service: { id: service.id, name: service.name, platform: service.platform, customerRatePer1000: service.customer_rate_per_1000 }, price, offers: bundleOffers(offers, service.customer_rate_per_1000, service.name) }
     }
 
     if (parsed.action === 'SEARCH_SERVICES') {
