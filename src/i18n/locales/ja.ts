@@ -496,6 +496,17 @@ const ja: Record<string, string> = {
   'Connect an e-mail to sign in without Telegram.': 'メールアドレスを連携すると、Telegram なしでサインインできます。',
   'Password (optional, at least 8 characters)': 'パスワード（任意、8 文字以上）',
   'Connecting an e-mail will be available soon.': 'メールアドレスの連携はまもなく利用できます。',
+  'AI assistant': 'AIアシスタント',
+  'Ask about a service…': 'サービスについて質問…',
+  'Tell me what you need and I will pick services from the catalogue: the cheapest ones, or those that do not drop.': 'ご希望を教えてください。カタログから、いちばん安いものや減りにくいものをお選びします。',
+  'Cheapest Instagram followers': '最安のInstagramフォロワー',
+  'Real Instagram followers that do not drop': '減らない本物のInstagramフォロワー',
+  'TikTok views': 'TikTok再生数',
+  'New chat': '新しいチャット',
+  'Copy article number': '商品番号をコピー',
+  'The assistant is busy right now. Try again in a minute.': 'アシスタントはただいま混み合っています。1分後にもう一度お試しください。',
+  'Too many questions. Try again in a few minutes.': '質問が多すぎます。数分後にもう一度お試しください。',
+  'No connection. Check the network and try again.': '接続がありません。ネットワークを確認してもう一度お試しください。',
 }
 
 export default ja

@@ -496,6 +496,17 @@ const hi: Record<string, string> = {
   'Connect an e-mail to sign in without Telegram.': 'Telegram के बिना साइन इन के लिए ई-मेल जोड़ें।',
   'Password (optional, at least 8 characters)': 'पासवर्ड (वैकल्पिक, कम से कम 8 अक्षर)',
   'Connecting an e-mail will be available soon.': 'ई-मेल जोड़ना जल्द उपलब्ध होगा।',
+  'AI assistant': 'AI सहायक',
+  'Ask about a service…': 'किसी सेवा के बारे में पूछें…',
+  'Tell me what you need and I will pick services from the catalogue: the cheapest ones, or those that do not drop.': 'बताइए आपको क्या चाहिए, कैटलॉग से सेवाएँ चुनने में मैं मदद करूँगा: सबसे सस्ती या वे जो घटती नहीं।',
+  'Cheapest Instagram followers': 'सबसे सस्ते Instagram फॉलोअर्स',
+  'Real Instagram followers that do not drop': 'असली Instagram फॉलोअर्स जो घटते नहीं',
+  'TikTok views': 'TikTok व्यूज़',
+  'New chat': 'नई चैट',
+  'Copy article number': 'आर्टिकल नंबर कॉपी करें',
+  'The assistant is busy right now. Try again in a minute.': 'सहायक अभी व्यस्त है। एक मिनट बाद फिर कोशिश करें।',
+  'Too many questions. Try again in a few minutes.': 'बहुत ज़्यादा सवाल। कुछ मिनट बाद फिर कोशिश करें।',
+  'No connection. Check the network and try again.': 'कनेक्शन नहीं है। नेटवर्क जाँचें और फिर कोशिश करें।',
 }
 
 export default hi

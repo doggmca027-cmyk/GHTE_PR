@@ -35,7 +35,7 @@ const COUNTRY_ALIASES: Readonly<Record<string, string>> = {
 }
 
 /** An article: PLATFORM-TYPE-QUALITY-SUPPLIER+NUMBER, and four more characters for a twin. No lookbehind: older iOS webviews cannot even parse one. */
-const SKU_PATTERN = /\b[A-Z]{2,4}-[A-Z]{2,5}-(?:HQ|STD|CHEAP)-[A-Z]{3,4}[A-Z0-9]{1,12}(?:-[A-F0-9]{4})?\b/i
+export const SKU_PATTERN = /\b[A-Z]{2,4}-[A-Z]{2,5}-(?:HQ|STD|CHEAP)-[A-Z]{3,4}[A-Z0-9]{1,12}(?:-[A-F0-9]{4})?\b/i
 
 const REGION_LOCALES = ['en', 'ru', 'uk', 'es', 'pt', 'de', 'fr', 'it', 'tr', 'id']
 const FIRST = 'A'.charCodeAt(0)

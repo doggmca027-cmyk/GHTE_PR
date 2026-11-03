@@ -496,6 +496,17 @@ const uk: Record<string, string> = {
   'Connect an e-mail to sign in without Telegram.': 'Підключіть пошту, щоб входити без Telegram.',
   'Password (optional, at least 8 characters)': 'Пароль (необов\'язково, щонайменше 8 символів)',
   'Connecting an e-mail will be available soon.': 'Підключення пошти скоро буде доступне.',
+  'AI assistant': 'AI-асистент',
+  'Ask about a service…': 'Запитайте про послугу…',
+  'Tell me what you need and I will pick services from the catalogue: the cheapest ones, or those that do not drop.': 'Розкажіть, що вам потрібно, і я підберу послуги з каталогу: найдешевші або такі, що не списуються.',
+  'Cheapest Instagram followers': 'Найдешевші підписники Instagram',
+  'Real Instagram followers that do not drop': 'Живі підписники Instagram без списань',
+  'TikTok views': 'Перегляди TikTok',
+  'New chat': 'Новий чат',
+  'Copy article number': 'Скопіювати артикул',
+  'The assistant is busy right now. Try again in a minute.': 'Асистент зараз зайнятий. Спробуйте за хвилину.',
+  'Too many questions. Try again in a few minutes.': 'Забагато запитань. Спробуйте за кілька хвилин.',
+  'No connection. Check the network and try again.': 'Немає з’єднання. Перевірте мережу й спробуйте ще раз.',
 }
 
 export default uk

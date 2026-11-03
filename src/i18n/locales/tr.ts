@@ -496,6 +496,17 @@ const tr: Record<string, string> = {
   'Connect an e-mail to sign in without Telegram.': 'Telegram olmadan giriş için bir e-posta bağlayın.',
   'Password (optional, at least 8 characters)': 'Şifre (isteğe bağlı, en az 8 karakter)',
   'Connecting an e-mail will be available soon.': 'E-posta bağlama yakında kullanılabilecek.',
+  'AI assistant': 'Yapay zeka asistanı',
+  'Ask about a service…': 'Bir hizmet hakkında sorun…',
+  'Tell me what you need and I will pick services from the catalogue: the cheapest ones, or those that do not drop.': 'Neye ihtiyacınız olduğunu söyleyin, katalogdan hizmetleri ben seçeyim: en ucuzları ya da düşmeyenleri.',
+  'Cheapest Instagram followers': 'En ucuz Instagram takipçileri',
+  'Real Instagram followers that do not drop': 'Düşmeyen gerçek Instagram takipçileri',
+  'TikTok views': 'TikTok izlenmeleri',
+  'New chat': 'Yeni sohbet',
+  'Copy article number': 'Ürün numarasını kopyala',
+  'The assistant is busy right now. Try again in a minute.': 'Asistan şu anda meşgul. Bir dakika sonra tekrar deneyin.',
+  'Too many questions. Try again in a few minutes.': 'Çok fazla soru. Birkaç dakika sonra tekrar deneyin.',
+  'No connection. Check the network and try again.': 'Bağlantı yok. Ağı kontrol edip tekrar deneyin.',
 }
 
 export default tr

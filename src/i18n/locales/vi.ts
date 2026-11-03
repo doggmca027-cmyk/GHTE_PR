@@ -496,6 +496,17 @@ const vi: Record<string, string> = {
   'Connect an e-mail to sign in without Telegram.': 'Kết nối email để đăng nhập không cần Telegram.',
   'Password (optional, at least 8 characters)': 'Mật khẩu (không bắt buộc, ít nhất 8 ký tự)',
   'Connecting an e-mail will be available soon.': 'Tính năng kết nối email sẽ sớm có.',
+  'AI assistant': 'Trợ lý AI',
+  'Ask about a service…': 'Hỏi về một dịch vụ…',
+  'Tell me what you need and I will pick services from the catalogue: the cheapest ones, or those that do not drop.': 'Hãy cho tôi biết bạn cần gì, tôi sẽ chọn dịch vụ trong danh mục: rẻ nhất hoặc loại không bị tụt.',
+  'Cheapest Instagram followers': 'Người theo dõi Instagram rẻ nhất',
+  'Real Instagram followers that do not drop': 'Người theo dõi Instagram thật, không bị tụt',
+  'TikTok views': 'Lượt xem TikTok',
+  'New chat': 'Cuộc trò chuyện mới',
+  'Copy article number': 'Sao chép mã sản phẩm',
+  'The assistant is busy right now. Try again in a minute.': 'Trợ lý đang bận. Hãy thử lại sau một phút.',
+  'Too many questions. Try again in a few minutes.': 'Quá nhiều câu hỏi. Hãy thử lại sau vài phút.',
+  'No connection. Check the network and try again.': 'Không có kết nối. Hãy kiểm tra mạng và thử lại.',
 }
 
 export default vi

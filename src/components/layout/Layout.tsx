@@ -17,6 +17,8 @@ interface Props {
   /** A website guest: the header offers to sign in instead of the balance. */
   guest?: boolean
   onSignIn?: () => void
+  /** Drawn over the screen, inside the phone frame in the Mini App (the AI assistant's button and its sheet). */
+  floating?: ReactNode
   children: ReactNode
 }
 
@@ -28,7 +30,7 @@ export function Layout(props: Props) {
   return wide ? <WebLayout {...props} /> : <AppLayout {...props} />
 }
 
-function AppLayout({ activeTab, onTabChange, balance, currency, onTopUp, isAdmin = false, guest = false, onSignIn, children }: Props) {
+function AppLayout({ activeTab, onTabChange, balance, currency, onTopUp, isAdmin = false, guest = false, onSignIn, floating, children }: Props) {
   return (
     <div className="flex min-h-full items-center justify-center bg-backdrop sm:p-6">
       <div className="relative mx-auto flex h-[100dvh] w-full max-w-[430px] flex-col overflow-hidden bg-gradient-to-b from-screen to-screen-end sm:h-[860px] sm:max-h-[calc(100dvh-3rem)] sm:rounded-[40px] sm:shadow-2xl">
@@ -46,6 +48,7 @@ function AppLayout({ activeTab, onTabChange, balance, currency, onTopUp, isAdmin
         />
         <main data-scroll-root className="flex-1 overflow-y-auto px-5 pb-4">{children}</main>
         <BottomNav active={activeTab} onChange={onTabChange} items={NAV_ITEMS} />
+        {floating}
       </div>
     </div>
   )

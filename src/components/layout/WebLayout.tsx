@@ -18,6 +18,8 @@ interface Props {
   isAdmin?: boolean
   guest?: boolean
   onSignIn?: () => void
+  /** Drawn over the page (the AI assistant's button). */
+  floating?: ReactNode
   children: ReactNode
 }
 
@@ -75,7 +77,7 @@ function LanguagePicker() {
  * The website's frame (the app opened in a browser, not in Telegram): a sticky navigation bar across the whole width, the page in a wide
  * container, a footer. On a phone-sized browser the sections move to the familiar tab bar at the bottom. The Mini App never renders this.
  */
-export function WebLayout({ activeTab, onTabChange, balance, currency, onTopUp, isAdmin = false, guest = false, onSignIn, children }: Props) {
+export function WebLayout({ activeTab, onTabChange, balance, currency, onTopUp, isAdmin = false, guest = false, onSignIn, floating, children }: Props) {
   const t = useT()
   const { lang } = useLanguage()
   const dark = useScheme() === 'dark'
@@ -207,6 +209,7 @@ export function WebLayout({ activeTab, onTabChange, balance, currency, onTopUp, 
           <BottomNav active={activeTab} onChange={(id) => go(id)} items={NAV_ITEMS} />
         </div>
       </div>
+      {floating}
     </div>
   )
 }

@@ -34,6 +34,8 @@ const SupportScreen = lazy(() => loadSupport().then((m) => ({ default: m.Support
 const SettingsScreen = lazy(() => loadSettings().then((m) => ({ default: m.SettingsScreen })))
 // The website guest's sign-in (Telegram's Login Widget, e-mail when on): its own chunk, loaded when a guest asks to sign in.
 const SignInModal = lazy(() => import('@/components/auth/SignInModal').then((m) => ({ default: m.SignInModal })))
+// The AI assistant (a round button over every screen, its sheet opens on a tap): its own small chunk, drawn once the screen is up.
+const AiChat = lazy(() => import('@/components/chat/AiChat').then((m) => ({ default: m.AiChat })))
 // Admin code is split into its own chunk: regular users never download it.
 const AdminScreen = lazy(() => import('@/components/admin/AdminScreen').then((m) => ({ default: m.AdminScreen })))
 
@@ -151,6 +153,7 @@ export default function App() {
       isAdmin={user.isAdmin}
       guest={guest}
       onSignIn={openSignIn}
+      floating={<Suspense fallback={null}><AiChat session={state.session} /></Suspense>}
     >
       <Suspense fallback={<Loader2 size={28} strokeWidth={2} className="mx-auto mt-16 animate-spin text-brand" aria-label={t('Loading')} />}>
       {tab === 'services' ? (

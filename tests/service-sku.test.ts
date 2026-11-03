@@ -152,8 +152,8 @@ describe('the SKU is for the admin only', () => {
   const files = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(path.join(d, e.name)) : /\.(ts|tsx)$/.test(e.name) ? [path.join(d, e.name)] : []))
   const mentions = (file: string) => /\bsku\b/i.test(fs.readFileSync(file, 'utf8'))
 
-  it('no customer screen, hook or API client in the app mentions it (only the admin screens, their types and clients, and the lookup of a card by its article)', () => {
-    const admin = /(^|\/)(components\/admin\/|services\/api\/(mock-)?admin|types\/(admin|catalog-mapping)|lib\/service-search\.ts$)/
+  it('no customer screen, hook or API client in the app mentions it (only the admin screens, their types and clients, , the lookup of a card by its article and the assistant that gives it)', () => {
+    const admin = /(^|\/)(components\/admin\/|services\/api\/(mock-)?admin|types\/(admin|catalog-mapping)|lib\/service-search\.ts$|lib\/ai-chat\.ts$|components\/chat\/)/
     const offenders = files(path.join(root, 'src')).map((f) => path.relative(path.join(root, 'src'), f).replace(/\\/g, '/')).filter((f) => !admin.test(f)).filter((f) => mentions(path.join(root, 'src', f)))
     expect(offenders).toEqual([])
   })

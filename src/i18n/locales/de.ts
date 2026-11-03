@@ -496,6 +496,17 @@ const de: Record<string, string> = {
   'Connect an e-mail to sign in without Telegram.': 'Verbinde eine E-Mail-Adresse, um dich ohne Telegram anzumelden.',
   'Password (optional, at least 8 characters)': 'Passwort (optional, mindestens 8 Zeichen)',
   'Connecting an e-mail will be available soon.': 'Das Verbinden einer E-Mail-Adresse ist bald möglich.',
+  'AI assistant': 'KI-Assistent',
+  'Ask about a service…': 'Frag nach einem Service…',
+  'Tell me what you need and I will pick services from the catalogue: the cheapest ones, or those that do not drop.': 'Sag mir, was du brauchst, und ich wähle Services aus dem Katalog: die günstigsten oder solche, die nicht abfallen.',
+  'Cheapest Instagram followers': 'Günstigste Instagram-Follower',
+  'Real Instagram followers that do not drop': 'Echte Instagram-Follower, die nicht abfallen',
+  'TikTok views': 'TikTok-Aufrufe',
+  'New chat': 'Neuer Chat',
+  'Copy article number': 'Artikelnummer kopieren',
+  'The assistant is busy right now. Try again in a minute.': 'Der Assistent ist gerade beschäftigt. Versuche es in einer Minute erneut.',
+  'Too many questions. Try again in a few minutes.': 'Zu viele Fragen. Versuche es in ein paar Minuten erneut.',
+  'No connection. Check the network and try again.': 'Keine Verbindung. Prüfe das Netzwerk und versuche es erneut.',
 }
 
 export default de

@@ -496,6 +496,17 @@ const zh: Record<string, string> = {
   'Connect an e-mail to sign in without Telegram.': '连接邮箱，无需 Telegram 即可登录。',
   'Password (optional, at least 8 characters)': '密码（可选，至少 8 个字符）',
   'Connecting an e-mail will be available soon.': '连接邮箱功能即将推出。',
+  'AI assistant': 'AI 助手',
+  'Ask about a service…': '咨询服务…',
+  'Tell me what you need and I will pick services from the catalogue: the cheapest ones, or those that do not drop.': '告诉我您的需求，我会从目录中挑选服务：最便宜的，或不掉粉的。',
+  'Cheapest Instagram followers': '最便宜的 Instagram 粉丝',
+  'Real Instagram followers that do not drop': '不掉粉的真实 Instagram 粉丝',
+  'TikTok views': 'TikTok 播放量',
+  'New chat': '新对话',
+  'Copy article number': '复制商品编号',
+  'The assistant is busy right now. Try again in a minute.': '助手现在正忙，请一分钟后重试。',
+  'Too many questions. Try again in a few minutes.': '提问过多，请几分钟后重试。',
+  'No connection. Check the network and try again.': '无网络连接，请检查网络后重试。',
 }
 
 export default zh

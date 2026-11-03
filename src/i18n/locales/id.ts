@@ -496,6 +496,17 @@ const id: Record<string, string> = {
   'Connect an e-mail to sign in without Telegram.': 'Hubungkan email untuk masuk tanpa Telegram.',
   'Password (optional, at least 8 characters)': 'Kata sandi (opsional, minimal 8 karakter)',
   'Connecting an e-mail will be available soon.': 'Menghubungkan email akan segera tersedia.',
+  'AI assistant': 'Asisten AI',
+  'Ask about a service…': 'Tanyakan tentang layanan…',
+  'Tell me what you need and I will pick services from the catalogue: the cheapest ones, or those that do not drop.': 'Ceritakan kebutuhan Anda dan saya akan memilihkan layanan dari katalog: yang termurah atau yang tidak turun.',
+  'Cheapest Instagram followers': 'Pengikut Instagram termurah',
+  'Real Instagram followers that do not drop': 'Pengikut Instagram asli yang tidak turun',
+  'TikTok views': 'Tayangan TikTok',
+  'New chat': 'Obrolan baru',
+  'Copy article number': 'Salin nomor artikel',
+  'The assistant is busy right now. Try again in a minute.': 'Asisten sedang sibuk. Coba lagi dalam semenit.',
+  'Too many questions. Try again in a few minutes.': 'Terlalu banyak pertanyaan. Coba lagi dalam beberapa menit.',
+  'No connection. Check the network and try again.': 'Tidak ada koneksi. Periksa jaringan dan coba lagi.',
 }
 
 export default id

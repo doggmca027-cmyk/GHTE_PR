@@ -496,6 +496,17 @@ const ar: Record<string, string> = {
   'Connect an e-mail to sign in without Telegram.': 'اربط بريدًا إلكترونيًا لتسجيل الدخول دون تيليجرام.',
   'Password (optional, at least 8 characters)': 'كلمة المرور (اختيارية، 8 أحرف على الأقل)',
   'Connecting an e-mail will be available soon.': 'سيتوفر ربط البريد الإلكتروني قريبًا.',
+  'AI assistant': 'مساعد الذكاء الاصطناعي',
+  'Ask about a service…': 'اسأل عن خدمة…',
+  'Tell me what you need and I will pick services from the catalogue: the cheapest ones, or those that do not drop.': 'أخبرني بما تحتاجه وسأختار لك خدمات من الكتالوج: الأرخص أو التي لا تتناقص.',
+  'Cheapest Instagram followers': 'أرخص متابعي إنستغرام',
+  'Real Instagram followers that do not drop': 'متابعون حقيقيون على إنستغرام لا ينقصون',
+  'TikTok views': 'مشاهدات تيك توك',
+  'New chat': 'محادثة جديدة',
+  'Copy article number': 'نسخ رقم المنتج',
+  'The assistant is busy right now. Try again in a minute.': 'المساعد مشغول الآن. حاول مرة أخرى بعد دقيقة.',
+  'Too many questions. Try again in a few minutes.': 'أسئلة كثيرة جدًا. حاول مرة أخرى بعد بضع دقائق.',
+  'No connection. Check the network and try again.': 'لا يوجد اتصال. تحقق من الشبكة وحاول مرة أخرى.',
 }
 
 export default ar

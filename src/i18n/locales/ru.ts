@@ -496,6 +496,17 @@ const ru: Record<string, string> = {
   'Connect an e-mail to sign in without Telegram.': 'Подключите почту, чтобы входить без Telegram.',
   'Password (optional, at least 8 characters)': 'Пароль (необязательно, не короче 8 символов)',
   'Connecting an e-mail will be available soon.': 'Подключение почты скоро будет доступно.',
+  'AI assistant': 'AI-ассистент',
+  'Ask about a service…': 'Спросите про услугу…',
+  'Tell me what you need and I will pick services from the catalogue: the cheapest ones, or those that do not drop.': 'Расскажите, что вам нужно, и я подберу услуги из каталога: самые дешёвые или те, что не списываются.',
+  'Cheapest Instagram followers': 'Самые дешёвые подписчики Instagram',
+  'Real Instagram followers that do not drop': 'Живые подписчики Instagram без списаний',
+  'TikTok views': 'Просмотры TikTok',
+  'New chat': 'Новый чат',
+  'Copy article number': 'Скопировать артикул',
+  'The assistant is busy right now. Try again in a minute.': 'Ассистент сейчас занят. Попробуйте через минуту.',
+  'Too many questions. Try again in a few minutes.': 'Слишком много вопросов. Попробуйте через несколько минут.',
+  'No connection. Check the network and try again.': 'Нет соединения. Проверьте сеть и попробуйте снова.',
 }
 
 export default ru
