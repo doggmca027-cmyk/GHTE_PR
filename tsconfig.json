@@ -30,6 +30,7 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": [
+    "api",
     "src",
     "tests",
     "scripts",

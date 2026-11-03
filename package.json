@@ -29,8 +29,10 @@
     "i18n:keys": "node --disable-warning=ExperimentalWarning scripts/i18n-keys.ts"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.111",
     "@tonconnect/ui-react": "^3.0.2",
     "@twa-dev/sdk": "^8.0.2",
+    "ai": "^7.0.162",
     "clsx": "^2.1.1",
     "lucide-react": "^1.52.0",
     "react": "^19.3.0",
