@@ -511,6 +511,12 @@ const ja: Record<string, string> = {
   'With guarantee': '保証付き',
   'Safe growth': '安全な成長',
   'Filter by type': '種類で絞り込む',
+  'Search platforms or SKU': 'プラットフォームまたは商品番号を検索',
+  'Search services or SKU': 'サービスまたは商品番号を検索',
+  'Article number {sku}': '商品番号 {sku}',
+  'No service with this article number': 'この商品番号のサービスはありません',
+  'Check the number or ask the AI assistant.': '番号を確認するか、AIアシスタントに聞いてください。',
+  'Find in the catalogue': 'カタログで探す',
 }
 
 export default ja

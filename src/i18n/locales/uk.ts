@@ -511,6 +511,12 @@ const uk: Record<string, string> = {
   'With guarantee': 'З гарантією',
   'Safe growth': 'Безпечне зростання',
   'Filter by type': 'Фільтр за типом',
+  'Search platforms or SKU': 'Пошук платформ або артикула',
+  'Search services or SKU': 'Пошук послуг або артикула',
+  'Article number {sku}': 'Артикул {sku}',
+  'No service with this article number': 'Послуги з таким артикулом немає',
+  'Check the number or ask the AI assistant.': 'Перевірте номер або запитайте AI-асистента.',
+  'Find in the catalogue': 'Знайти в каталозі',
 }
 
 export default uk

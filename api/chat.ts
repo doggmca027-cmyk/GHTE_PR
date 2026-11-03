@@ -11,7 +11,7 @@ import { createRateLimiter, DEFAULT_MODEL, FALLBACK_MODELS, handleChat, type Cha
 
 export const config = { runtime: 'edge' }
 
-const MAX_OUTPUT_TOKENS = 700
+const MAX_OUTPUT_TOKENS = 900
 /** A model that has not said its first word by then is given up on: the next one is tried. */
 const FIRST_WORD_TIMEOUT_MS = 12_000
 const allow = createRateLimiter()

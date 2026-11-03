@@ -511,6 +511,12 @@ const zh: Record<string, string> = {
   'With guarantee': '有保障',
   'Safe growth': '安全增长',
   'Filter by type': '按类型筛选',
+  'Search platforms or SKU': '搜索平台或商品编号',
+  'Search services or SKU': '搜索服务或商品编号',
+  'Article number {sku}': '商品编号 {sku}',
+  'No service with this article number': '没有此编号的服务',
+  'Check the number or ask the AI assistant.': '请检查编号或询问 AI 助手。',
+  'Find in the catalogue': '在目录中查找',
 }
 
 export default zh

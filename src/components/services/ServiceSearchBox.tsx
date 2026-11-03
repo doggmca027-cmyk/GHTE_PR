@@ -23,7 +23,7 @@ export function ServiceSearchBox({ value, onChange, segment = null, onSegmentCha
           type="search"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={t('Search services')}
+          placeholder={t('Search services or SKU')}
           enterKeyHint="search"
           autoCapitalize="none"
           autoCorrect="off"

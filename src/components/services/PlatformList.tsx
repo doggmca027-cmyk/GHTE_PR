@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronRight, Search, SearchX, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { haptic } from '@/lib/haptics'
@@ -18,13 +18,20 @@ export interface PlatformEntry {
 interface Props {
   platforms: PlatformEntry[]
   onSelect: (slug: string) => void
+  /** The text of the search box, when the screen owns it (it looks an article number up across the catalogue). Otherwise the list keeps it. */
+  query?: string
+  onQueryChange?: (query: string) => void
+  /** Shown under the box instead of the platforms (the card an article number found). */
+  replacement?: ReactNode
 }
 
 /** Every platform as a list (not tabs): the colour tile, the name and how many services it has. Tapping one opens its services. */
-export function PlatformList({ platforms, onSelect }: Props) {
+export function PlatformList({ platforms, onSelect, query: controlled, onQueryChange, replacement }: Props) {
   const t = useT()
   const wide = useWide()
-  const [query, setQuery] = useState('')
+  const [own, setOwn] = useState('')
+  const query = controlled ?? own
+  const setQuery = onQueryChange ?? setOwn
   // in memory and instant: the list is already on the device, typing never makes a request
   const shown = useMemo(() => searchPlatforms(platforms, query), [platforms, query])
 
@@ -39,7 +46,7 @@ export function PlatformList({ platforms, onSelect }: Props) {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('Search platforms')}
+            placeholder={t('Search platforms or SKU')}
             enterKeyHint="search"
             autoCapitalize="none"
             autoCorrect="off"
@@ -59,7 +66,7 @@ export function PlatformList({ platforms, onSelect }: Props) {
         </label>
       </div>
 
-      {shown.length === 0 ? (
+      {replacement ? replacement : shown.length === 0 ? (
         <Card className="mt-1 space-y-2 py-10 text-center">
           <SearchX size={28} strokeWidth={1.75} className="mx-auto text-content-muted" />
           <p className="text-sm font-semibold text-content-primary">{t('No platforms found')}</p>

@@ -511,6 +511,12 @@ const ru: Record<string, string> = {
   'With guarantee': 'С гарантией',
   'Safe growth': 'Безопасный рост',
   'Filter by type': 'Фильтр по типу',
+  'Search platforms or SKU': 'Поиск платформ или артикула',
+  'Search services or SKU': 'Поиск услуг или артикула',
+  'Article number {sku}': 'Артикул {sku}',
+  'No service with this article number': 'Услуги с таким артикулом нет',
+  'Check the number or ask the AI assistant.': 'Проверьте номер или спросите AI-ассистента.',
+  'Find in the catalogue': 'Найти в каталоге',
 }
 
 export default ru

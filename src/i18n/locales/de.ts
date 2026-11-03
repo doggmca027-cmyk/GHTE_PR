@@ -511,6 +511,12 @@ const de: Record<string, string> = {
   'With guarantee': 'Mit Garantie',
   'Safe growth': 'Sicherer Zuwachs',
   'Filter by type': 'Nach Typ filtern',
+  'Search platforms or SKU': 'Plattform oder Artikelnummer suchen',
+  'Search services or SKU': 'Service oder Artikelnummer suchen',
+  'Article number {sku}': 'Artikelnummer {sku}',
+  'No service with this article number': 'Kein Service mit dieser Artikelnummer',
+  'Check the number or ask the AI assistant.': 'Prüfe die Nummer oder frage den KI-Assistenten.',
+  'Find in the catalogue': 'Im Katalog finden',
 }
 
 export default de

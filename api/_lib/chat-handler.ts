@@ -1,7 +1,7 @@
 // The request side of the support chat (api/chat.ts): validation, a small rate limit, retrieval from the public storefront, the system prompt, and
 // the model call. The model call is injected, so this is tested without the AI SDK, a key or a network.
 
-import { buildSearchUrl, buildSystemPrompt, extractIntent, rankServices, searchKinds, type StorefrontService } from './chat-rag'
+import { addonIntent, buildSearchUrl, buildSystemPrompt, companionActions, extractIntent, rankAddons, rankServices, searchKinds, type StorefrontService } from './chat-rag'
 
 export const MAX_BODY_BYTES = 16_384
 export const MAX_MESSAGES = 12
@@ -62,18 +62,30 @@ export function parseMessages(body: unknown): ChatMessage[] | null {
   return out[out.length - 1].role === 'user' ? out : null
 }
 
-async function search(deps: ChatDeps, text: string): Promise<StorefrontService[]> {
+/** What fits the customer's wish, and the addons that complete a package with it (views for followers, likes for views). */
+interface Found {
+  found: StorefrontService[]
+  addons: StorefrontService[]
+}
+
+async function search(deps: ChatDeps, text: string): Promise<Found> {
   const intent = extractIntent(text)
-  const urls = searchKinds(intent).map((kind) => buildSearchUrl(deps.env.supabaseUrl!, intent, kind)).filter((url): url is string => url !== null)
-  const lists = await Promise.all(urls.map(async (url) => {
+  const get = async (url: string): Promise<StorefrontService[]> => {
     const res = await deps.fetch(url, {
       headers: { apikey: deps.env.anonKey!, Authorization: `Bearer ${deps.env.anonKey}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(RETRIEVAL_TIMEOUT_MS),
     })
     if (!res.ok) throw new Error(`storefront search answered ${res.status}`)
     return (await res.json()) as StorefrontService[]
-  }))
-  return lists.length === 0 ? [] : rankServices(lists.flat(), intent)
+  }
+  const urls = searchKinds(intent).map((kind) => buildSearchUrl(deps.env.supabaseUrl!, intent, kind)).filter((url): url is string => url !== null)
+  // the addon of the package: one more request, the cheapest cards of the other action on the same platform
+  const addonUrl = companionActions(intent).length > 0 ? buildSearchUrl(deps.env.supabaseUrl!, addonIntent(intent), 'any') : null
+  const [lists, addonList] = await Promise.all([Promise.all(urls.map(get)), addonUrl ? get(addonUrl) : Promise.resolve([] as StorefrontService[])])
+  return {
+    found: lists.length === 0 ? [] : rankServices(lists.flat(), intent),
+    addons: addonList.length === 0 ? [] : rankAddons(addonList, intent),
+  }
 }
 
 export async function handleChat(req: Request, deps: ChatDeps): Promise<Response> {
@@ -98,7 +110,7 @@ export async function handleChat(req: Request, deps: ChatDeps): Promise<Response
 
   // What to look for comes from the customer's recent wishes: the last two of their messages ("and with a refill?" follows an earlier "Instagram followers")
   const wish = messages.filter((m) => m.role === 'user').slice(-2).map((m) => m.content).join(' ')
-  let found: StorefrontService[]
+  let found: Found
   try {
     found = await search(deps, wish)
   } catch {
@@ -106,7 +118,7 @@ export async function handleChat(req: Request, deps: ChatDeps): Promise<Response
     return json(503, 'catalog_unavailable', 'The catalogue is not available right now. Try again in a minute.')
   }
 
-  const system = buildSystemPrompt(found)
+  const system = buildSystemPrompt(found.found, found.addons)
   for (const model of models) {
     if (req.signal.aborted) break
     try {

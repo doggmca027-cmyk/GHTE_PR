@@ -87,6 +87,32 @@ describe('the AI assistant', () => {
     expect(writeText).toHaveBeenCalledWith(SKU)
   })
 
+  it('every article also has a "find in the catalogue" button: it sends the article to the catalogue\'s search and closes the sheet', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(`Take **${SKU}** and **TT-VIEW-STD-MTP9943**. Вставьте эти артикулы в поиск.`, { status: 200 })))
+    const found: string[] = []
+    await act(async () => { root.render(createElement(AiChat, { session: session(), onFindArticle: (sku: string) => found.push(sku) })) })
+    await click(byLabel('AI assistant'))
+    await typeInto(host.querySelector('input'), 'cheap followers and views')
+    await click(byLabel('Send'))
+    await flush(10)
+    expect(byLabel(`Find in the catalogue: ${SKU}`)).not.toBeNull()
+    expect(byLabel('Find in the catalogue: TT-VIEW-STD-MTP9943')).not.toBeNull()
+    await click(byLabel('Find in the catalogue: TT-VIEW-STD-MTP9943'))
+    expect(found).toEqual(['TT-VIEW-STD-MTP9943'])
+    expect(host.querySelector('[role="dialog"]')).toBeNull() // the sheet is out of the way of the catalogue
+  })
+
+  it('without a catalogue to send it to (no callback) there is only the copy button', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(`Take **${SKU}**`, { status: 200 })))
+    await mount()
+    await click(byLabel('AI assistant'))
+    await typeInto(host.querySelector('input'), 'cheap followers')
+    await click(byLabel('Send'))
+    await flush(10)
+    expect(byLabel(`Copy article number: ${SKU}`)).not.toBeNull()
+    expect(byLabel(`Find in the catalogue: ${SKU}`)).toBeNull()
+  })
+
   it('keeps the conversation: the next question goes with the earlier ones', async () => {
     const answers = ['First answer.', 'Second answer.']
     const calls: { messages: { role: string; content: string }[] }[] = []

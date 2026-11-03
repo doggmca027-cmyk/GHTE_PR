@@ -511,6 +511,12 @@ const vi: Record<string, string> = {
   'With guarantee': 'Có bảo hành',
   'Safe growth': 'Tăng trưởng an toàn',
   'Filter by type': 'Lọc theo loại',
+  'Search platforms or SKU': 'Tìm nền tảng hoặc mã sản phẩm',
+  'Search services or SKU': 'Tìm dịch vụ hoặc mã sản phẩm',
+  'Article number {sku}': 'Mã sản phẩm {sku}',
+  'No service with this article number': 'Không có dịch vụ với mã sản phẩm này',
+  'Check the number or ask the AI assistant.': 'Hãy kiểm tra mã hoặc hỏi trợ lý AI.',
+  'Find in the catalogue': 'Tìm trong danh mục',
 }
 
 export default vi

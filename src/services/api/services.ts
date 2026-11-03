@@ -1,4 +1,4 @@
-import { MOCK_CATALOG, MOCK_PLATFORMS } from '@/constants/dev'
+import { MOCK_CATALOG, MOCK_PLATFORMS, MOCK_SKUS } from '@/constants/dev'
 import type { PlatformInfo } from '@/constants/platforms'
 import { segmentParam, segmentsFromRow } from '@/lib/segments'
 import { serviceMatches, serviceSearchFilter, type SearchTerm } from '@/lib/service-search'
@@ -112,6 +112,35 @@ export async function fetchCategories(session: AuthSession): Promise<ICategory[]
     session.token,
   )
   return rows.map(categoryFromRow)
+}
+
+/** The card with this article number (SKU), wherever it is in the catalogue, and the platform it is on. */
+export interface SkuHit {
+  service: ICatalogService
+  platform: { slug: Platform; name: string }
+}
+
+/**
+ * Looks a card up by its article number across ALL categories and platforms: one request, an exact match on the unique `sku`. Null when no active
+ * card on an active platform has it (a typo, an old article, a card that left the storefront).
+ */
+export async function fetchServiceBySku(session: AuthSession, sku: string): Promise<SkuHit | null> {
+  if (session.isMock) {
+    const id = MOCK_SKUS[sku]
+    const service = id ? MOCK_CATALOG.services.find((s) => s.id === id) : undefined
+    const category = service ? MOCK_CATALOG.categories.find((c) => c.id === service.categoryId) : undefined
+    const platform = category ? MOCK_PLATFORMS.find((p) => p.slug === category.platform) : undefined
+    return service && platform ? { service, platform: { slug: platform.slug, name: platform.name } } : null
+  }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
+  if (!/^[A-Z0-9-]{1,60}$/.test(sku)) return null // only what a real article is made of reaches the filter
+  const select = `${SERVICE_COLUMNS.join(',')},category:categories!inner(platform:platforms!inner(slug,name))`
+  const rows = await rest<Array<ServiceRow & { category: { platform: { slug: Platform; name: string } } }>>(
+    `services?select=${select}&sku=eq.${sku}&is_active=eq.true&category.platform.active=eq.true&limit=1`,
+    session.token,
+  )
+  const row = rows[0]
+  return row ? { service: serviceFromRow(row), platform: row.category.platform } : null
 }
 
 /**

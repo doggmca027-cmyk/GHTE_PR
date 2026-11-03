@@ -511,6 +511,12 @@ const hi: Record<string, string> = {
   'With guarantee': 'गारंटी के साथ',
   'Safe growth': 'सुरक्षित वृद्धि',
   'Filter by type': 'प्रकार से फ़िल्टर करें',
+  'Search platforms or SKU': 'प्लैटफ़ॉर्म या आर्टिकल नंबर खोजें',
+  'Search services or SKU': 'सेवा या आर्टिकल नंबर खोजें',
+  'Article number {sku}': 'आर्टिकल नंबर {sku}',
+  'No service with this article number': 'इस आर्टिकल नंबर की कोई सेवा नहीं है',
+  'Check the number or ask the AI assistant.': 'नंबर जाँचें या AI सहायक से पूछें।',
+  'Find in the catalogue': 'कैटलॉग में खोजें',
 }
 
 export default hi

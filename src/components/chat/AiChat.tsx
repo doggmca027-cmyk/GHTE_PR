@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Check, Copy, Loader2, MessageCircle, RotateCcw, Send, Sparkles, TriangleAlert, X } from 'lucide-react'
+import { Check, Copy, Loader2, MessageCircle, RotateCcw, Search, Send, Sparkles, TriangleAlert, X } from 'lucide-react'
 import { tr, useT } from '@/i18n'
 import { askAssistant, ChatError, MAX_MESSAGE_CHARS, mockAssistant, splitAnswer, type ChatFailure, type ChatMessage } from '@/lib/ai-chat'
 import { copyText } from '@/lib/clipboard'
@@ -18,7 +18,7 @@ const FAILURES: Record<ChatFailure, string> = {
 }
 
 /** An answer of the assistant: text and **bold** as they are, every article number as a chip that copies it. */
-function Answer({ text, copied, onCopy }: { text: string; copied: string | null; onCopy: (article: string) => void }) {
+function Answer({ text, copied, onCopy, onFind }: { text: string; copied: string | null; onCopy: (article: string) => void; onFind?: (article: string) => void }) {
   const t = useT()
   return (
     <>
@@ -26,16 +26,27 @@ function Answer({ text, copied, onCopy }: { text: string; copied: string | null;
         if (piece.kind === 'bold') return <strong key={i} className="font-bold">{piece.text}</strong>
         if (piece.kind === 'text') return <span key={i}>{piece.text}</span>
         return (
+          <span key={i} className="mx-0.5 inline-flex items-center gap-1 align-baseline">
           <button
-            key={i}
             type="button"
             onClick={() => onCopy(piece.text)}
             aria-label={`${t('Copy article number')}: ${piece.text}`}
-            className="mx-0.5 inline-flex items-center gap-1 rounded-lg bg-brand/10 px-2 py-0.5 align-baseline font-mono text-[12.5px] font-bold text-brand transition-transform active:scale-95"
+            className="inline-flex items-center gap-1 rounded-lg bg-brand/10 px-2 py-0.5 font-mono text-[12.5px] font-bold text-brand transition-transform active:scale-95"
           >
             {piece.text}
             {copied === piece.text ? <Check size={13} strokeWidth={2.5} aria-hidden="true" /> : <Copy size={13} strokeWidth={2} aria-hidden="true" />}
           </button>
+          {onFind && (
+            <button
+              type="button"
+              onClick={() => onFind(piece.text)}
+              aria-label={`${t('Find in the catalogue')}: ${piece.text}`}
+              className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand/10 text-brand transition-transform active:scale-95"
+            >
+              <Search size={13} strokeWidth={2} aria-hidden="true" />
+            </button>
+          )}
+          </span>
         )
       })}
     </>
@@ -47,7 +58,7 @@ function Answer({ text, copied, onCopy }: { text: string; copied: string | null;
  * so it names real services with their article numbers and prices; an article is copied with one tap and pasted into the catalogue's search.
  * Open to a website guest as well: it reads only what the catalogue shows to everyone.
  */
-export function AiChat({ session }: { session: AuthSession }) {
+export function AiChat({ session, onFindArticle }: { session: AuthSession; onFindArticle?: (article: string) => void }) {
   const t = useT()
   const wide = useWide()
   const [open, setOpen] = useState(false)
@@ -177,7 +188,7 @@ export function AiChat({ session }: { session: AuthSession }) {
                   ? m.content
                   : m.content === ''
                     ? <Loader2 size={16} strokeWidth={2} className="animate-spin text-brand" aria-label={t('Loading')} />
-                    : <Answer text={m.content} copied={copied} onCopy={(article) => void copyArticle(article)} />}
+                    : <Answer text={m.content} copied={copied} onCopy={(article) => void copyArticle(article)} onFind={onFindArticle && ((article) => { setOpen(false); onFindArticle(article) })} />}
               </div>
             </div>
           ))}

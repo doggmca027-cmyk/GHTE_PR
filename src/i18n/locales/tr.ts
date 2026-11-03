@@ -511,6 +511,12 @@ const tr: Record<string, string> = {
   'With guarantee': 'Garantili',
   'Safe growth': 'Güvenli büyüme',
   'Filter by type': 'Türe göre filtrele',
+  'Search platforms or SKU': 'Platform veya ürün numarası ara',
+  'Search services or SKU': 'Hizmet veya ürün numarası ara',
+  'Article number {sku}': 'Ürün numarası {sku}',
+  'No service with this article number': 'Bu ürün numarasına sahip hizmet yok',
+  'Check the number or ask the AI assistant.': 'Numarayı kontrol edin veya yapay zeka asistanına sorun.',
+  'Find in the catalogue': 'Katalogda bul',
 }
 
 export default tr

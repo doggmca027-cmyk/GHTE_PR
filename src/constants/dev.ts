@@ -63,3 +63,9 @@ export const MOCK_CATALOG: ICatalog = {
     svc(8, ttLikes, 'TikTok Likes [Real, Refill]', 2.5, 50, 50_000, true, 20),
   ],
 }
+
+/** The article numbers of the offline catalogue (the assistant's mock answer names the first): article -> service id. */
+export const MOCK_SKUS: Record<string, string> = {
+  'IG-FOL-STD-ROOT89336': '00000000-0000-4000-8000-00000000d005',
+  'TT-LIKE-HQ-SEC12787': '00000000-0000-4000-8000-00000000d008',
+}

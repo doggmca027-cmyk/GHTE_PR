@@ -511,6 +511,12 @@ const id: Record<string, string> = {
   'With guarantee': 'Dengan garansi',
   'Safe growth': 'Pertumbuhan aman',
   'Filter by type': 'Filter menurut jenis',
+  'Search platforms or SKU': 'Cari platform atau nomor artikel',
+  'Search services or SKU': 'Cari layanan atau nomor artikel',
+  'Article number {sku}': 'Nomor artikel {sku}',
+  'No service with this article number': 'Tidak ada layanan dengan nomor artikel ini',
+  'Check the number or ask the AI assistant.': 'Periksa nomornya atau tanyakan ke asisten AI.',
+  'Find in the catalogue': 'Cari di katalog',
 }
 
 export default id

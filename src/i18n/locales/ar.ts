@@ -511,6 +511,12 @@ const ar: Record<string, string> = {
   'With guarantee': 'مع ضمان',
   'Safe growth': 'نمو آمن',
   'Filter by type': 'تصفية حسب النوع',
+  'Search platforms or SKU': 'ابحث عن منصة أو رقم المنتج',
+  'Search services or SKU': 'ابحث عن خدمة أو رقم المنتج',
+  'Article number {sku}': 'رقم المنتج {sku}',
+  'No service with this article number': 'لا توجد خدمة بهذا الرقم',
+  'Check the number or ask the AI assistant.': 'تحقق من الرقم أو اسأل مساعد الذكاء الاصطناعي.',
+  'Find in the catalogue': 'ابحث في الكتالوج',
 }
 
 export default ar

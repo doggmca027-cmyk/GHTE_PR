@@ -152,9 +152,12 @@ describe('the SKU is for the admin only', () => {
   const files = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(path.join(d, e.name)) : /\.(ts|tsx)$/.test(e.name) ? [path.join(d, e.name)] : []))
   const mentions = (file: string) => /\bsku\b/i.test(fs.readFileSync(file, 'utf8'))
 
-  it('no customer screen, hook or API client in the app mentions it (only the admin screens, their types and clients, , the lookup of a card by its article and the assistant that gives it)', () => {
-    const admin = /(^|\/)(components\/admin\/|services\/api\/(mock-)?admin|types\/(admin|catalog-mapping)|lib\/service-search\.ts$|lib\/ai-chat\.ts$|components\/chat\/)/
-    const offenders = files(path.join(root, 'src')).map((f) => path.relative(path.join(root, 'src'), f).replace(/\\/g, '/')).filter((f) => !admin.test(f)).filter((f) => mentions(path.join(root, 'src', f)))
+  // The article on the storefront card is public since 20261230000000 (the assistant gives it to customers, the search finds a card by it). What stays private is
+  // the panel service behind the card: its table, and with it the supplier's own numbers and costs. The code of the app must not even name that table.
+  it('no customer screen, hook or API client in the app reads the panel services: the article a customer sees is the copy on the card', () => {
+    const admin = /(^|\/)(components\/admin\/|services\/api\/(mock-)?admin|types\/(admin|catalog-mapping))/
+    const offenders = files(path.join(root, 'src')).map((f) => path.relative(path.join(root, 'src'), f).replace(/\\/g, '/')).filter((f) => !admin.test(f))
+      .filter((f) => /provider_service|primary_provider|fallback_provider|cost_per_1000/i.test(fs.readFileSync(path.join(root, 'src', f), 'utf8')))
     expect(offenders).toEqual([])
   })
 

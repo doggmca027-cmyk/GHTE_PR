@@ -80,7 +80,7 @@ describe('the list as markup', () => {
   it('shows one row per platform with its name, a coloured initials tile, the service count and a search box', async () => {
     const html = await render([{ slug: 'twitch', name: 'Twitch', count: 12 }, { slug: 'kick', name: 'Kick', count: 0 }])
     expect(html).toContain('type="search"')
-    expect(html).toContain('placeholder="Search platforms"')
+    expect(html).toContain('placeholder="Search platforms or SKU"')
     expect(html.match(/<li>/g)).toHaveLength(2)
     expect(html).toContain('Twitch')
     expect(html).toContain('Services: 12')

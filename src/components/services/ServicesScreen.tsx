@@ -5,11 +5,13 @@ import { Card } from '@/components/ui/Card'
 import { FALLBACK_PLATFORMS, type PlatformInfo } from '@/constants/platforms'
 import { useAuth } from '@/context/AuthContext'
 import { useServiceSearch } from '@/hooks/useServiceSearch'
+import { useSkuLookup } from '@/hooks/useSkuLookup'
 import { useLanguage, useT } from '@/i18n'
 import { track } from '@/lib/analytics-client'
 import { haptic } from '@/lib/haptics'
 import { useWide } from '@/lib/layout-mode'
 import { resetScroll } from '@/lib/scroll'
+import { skuFromQuery } from '@/lib/service-search'
 import { localizedName } from '@/lib/service-view'
 import { SERVICES_PAGE, fetchCategories, fetchCategoryServices, fetchPlatforms } from '@/services/api/services'
 import { cachedLoad, isFresh, peekCached } from '@/lib/catalog-cache'
@@ -20,6 +22,7 @@ import { OrderModal } from './OrderModal'
 import { PlatformList, type PlatformEntry } from './PlatformList'
 import { ServiceCard } from './ServiceCard'
 import { ServiceSearchBox } from './ServiceSearchBox'
+import { SkuResult } from './SkuResult'
 import { VariantCard } from './VariantCard'
 
 type Overview = { status: 'loading' } | { status: 'error' } | { status: 'ready'; categories: ICategory[]; platforms: PlatformInfo[] }
@@ -32,6 +35,8 @@ interface Props {
   onViewOrders: () => void
   /** Open straight on this platform (a tile of the Home screen was tapped). */
   initialPlatform?: string | null
+  /** An article number to look up across the whole catalogue (the assistant's answer sent it here); a new `nonce` asks again for the same article. */
+  lookupRequest?: { sku: string; nonce: number } | null
 }
 
 function SkeletonCard() {
@@ -64,7 +69,7 @@ export function platformEntries(platforms: PlatformInfo[], categories: ReadonlyA
     .map(({ slug, name, count }) => ({ slug, name, count }))
 }
 
-export function ServicesScreen({ session, onViewOrders, initialPlatform = null }: Props) {
+export function ServicesScreen({ session, onViewOrders, initialPlatform = null, lookupRequest = null }: Props) {
   const t = useT()
   const wide = useWide()
   const { lang } = useLanguage()
@@ -77,6 +82,10 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
   const [serviceQuery, setServiceQuery] = useState('')
   // a chip under the search field: only the cards of this segment (also with no words typed)
   const [segment, setSegment] = useState<Segment | null>(null)
+  // the search box of the platform list; an article number typed in either box is looked up across the whole catalogue (see sku below)
+  const [platformQuery, setPlatformQuery] = useState('')
+  // the platform of the card an article number found: it can be another than the one open
+  const [skuPlatform, setSkuPlatform] = useState<{ slug: string; name: string } | null>(null)
   const request = useRef(0)
   // into a platform or a category and back out: the new level opens at its top
   useLayoutEffect(() => { resetScroll() }, [platform, categoryId])
@@ -109,7 +118,10 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
 
   // The search covers the opened category, or every category of the opened platform.
   const searchScope = useMemo(() => (categoryId ? [categoryId] : platformCategories.map((c) => c.id)), [categoryId, platformCategories])
-  const search = useServiceSearch(session, searchScope, platform ? serviceQuery : '', platform ? segment : null)
+  // An article number in the box is not words: it finds the one card that carries it, in any category of any platform, with one exact request.
+  const sku = skuFromQuery(platform ? serviceQuery : platformQuery)
+  const skuLookup = useSkuLookup(session, sku)
+  const search = useServiceSearch(session, searchScope, platform && !sku ? serviceQuery : '', platform && !sku ? segment : null)
 
   // The first page of a category's services, when the category is opened.
   // (from memory first when it was opened or touched a moment ago, see prefetch below)
@@ -154,6 +166,16 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
     setSelected(service)
     void refreshWallet() // make sure the balance check uses a fresh value
   }, [refreshWallet])
+
+  // the assistant sent an article: the catalogue starts at the top with it in the search box
+  useEffect(() => {
+    if (!lookupRequest) return
+    setPlatform(null)
+    setCategoryId(null)
+    setServiceQuery('')
+    setSegment(null)
+    setPlatformQuery(lookupRequest.sku)
+  }, [lookupRequest?.nonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectPlatform = (slug: string) => {
     const own = categories.filter((c) => c.platform === slug)
@@ -208,13 +230,25 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
         </Card>
       )}
 
-      {state.status === 'ready' && platform === null && <PlatformList platforms={entries} onSelect={selectPlatform} />}
+      {state.status === 'ready' && platform === null && (
+        <PlatformList
+          platforms={entries}
+          onSelect={selectPlatform}
+          query={platformQuery}
+          onQueryChange={setPlatformQuery}
+          replacement={sku ? <SkuResult sku={sku} lookup={skuLookup} onSelect={(service, p) => { setSkuPlatform(p); open(service) }} /> : undefined}
+        />
+      )}
 
       {state.status === 'ready' && platform !== null && platformCategories.length > 0 && (
         <ServiceSearchBox value={serviceQuery} onChange={setServiceQuery} segment={segment} onSegmentChange={setSegment} />
       )}
 
-      {state.status === 'ready' && platform !== null && search.active && (
+      {state.status === 'ready' && platform !== null && sku && (
+        <SkuResult sku={sku} lookup={skuLookup} onSelect={(service, p) => { setSkuPlatform(p); open(service) }} />
+      )}
+
+      {state.status === 'ready' && platform !== null && !sku && search.active && (
         <div className={wide ? 'mt-1 grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3' : 'mt-1 space-y-3'}>
           {(search.status === 'idle' || search.status === 'loading') && [0, 1, 2].map((i) => <SkeletonCard key={i} />)}
 
@@ -246,7 +280,7 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
         </div>
       )}
 
-      {state.status === 'ready' && platform !== null && !search.active && categoryId === null && (
+      {state.status === 'ready' && platform !== null && !sku && !search.active && categoryId === null && (
         platformCategories.length === 0 ? (
           <Card className="col-span-full space-y-2 py-10 text-center">
             <SearchX size={28} strokeWidth={1.75} className="mx-auto text-content-muted" />
@@ -258,7 +292,7 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
         )
       )}
 
-      {state.status === 'ready' && platform !== null && !search.active && categoryId !== null && (
+      {state.status === 'ready' && platform !== null && !sku && !search.active && categoryId !== null && (
         <div className={wide ? 'grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3' : 'space-y-3'}>
           {(!page || page.status === 'loading') && [0, 1, 2].map((i) => <SkeletonCard key={i} />)}
 
@@ -291,14 +325,14 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
         </div>
       )}
 
-      {selected && platform && (
+      {selected && (skuPlatform?.slug ?? platform) && (
         <OrderModal
           service={selected}
-          platform={platform}
-          platformName={current?.name}
+          platform={(skuPlatform?.slug ?? platform)!}
+          platformName={skuPlatform?.name ?? current?.name}
           session={session}
-          onClose={() => setSelected(null)}
-          onViewOrders={() => { setSelected(null); onViewOrders() }}
+          onClose={() => { setSelected(null); setSkuPlatform(null) }}
+          onViewOrders={() => { setSelected(null); setSkuPlatform(null); onViewOrders() }}
         />
       )}
     </>

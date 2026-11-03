@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { countryCodes, parseServiceQuery, serviceMatches, serviceSearchFilter } from '../src/lib/service-search'
 import { describeService, describeServiceFacts, serviceCountries } from '../src/lib/service-view'
 
@@ -114,6 +114,40 @@ describe('an article number (SKU) from the support assistant', () => {
     expect(parseServiceQuery('instagram followers')).toEqual([{ text: 'instagram', geo: [] }, { text: 'followers', geo: [] }])
     expect(parseServiceQuery('non-drop real-time hq').every((t) => t.sku === undefined)).toBe(true)
     expect(parseServiceQuery('ig-fol')[0]!.sku).toBeUndefined()
+  })
+})
+
+describe('the article lookup on the whole catalogue', () => {
+  it('the API client asks for the one active card on an active platform with this article, wherever it is', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://example.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon')
+    const urls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(decodeURIComponent(url))
+      return new Response(JSON.stringify([{ id: 's', category_id: 'c', name: 'N', description: null, customer_rate_per_1000: '1.1', min_quantity: 1, max_quantity: 9, refill_supported: false, sort_order: 0, category: { platform: { slug: 'tiktok', name: 'TikTok' } } }]), { status: 200 })
+    }))
+    const { fetchServiceBySku } = await import('../src/services/api/services')
+    const hit = await fetchServiceBySku({ token: 't', isMock: false } as never, 'TT-LIKE-HQ-SEC12787')
+    expect(hit?.platform).toEqual({ slug: 'tiktok', name: 'TikTok' })
+    expect(hit?.service.ratePer1000).toBe(1.1)
+    expect(urls).toHaveLength(1)
+    expect(urls[0]).toContain('services?select=')
+    expect(urls[0]).toContain('&sku=eq.TT-LIKE-HQ-SEC12787&is_active=eq.true&category.platform.active=eq.true&limit=1')
+    expect(urls[0]).not.toContain('category_id=') // the select names the column; the filter must not limit the categories
+    // only what an article is made of reaches the filter
+    expect(await fetchServiceBySku({ token: 't', isMock: false } as never, 'X,or(id.eq.1)')).toBeNull()
+    expect(urls).toHaveLength(1)
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  })
+
+  it('the offline catalogue knows the article its mock assistant names', async () => {
+    const { fetchServiceBySku } = await import('../src/services/api/services')
+    const hit = await fetchServiceBySku({ token: '', isMock: true } as never, 'IG-FOL-STD-ROOT89336')
+    expect(hit?.service.name).toBe('Instagram Followers [Real, Refill 30D]')
+    expect(hit?.platform.slug).toBe('instagram')
+    expect(await fetchServiceBySku({ token: '', isMock: true } as never, 'IG-FOL-STD-ROOT1')).toBeNull()
   })
 })
 

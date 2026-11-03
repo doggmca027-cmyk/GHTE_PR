@@ -37,6 +37,9 @@ const COUNTRY_ALIASES: Readonly<Record<string, string>> = {
 /** An article: PLATFORM-TYPE-QUALITY-SUPPLIER+NUMBER, and four more characters for a twin. No lookbehind: older iOS webviews cannot even parse one. */
 export const SKU_PATTERN = /\b[A-Z]{2,4}-[A-Z]{2,5}-(?:HQ|STD|CHEAP)-[A-Z]{3,4}[A-Z0-9]{1,12}(?:-[A-F0-9]{4})?\b/i
 
+/** The article number in a typed or pasted text (also inside **bold** or [brackets]), in capitals, or null when the text has none. */
+export const skuFromQuery = (raw: string): string | null => SKU_PATTERN.exec(raw)?.[0].toUpperCase() ?? null
+
 const REGION_LOCALES = ['en', 'ru', 'uk', 'es', 'pt', 'de', 'fr', 'it', 'tr', 'id']
 const FIRST = 'A'.charCodeAt(0)
 
@@ -85,7 +88,7 @@ function searchText(text: string): string {
 
 /** Words -> terms. Up to three words in a row are tried as a country first ("south korea"), so they stay together. */
 export function parseServiceQuery(raw: string): SearchTerm[] {
-  const sku = SKU_PATTERN.exec(raw)?.[0].toUpperCase()
+  const sku = skuFromQuery(raw)
   if (sku) return [{ text: sku.toLowerCase(), geo: [], sku }]
   const words = searchText(raw).split(' ').filter(Boolean).map((w) => w.slice(0, MAX_WORD))
   const terms: SearchTerm[] = []
