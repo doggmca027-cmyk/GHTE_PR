@@ -199,6 +199,11 @@ export interface PriceRule {
    */
   name_all?: string[] | null
   name_any?: string[] | null
+  /**
+   * 'quality': the rule applies to quality cards only (offer-quality.ts isQualityCard: the name promises a refill, HQ, real, organic or non-drop
+   * and does not take it back). A keyword scope cannot say that: it would also match "[no refill] [high quality]". null: every card.
+   */
+  quality_scope?: 'quality' | null
   /** The rule's price is at least cost + this per 1000 (the markup never earns less than this; null: no such minimum). */
   min_markup?: number | null
   /** The rule's price is at least this per 1000, whatever the cost (null: no such minimum). */

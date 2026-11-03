@@ -63,7 +63,7 @@ type DbLike = { from(table: string): any }
 /** The active price rules, as sync-catalog reads them. */
 export async function loadPriceRules(db: DbLike): Promise<PriceRule[]> {
   const { data, error } = await db.from('price_rules')
-    .select('id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, min_markup, min_price, name_all, name_any, priority, is_active')
+    .select('id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, min_markup, min_price, name_all, name_any, priority, is_active, quality_scope')
     .eq('is_active', true)
   if (error) throw new Error(`load price_rules: ${error.message}`)
   return ((data ?? []) as (Omit<PriceRule, 'platform'> & { platform: { slug: string } | null })[]).map((r) => ({

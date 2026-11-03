@@ -99,7 +99,7 @@ if (applied === migrations.length) {
   const PRIVATE_COLUMNS: Record<string, string[]> = {
     orders: ['cost_amount', 'profit_amount', 'provider_id', 'provider_offer_id', 'provider_order_id', 'provider_reservation', 'error_message', 'routing_score_snapshot', 'idempotency_key', 'list_price_amount', 'tier_discount_amount', 'promo_discount_amount', 'promo_code_id', 'discount_capped'],
     order_status_history: ['comment'],
-    services: ['primary_provider_service_id', 'fallback_provider_service_id'],
+    services: ['primary_provider_service_id', 'fallback_provider_service_id', 'no_premium_offers'],
     // the internal article number (migration 20261228000000): for the admin only
     provider_services: ['sku'],
   }

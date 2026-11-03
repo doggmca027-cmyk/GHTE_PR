@@ -48,7 +48,7 @@ import type { Platform, PriceRule } from '../_shared/types.ts'
 // deno-lint-ignore no-explicit-any
 type Db = SupabaseClient<any, 'public', any>
 
-const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, min_markup, min_price, name_all, name_any, priority, is_active'
+const RULE_COLUMNS = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, min_markup, min_price, name_all, name_any, priority, is_active, quality_scope'
 
 function must<T>(res: { data: T | null; error: { message: string } | null }, what: string): T {
   if (res.error) throw new Error(`${what}: ${res.error.message}`)
