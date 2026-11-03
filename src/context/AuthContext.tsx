@@ -25,10 +25,13 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 const TOKEN_REFRESH_MARGIN_S = 60
+/** The balance is read at most this often: opening card after card, or switching apps back and forth, must not read it every time. A placed order brings the new balance itself. */
+export const WALLET_FRESH_MS = 15_000
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' })
   const sessionRef = useRef<AuthSession | null>(null)
+  const walletReadAt = useRef(0)
 
   const login = useCallback(async () => {
     setState({ status: 'loading' })
@@ -81,8 +84,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await login()
       return
     }
+    if (Date.now() - walletReadAt.current < WALLET_FRESH_MS) return
+    walletReadAt.current = Date.now() // set before the call: two callers at once make one request
     const wallet = await fetchWallet(session.token)
-    if (!wallet) return
+    if (!wallet) { walletReadAt.current = 0; return } // a failed read is tried again at the next chance
     const next = { ...session, wallet }
     sessionRef.current = next
     setState({ status: 'authenticated', session: next })
@@ -91,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyWallet = useCallback((wallet: IWallet) => {
     const session = sessionRef.current
     if (!session) return
+    walletReadAt.current = Date.now() // the server has just said what it is
     const next = { ...session, wallet }
     sessionRef.current = next
     setState({ status: 'authenticated', session: next })

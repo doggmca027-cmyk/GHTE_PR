@@ -127,6 +127,25 @@ describe('SMMv2Adapter: the panel\'s own text about a service', () => {
   })
 })
 
+describe('SMMv2Adapter: one malformed service does not fail the whole catalogue', () => {
+  const item = (service: number, extra: Record<string, unknown> = {}) => ({ service, name: `S${service}`, type: 'Default', rate: '1.00', min: 10, max: 100, category: 'c', refill: false, cancel: false, ...extra })
+  const services = async (body: unknown[]) => {
+    const fetchImpl = (async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch
+    return new SMMv2Adapter({ id: 'smm', name: 'Panel', apiUrl: 'https://panel.example/api/v2', apiKey: KEY, mockMode: false, fetchImpl, capabilities: DEFAULT_SMM_V2_CAPABILITIES }).getServices()
+  }
+
+  it('a price of "N/A", an empty limit or a decimal comma come through as NaN (the sync skips and logs them), the rest of the list is intact', async () => {
+    const out = await services([item(1), item(2, { rate: 'N/A' }), item(3, { rate: '0,5' }), item(4, { min: '' }), item(5, { max: null }), item(6, { rate: '2.50', min: '50', max: '1000' })])
+    expect(out).toHaveLength(6)
+    expect(out[0]).toMatchObject({ externalServiceId: '1', ratePer1000: 1, minQuantity: 10, maxQuantity: 100 })
+    expect(Number.isNaN(out[1].ratePer1000)).toBe(true)
+    expect(Number.isNaN(out[2].ratePer1000)).toBe(true)
+    expect(Number.isNaN(out[3].minQuantity)).toBe(true)
+    expect(Number.isNaN(out[4].maxQuantity)).toBe(true)
+    expect(out[5]).toMatchObject({ ratePer1000: 2.5, minQuantity: 50, maxQuantity: 1000 })
+  })
+})
+
 describe('SMMv2Adapter: a big catalogue gets a longer timeout than an order or a balance', () => {
   const slowPanel = (body: unknown, delayMs: number) => (async (_url: unknown, init?: RequestInit) =>
     new Promise<Response>((resolve, reject) => {

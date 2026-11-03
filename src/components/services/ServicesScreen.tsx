@@ -14,7 +14,7 @@ import { resetScroll } from '@/lib/scroll'
 import { skuFromQuery } from '@/lib/service-search'
 import { localizedName } from '@/lib/service-view'
 import { SERVICES_PAGE, fetchCategories, fetchCategoryServices, fetchPlatforms } from '@/services/api/services'
-import { cachedLoad, isFresh, peekCached } from '@/lib/catalog-cache'
+import { cachedLoad, hydrateCached, isFresh, peekCached, persistedLoad } from '@/lib/catalog-cache'
 import type { AuthSession } from '@/services/api/auth'
 import type { ICatalogService, ICategory, Platform, Segment } from '@/types/catalog'
 import { CategoryRows } from './CategoryRows'
@@ -95,10 +95,12 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null, 
   const who = session.isMock ? 'mock' : 'public'
   const load = useCallback(() => {
     const key = `overview:${who}`
+    // the platforms and categories of the last visit are shown on the first frame (a slow connection sees the catalogue, not a blank screen) and renewed at once
+    if (!session.isMock) hydrateCached(key)
     const hit = peekCached<{ categories: ICategory[]; platforms: PlatformInfo[] }>(key)
     setState(hit ? { status: 'ready', ...hit } : { status: 'loading' })
     if (hit && isFresh(key)) return
-    cachedLoad(key, () => Promise.all([fetchCategories(session), fetchPlatforms(session).catch(() => null)])
+    ;(session.isMock ? cachedLoad : persistedLoad)(key, () => Promise.all([fetchCategories(session), fetchPlatforms(session).catch(() => null)])
       .then(([categories, registry]) => ({ categories, platforms: mergePlatforms(registry, categories) }))).then(
       (v) => setState({ status: 'ready', ...v }),
       () => { if (!hit) setState({ status: 'error' }) },

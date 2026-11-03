@@ -79,11 +79,27 @@ export function resolveCategory(categoryRaw: string, serviceName = ''): Resolved
 export interface SkippedService {
   externalServiceId: string
   reason: string
+  /** What was wrong, for the log: the values the panel sent ("rate=NaN", "min=100 max=10"). */
+  detail?: string
 }
 
 /** Placeholder services of some panels cost a trillion per 1000 (RootPanel has two); the column holds at most 10 billion. Nothing real costs this much. */
 export const MAX_RATE_PER_1000 = 100_000
 const INT4_MAX = 2_147_483_647
+
+/** The values behind a skip reason, short enough for a log line. */
+function skipDetail(reason: string, s: IProviderService): string | undefined {
+  if (reason === 'invalid rate') return `rate=${s.ratePer1000}`
+  if (reason === 'invalid min' || reason === 'invalid max') return `min=${s.minQuantity} max=${s.maxQuantity}`
+  return undefined
+}
+
+/** How many services were skipped for each reason: { 'invalid rate': 3, 'invalid max': 1 }. */
+export function countSkipReasons(skipped: readonly SkippedService[]): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const s of skipped) out[s.reason] = (out[s.reason] ?? 0) + 1
+  return out
+}
 
 export function normalizeProviderServices(list: IProviderService[]): {
   valid: IProviderService[]
@@ -107,7 +123,7 @@ export function normalizeProviderServices(list: IProviderService[]): {
               : !Number.isInteger(s.maxQuantity) || s.maxQuantity < s.minQuantity || s.maxQuantity > INT4_MAX
                 ? 'invalid max'
                 : null
-    if (reason) skipped.push({ externalServiceId: id, reason })
+    if (reason) skipped.push({ externalServiceId: id, reason, detail: skipDetail(reason, s) })
     else {
       seen.add(id)
       valid.push(s)

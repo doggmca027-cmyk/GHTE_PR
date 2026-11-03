@@ -65,6 +65,7 @@ describe('the chips on the services screen (offline catalogue)', () => {
   const session = { token: '', expiresAt: 0, isMock: true, wallet: { balance: 5, currency: 'USD' }, user: { id: 'u', telegramId: 1, username: 'x', firstName: 'X', languageCode: 'en', isAdmin: false } } as never
 
   beforeEach(async () => {
+    localStorage.clear() // the catalogue of an earlier test is not this test's last visit
     vi.resetModules()
     vi.doMock('../src/context/AuthContext', () => ({ useAuth: () => ({ refreshWallet: async () => {}, applyWallet: () => {} }) }))
     vi.doMock('../src/lib/analytics-client', () => ({ track: () => {}, bindAnalytics: () => {} }))

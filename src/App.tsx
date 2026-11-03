@@ -16,6 +16,7 @@ import { widgetUserFromUrl } from '@/components/auth/TelegramLoginWidget'
 import { tr, useT } from '@/i18n'
 import { tm } from '@/i18n/messages'
 import { bindAnalytics, track } from '@/lib/analytics-client'
+import { canPrefetch } from '@/lib/connection'
 import { LayoutModeContext, layoutModeFor } from '@/lib/layout-mode'
 import { applyStartReferral } from '@/lib/referral-start'
 import { insideTelegram } from '@/services/api/web-auth'
@@ -41,6 +42,8 @@ const AdminScreen = lazy(() => import('@/components/admin/AdminScreen').then((m)
 
 /** Fetches the tab chunks once the browser has nothing else to do (never before the first screen is shown). */
 function prefetchTabs() {
+  // a slow or metered connection keeps its bandwidth for what the customer opens: the tabs load when they are tapped
+  if (!canPrefetch()) return
   const run = () => { void loadOrders(); void loadSettings(); void loadSupport(); void loadWallet() }
   const idle = (window as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback
   if (idle) idle(run, { timeout: 4000 })

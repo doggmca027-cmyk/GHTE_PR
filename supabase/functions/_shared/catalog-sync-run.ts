@@ -17,6 +17,7 @@
 
 import {
   LEGACY_PRICE_CHANGE_LIMIT,
+  countSkipReasons,
   countLargePriceMoves,
   detectCatalogAnomalies,
   diffProviderServices,
@@ -129,6 +130,13 @@ export async function syncProviderCatalog(input: SyncProviderInput): Promise<Pro
   const { skipped } = normalized
   let valid = normalized.valid
   report.skippedInvalid = skipped.length
+  // a service the panel listed with a price or limits we cannot use is not synced: say which ones and why, so a panel that breaks its format is seen
+  if (skipped.length > 0) {
+    log.warn('services skipped: the panel sent values we cannot use', {
+      providerId: provider.id, provider: provider.name, skipped: skipped.length, reasons: countSkipReasons(skipped),
+      examples: skipped.slice(0, 5).map((s) => `${s.externalServiceId}: ${s.reason}${s.detail ? ` (${s.detail})` : ''}`), error_code: 'services_skipped',
+    })
+  }
   if (valid.length === 0) {
     report.status = 'skipped'
     report.error = 'provider returned no valid services; nothing changed'

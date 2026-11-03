@@ -204,7 +204,10 @@ export function createSupabaseCatalogStore(db: Db): CatalogStore {
     },
 
     async loadReferenceServices() {
-      return (must(await db.rpc('storefront_reference_services'), 'load reference services') ?? []) as { platform: string; category: string; name: string }[]
+      // The query takes ~70 ms; twice in ~7,000 runs it hit the API's 8 s statement timeout while the database was busy. Once more is enough.
+      let res = await db.rpc('storefront_reference_services')
+      if (res.error?.code === '57014') res = await db.rpc('storefront_reference_services')
+      return (must(res, 'load reference services') ?? []) as { platform: string; category: string; name: string }[]
     },
 
     async fillGaps(providerId, rows: PublishRow[]) {

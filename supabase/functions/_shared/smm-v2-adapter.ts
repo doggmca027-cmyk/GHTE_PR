@@ -92,6 +92,14 @@ function toNumber(value: unknown, field: string): number {
   return n
 }
 
+/**
+ * A number from a field of the panel's service list, or NaN when it is not one. One malformed service (a price of "N/A", a limit left empty) must not
+ * fail the whole list of tens of thousands: normalizeProviderServices skips it and says why, and the sync logs it.
+ */
+function looseNumber(value: unknown): number {
+  return typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN
+}
+
 function toOptionalNumber(value: unknown, field: string): number | undefined {
   return value === undefined || value === null || value === '' ? undefined : toNumber(value, field)
 }
@@ -218,9 +226,9 @@ export class SMMv2Adapter implements IProviderAdapter {
         name: String(item.name ?? ''),
         type: String(item.type ?? 'Default'),
         categoryRaw: String(item.category ?? ''),
-        ratePer1000: toNumber(item.rate, 'rate'),
-        minQuantity: toNumber(item.min, 'min'),
-        maxQuantity: toNumber(item.max, 'max'),
+        ratePer1000: looseNumber(item.rate),
+        minQuantity: looseNumber(item.min),
+        maxQuantity: looseNumber(item.max),
         refillSupported: toBool(item.refill),
         cancelSupported: toBool(item.cancel),
         dripfeedSupported: toBool(item.dripfeed),

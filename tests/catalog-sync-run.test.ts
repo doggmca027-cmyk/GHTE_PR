@@ -10,7 +10,7 @@ import {
   type ProviderServiceRow,
   type ServiceRow,
 } from '../supabase/functions/_shared/catalog-sync.ts'
-import { silentLogger } from '../supabase/functions/_shared/logger.ts'
+import { createLogger, silentLogger } from '../supabase/functions/_shared/logger.ts'
 import { MockProviderAdapter } from '../supabase/functions/_shared/providers/index.ts'
 import type { PricingOffer } from '../supabase/functions/_shared/service-cost.ts'
 import type { IProviderService, PriceRule } from '../supabase/functions/_shared/types.ts'
@@ -137,6 +137,33 @@ class MemoryStore implements CatalogStore {
 
 const run = (store: MemoryStore, services: IProviderService[], adapter = new MockProviderAdapter({ id: PROVIDER.id, name: PROVIDER.name, services, balance: 42.5 })) =>
   syncProviderCatalog({ provider: PROVIDER, adapter, store, rules, log: silentLogger, now: () => new Date('2026-10-08T00:00:00.000Z') })
+
+describe('syncProviderCatalog: a panel that sends values we cannot use is logged, not silently thinned', () => {
+  const capture = () => {
+    const lines: { level: string; msg: string; ctx: Record<string, unknown> }[] = []
+    const log = createLogger({ fn: 'test', correlationId: 'c', sink: (level, line) => { const j = JSON.parse(line) as { msg: string } & Record<string, unknown>; lines.push({ level, msg: j.msg, ctx: j }) } })
+    return { log, lines }
+  }
+
+  it('says how many were skipped, for which reasons and with which values, once per run', async () => {
+    const store = new MemoryStore()
+    const { log, lines } = capture()
+    const adapter = new MockProviderAdapter({ id: PROVIDER.id, name: PROVIDER.name, services: [svc('1'), svc('2', { ratePer1000: Number.NaN }), svc('3', { ratePer1000: 1e12 }), svc('4', { minQuantity: 100, maxQuantity: 10 }), svc('5', { name: ' ' })], balance: 1 })
+    const report = await syncProviderCatalog({ provider: PROVIDER, adapter, store, rules, log, now: () => new Date('2026-10-08T00:00:00.000Z') })
+    expect(report).toMatchObject({ status: 'ok', added: 1, skippedInvalid: 4 })
+    const warned = lines.filter((l) => l.msg.startsWith('services skipped'))
+    expect(warned).toHaveLength(1)
+    expect(warned[0]).toMatchObject({ level: 'warn' })
+    expect(warned[0]!.ctx).toMatchObject({ providerId: PROVIDER.id, skipped: 4, error_code: 'services_skipped', reasons: { 'invalid rate': 2, 'invalid max': 1, 'empty name': 1 } })
+    expect(warned[0]!.ctx.examples).toEqual(['2: invalid rate (rate=NaN)', '3: invalid rate (rate=1000000000000)', '4: invalid max (min=100 max=10)', '5: empty name'])
+  })
+
+  it('a clean catalogue logs nothing about it', async () => {
+    const { log, lines } = capture()
+    await syncProviderCatalog({ provider: PROVIDER, adapter: new MockProviderAdapter({ id: PROVIDER.id, name: PROVIDER.name, services: [svc('1'), svc('2')], balance: 1 }), store: new MemoryStore(), rules, log, now: () => new Date('2026-10-08T00:00:00.000Z') })
+    expect(lines.filter((l) => l.msg.startsWith('services skipped'))).toEqual([])
+  })
+})
 
 describe('syncProviderCatalog (through the IProviderAdapter contract)', () => {
   it('stores new provider services but never creates storefront services', async () => {

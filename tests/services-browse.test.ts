@@ -114,6 +114,7 @@ describe('browsing the services', () => {
   const session = { token: 'jwt', expiresAt: 0, isMock: false, wallet: { balance: 5, currency: 'USD' }, user: { id: 'u', telegramId: 1, username: 'x', firstName: 'X', languageCode: 'en', isAdmin: false } }
 
   beforeEach(async () => {
+    localStorage.clear() // the catalogue of an earlier test is not this test's last visit
     vi.resetModules()
     vi.stubEnv('VITE_SUPABASE_URL', 'https://example.supabase.co')
     vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
