@@ -123,10 +123,12 @@ describe('the SKU is for the admin only', () => {
   beforeAll(async () => { db = await freshDb() }, 240_000)
   afterAll(async () => { await db.close() })
 
-  it.each(['anon', 'authenticated'])('%s can read neither the column nor the table, and no customer table has such a column', async (role) => {
+  // The panel service's own SKU stays private. Its copy on the storefront card is public (20261230000000, tests/storefront-sku.test.ts): that one is
+  // what the assistant gives a customer.
+  it.each(['anon', 'authenticated'])('%s can read neither the column nor the table of the panel services, and no other table has such a column', async (role) => {
     expect(await value(`select has_column_privilege($1, 'public.provider_services', 'sku', 'select') v`, role)).toBe(false)
     expect(await value(`select has_table_privilege($1, 'public.provider_services', 'select') v`, role)).toBe(false)
-    expect(await value(`select count(*)::int v from information_schema.columns where table_schema = 'public' and column_name = 'sku' and table_name <> 'provider_services'`)).toBe(0)
+    expect(await value(`select count(*)::int v from information_schema.columns where table_schema = 'public' and column_name = 'sku' and table_name not in ('provider_services', 'services')`)).toBe(0)
   })
 
   it('reaches the admin through the order hub: the message the database queues names the SKU of the service the order was routed to', async () => {
@@ -150,8 +152,8 @@ describe('the SKU is for the admin only', () => {
   const files = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(path.join(d, e.name)) : /\.(ts|tsx)$/.test(e.name) ? [path.join(d, e.name)] : []))
   const mentions = (file: string) => /\bsku\b/i.test(fs.readFileSync(file, 'utf8'))
 
-  it('no customer screen, hook or API client in the app mentions it (only the admin screens, their types and clients)', () => {
-    const admin = /(^|\/)(components\/admin\/|services\/api\/(mock-)?admin|types\/(admin|catalog-mapping))/
+  it('no customer screen, hook or API client in the app mentions it (only the admin screens, their types and clients, and the lookup of a card by its article)', () => {
+    const admin = /(^|\/)(components\/admin\/|services\/api\/(mock-)?admin|types\/(admin|catalog-mapping)|lib\/service-search\.ts$)/
     const offenders = files(path.join(root, 'src')).map((f) => path.relative(path.join(root, 'src'), f).replace(/\\/g, '/')).filter((f) => !admin.test(f)).filter((f) => mentions(path.join(root, 'src', f)))
     expect(offenders).toEqual([])
   })

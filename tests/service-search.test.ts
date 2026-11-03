@@ -86,6 +86,37 @@ describe('matching in memory (the same decision as the filter)', () => {
   })
 })
 
+describe('an article number (SKU) from the support assistant', () => {
+  const sku = 'IG-FOL-STD-ROOT89336'
+
+  it('is not words: it is the one card with exactly this article, wherever it is written (bold, brackets, lower case, a twin\'s suffix)', () => {
+    expect(parseServiceQuery(sku)).toEqual([{ text: 'ig-fol-std-root89336', geo: [], sku }])
+    expect(parseServiceQuery(`**${sku}**`)[0]!.sku).toBe(sku)
+    expect(parseServiceQuery(`[${sku.toLowerCase()}] please`)[0]!.sku).toBe(sku)
+    expect(parseServiceQuery('Ig-Like-Hq-Sec5197-0aB4')[0]!.sku).toBe('IG-LIKE-HQ-SEC5197-0AB4')
+    expect(parseServiceQuery('tt-fol-cheap-mtp5760')).toHaveLength(1)
+  })
+
+  it('is looked up with an exact filter that nothing typed can widen', () => {
+    expect(serviceSearchFilter(parseServiceQuery(sku))).toBe(`(or(sku.eq.${sku}))`)
+    const f = serviceSearchFilter(parseServiceQuery(`${sku},or(id.eq.1)`))!
+    expect(f).toBe(`(or(sku.eq.${sku}))`)
+  })
+
+  it('is matched in memory the same way', () => {
+    const terms = parseServiceQuery(sku)
+    expect(serviceMatches({ ...svc('Instagram Followers'), sku }, terms)).toBe(true)
+    expect(serviceMatches({ ...svc('Instagram Followers'), sku: 'IG-FOL-STD-ROOT1' }, terms)).toBe(false)
+    expect(serviceMatches(svc('Instagram Followers'), terms)).toBe(false)
+  })
+
+  it('does not change how words are searched: a phrase that merely has hyphens is still words', () => {
+    expect(parseServiceQuery('instagram followers')).toEqual([{ text: 'instagram', geo: [] }, { text: 'followers', geo: [] }])
+    expect(parseServiceQuery('non-drop real-time hq').every((t) => t.sku === undefined)).toBe(true)
+    expect(parseServiceQuery('ig-fol')[0]!.sku).toBeUndefined()
+  })
+})
+
 describe('the description of a service', () => {
   it('lists each fact with its kind, and describeService gives the same lines', () => {
     const a = { refill: 30, startMax: 0, speed: 1000, drop: 'none' as const, real: true, geo: ['US'] }

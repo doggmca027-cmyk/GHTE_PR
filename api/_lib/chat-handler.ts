@@ -1,7 +1,7 @@
 // The request side of the support chat (api/chat.ts): validation, a small rate limit, retrieval from the public storefront, the system prompt, and
 // the model call. The model call is injected, so this is tested without the AI SDK, a key or a network.
 
-import { buildSearchUrl, buildSystemPrompt, extractIntent, rankServices, type StorefrontService } from './chat-rag'
+import { buildSearchUrl, buildSystemPrompt, extractIntent, rankServices, searchKinds, type StorefrontService } from './chat-rag'
 
 export const MAX_BODY_BYTES = 16_384
 export const MAX_MESSAGES = 12
@@ -18,7 +18,8 @@ export interface ChatEnv {
   /** The storefront's public API (the same project and anon key the app itself uses). */
   supabaseUrl?: string
   anonKey?: string
-  model: string
+  /** The models to try, in order: the next one answers when the one before cannot (overloaded, retired, over its quota). */
+  models: string[]
 }
 
 export interface ChatDeps {
@@ -26,12 +27,17 @@ export interface ChatDeps {
   fetch: typeof fetch
   /** True when this caller may ask again. */
   allow: (caller: string) => boolean
-  /** Streams the model's answer. */
-  stream: (args: { apiKey: string; model: string; system: string; messages: ChatMessage[]; signal: AbortSignal }) => Response
+  /** Starts the model's answer: resolves with the text, as a stream, once it has begun; rejects when the model cannot answer. */
+  generate: (args: { apiKey: string; model: string; system: string; messages: ChatMessage[]; signal: AbortSignal }) => Promise<ReadableStream<Uint8Array>>
 }
 
-/** Default model: gemini-1.5-flash was shut down; 2.5-flash goes on 2026-12-01 and 2.5-flash-lite has no shutdown date. GEMINI_MODEL overrides it. */
-export const DEFAULT_MODEL = 'gemini-2.5-flash-lite'
+/**
+ * The model that answers, and the ones that take over. gemini-1.5-flash is shut down, gemini-2.5-flash goes on 2026-12-01 and gemini-2.5-flash-lite
+ * is closed to the keys made after it; the 3.5 lite model answered in 1-2 s without spending tokens on thinking (a thinking model would eat the
+ * answer's token budget). The "-latest" alias outlives any one model. GEMINI_MODEL, when set, goes first.
+ */
+export const DEFAULT_MODEL = 'gemini-3.5-flash-lite'
+export const FALLBACK_MODELS = ['gemini-flash-lite-latest']
 
 const json = (status: number, error: string, message: string) =>
   new Response(JSON.stringify({ error, message }), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
@@ -58,19 +64,21 @@ export function parseMessages(body: unknown): ChatMessage[] | null {
 
 async function search(deps: ChatDeps, text: string): Promise<StorefrontService[]> {
   const intent = extractIntent(text)
-  const url = buildSearchUrl(deps.env.supabaseUrl!, intent)
-  if (!url) return []
-  const res = await deps.fetch(url, {
-    headers: { apikey: deps.env.anonKey!, Authorization: `Bearer ${deps.env.anonKey}`, Accept: 'application/json' },
-    signal: AbortSignal.timeout(RETRIEVAL_TIMEOUT_MS),
-  })
-  if (!res.ok) throw new Error(`storefront search answered ${res.status}`)
-  return rankServices((await res.json()) as StorefrontService[], intent)
+  const urls = searchKinds(intent).map((kind) => buildSearchUrl(deps.env.supabaseUrl!, intent, kind)).filter((url): url is string => url !== null)
+  const lists = await Promise.all(urls.map(async (url) => {
+    const res = await deps.fetch(url, {
+      headers: { apikey: deps.env.anonKey!, Authorization: `Bearer ${deps.env.anonKey}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(RETRIEVAL_TIMEOUT_MS),
+    })
+    if (!res.ok) throw new Error(`storefront search answered ${res.status}`)
+    return (await res.json()) as StorefrontService[]
+  }))
+  return lists.length === 0 ? [] : rankServices(lists.flat(), intent)
 }
 
 export async function handleChat(req: Request, deps: ChatDeps): Promise<Response> {
   if (req.method !== 'POST') return json(405, 'method_not_allowed', 'Use POST.')
-  const { apiKey, supabaseUrl, anonKey, model } = deps.env
+  const { apiKey, supabaseUrl, anonKey, models } = deps.env
   if (!apiKey || !supabaseUrl || !anonKey) return json(503, 'chat_not_configured', 'The assistant is not available yet.')
 
   const caller = (req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown').split(',')[0].trim()
@@ -98,7 +106,19 @@ export async function handleChat(req: Request, deps: ChatDeps): Promise<Response
     return json(503, 'catalog_unavailable', 'The catalogue is not available right now. Try again in a minute.')
   }
 
-  return deps.stream({ apiKey, model, system: buildSystemPrompt(found), messages, signal: req.signal })
+  const system = buildSystemPrompt(found)
+  for (const model of models) {
+    if (req.signal.aborted) break
+    try {
+      const answer = await deps.generate({ apiKey, model, system, messages, signal: req.signal })
+      return new Response(answer, {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Chat-Model': model },
+      })
+    } catch {
+      // overloaded, retired, over its quota: the next model takes over
+    }
+  }
+  return json(503, 'assistant_unavailable', 'The assistant is busy right now. Try again in a minute.')
 }
 
 /** At most `limit` questions per caller in `windowMs`. Kept per instance: it stops a loop, not a determined abuser (the model's own quota is the backstop). */

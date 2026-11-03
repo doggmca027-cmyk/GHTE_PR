@@ -5,6 +5,9 @@
 // country term: it matches a service whose structured `attributes.geo` holds that country OR whose name says the country. Every
 // other word is a plain term. ALL terms must match (the more words, the narrower the result).
 //
+// An article number (SKU) pasted from the support assistant ("IG-FOL-STD-ROOT89336", also inside **bold** or [brackets]) is not words: it finds
+// the card that carries exactly this article, and nothing else is looked for.
+//
 // The same terms are used twice: as a PostgREST filter (serviceSearchFilter) so the database does the work over the whole catalogue,
 // and as a function (serviceMatches) for the offline mock catalogue and for tests, so the two cannot drift apart.
 import { normalizeQuery } from '@/lib/platform-search'
@@ -14,6 +17,8 @@ export interface SearchTerm {
   text: string
   /** ISO codes when the text is a country: the service's `geo` is checked for them too. */
   geo: string[]
+  /** The article number (upper case) of the one card looked for. */
+  sku?: string
 }
 
 export const MAX_TERMS = 5
@@ -28,6 +33,9 @@ const COUNTRY_ALIASES: Readonly<Record<string, string>> = {
   czechia: 'CZ', турция: 'TR', turkey: 'TR', turkiye: 'TR', ukraine: 'UA', украина: 'UA', belarus: 'BY', беларусь: 'BY', белоруссия: 'BY',
   kazakhstan: 'KZ', казахстан: 'KZ', uzbekistan: 'UZ', узбекистан: 'UZ',
 }
+
+/** An article: PLATFORM-TYPE-QUALITY-SUPPLIER+NUMBER, and four more characters for a twin. No lookbehind: older iOS webviews cannot even parse one. */
+const SKU_PATTERN = /\b[A-Z]{2,4}-[A-Z]{2,5}-(?:HQ|STD|CHEAP)-[A-Z]{3,4}[A-Z0-9]{1,12}(?:-[A-F0-9]{4})?\b/i
 
 const REGION_LOCALES = ['en', 'ru', 'uk', 'es', 'pt', 'de', 'fr', 'it', 'tr', 'id']
 const FIRST = 'A'.charCodeAt(0)
@@ -77,6 +85,8 @@ function searchText(text: string): string {
 
 /** Words -> terms. Up to three words in a row are tried as a country first ("south korea"), so they stay together. */
 export function parseServiceQuery(raw: string): SearchTerm[] {
+  const sku = SKU_PATTERN.exec(raw)?.[0].toUpperCase()
+  if (sku) return [{ text: sku.toLowerCase(), geo: [], sku }]
   const words = searchText(raw).split(' ').filter(Boolean).map((w) => w.slice(0, MAX_WORD))
   const terms: SearchTerm[] = []
   for (let i = 0; i < words.length && terms.length < MAX_TERMS;) {
@@ -104,6 +114,7 @@ export function parseServiceQuery(raw: string): SearchTerm[] {
 export function serviceSearchFilter(terms: readonly SearchTerm[]): string | null {
   if (terms.length === 0) return null
   const groups = terms.map((term) => {
+    if (term.sku) return `or(sku.eq.${term.sku})` // letters, digits and hyphens only (SKU_PATTERN)
     const like = `*${term.text.replace(/е/g, '_')}*`
     const parts = [`name.ilike.${like}`, `name_i18n->>ru.ilike.${like}`, `description.ilike.${like}`]
     for (const iso of term.geo) parts.push(`attributes->>geo.ilike.*"${iso}"*`)
@@ -113,6 +124,7 @@ export function serviceSearchFilter(terms: readonly SearchTerm[]): string | null
 }
 
 interface Searchable {
+  sku?: string | null
   name: string
   description: string | null
   nameI18n?: Record<string, string>
@@ -124,6 +136,7 @@ const has = (haystack: string | null | undefined, needle: string) => !!haystack 
 /** The same decision the filter makes, in memory. */
 export function serviceMatches(service: Searchable, terms: readonly SearchTerm[]): boolean {
   return terms.every((term) =>
+    term.sku ? service.sku?.toUpperCase() === term.sku :
     has(service.name, term.text) || has(service.nameI18n?.ru, term.text) || has(service.description, term.text) ||
     term.geo.some((iso) => service.attributes?.geo?.includes(iso)))
 }
