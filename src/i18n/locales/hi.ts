@@ -507,6 +507,10 @@ const hi: Record<string, string> = {
   'The assistant is busy right now. Try again in a minute.': 'सहायक अभी व्यस्त है। एक मिनट बाद फिर कोशिश करें।',
   'Too many questions. Try again in a few minutes.': 'बहुत ज़्यादा सवाल। कुछ मिनट बाद फिर कोशिश करें।',
   'No connection. Check the network and try again.': 'कनेक्शन नहीं है। नेटवर्क जाँचें और फिर कोशिश करें।',
+  'Premium': 'प्रीमियम / असली',
+  'With guarantee': 'गारंटी के साथ',
+  'Safe growth': 'सुरक्षित वृद्धि',
+  'Filter by type': 'प्रकार से फ़िल्टर करें',
 }
 
 export default hi

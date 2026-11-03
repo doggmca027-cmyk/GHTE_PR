@@ -14,7 +14,7 @@ import { localizedName } from '@/lib/service-view'
 import { SERVICES_PAGE, fetchCategories, fetchCategoryServices, fetchPlatforms } from '@/services/api/services'
 import { cachedLoad, isFresh, peekCached } from '@/lib/catalog-cache'
 import type { AuthSession } from '@/services/api/auth'
-import type { ICatalogService, ICategory, Platform } from '@/types/catalog'
+import type { ICatalogService, ICategory, Platform, Segment } from '@/types/catalog'
 import { CategoryRows } from './CategoryRows'
 import { OrderModal } from './OrderModal'
 import { PlatformList, type PlatformEntry } from './PlatformList'
@@ -75,6 +75,8 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
   const [page, setPage] = useState<Page | null>(null)
   const [selected, setSelected] = useState<ICatalogService | null>(null)
   const [serviceQuery, setServiceQuery] = useState('')
+  // a chip under the search field: only the cards of this segment (also with no words typed)
+  const [segment, setSegment] = useState<Segment | null>(null)
   const request = useRef(0)
   // into a platform or a category and back out: the new level opens at its top
   useLayoutEffect(() => { resetScroll() }, [platform, categoryId])
@@ -107,7 +109,7 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
 
   // The search covers the opened category, or every category of the opened platform.
   const searchScope = useMemo(() => (categoryId ? [categoryId] : platformCategories.map((c) => c.id)), [categoryId, platformCategories])
-  const search = useServiceSearch(session, searchScope, platform ? serviceQuery : '')
+  const search = useServiceSearch(session, searchScope, platform ? serviceQuery : '', platform ? segment : null)
 
   // The first page of a category's services, when the category is opened.
   // (from memory first when it was opened or touched a moment ago, see prefetch below)
@@ -157,6 +159,7 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
     const own = categories.filter((c) => c.platform === slug)
     setPlatform(slug)
     setServiceQuery('')
+    setSegment(null)
     // a platform with a single category goes straight to its services
     setCategoryId(own.length === 1 ? own[0].id : null)
   }
@@ -172,6 +175,7 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
   const back = () => {
     haptic.select()
     setServiceQuery('')
+    setSegment(null)
     if (categoryId && platformCategories.length > 1) setCategoryId(null)
     else { setCategoryId(null); setPlatform(null) }
   }
@@ -207,7 +211,7 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null }
       {state.status === 'ready' && platform === null && <PlatformList platforms={entries} onSelect={selectPlatform} />}
 
       {state.status === 'ready' && platform !== null && platformCategories.length > 0 && (
-        <ServiceSearchBox value={serviceQuery} onChange={setServiceQuery} />
+        <ServiceSearchBox value={serviceQuery} onChange={setServiceQuery} segment={segment} onSegmentChange={setSegment} />
       )}
 
       {state.status === 'ready' && platform !== null && search.active && (

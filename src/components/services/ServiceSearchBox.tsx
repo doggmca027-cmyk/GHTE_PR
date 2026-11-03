@@ -1,13 +1,18 @@
 import { Search, X } from 'lucide-react'
 import { useT } from '@/i18n'
+import type { Segment } from '@/types/catalog'
+import { SegmentChips } from './SegmentChips'
 
 interface Props {
   value: string
   onChange: (value: string) => void
+  /** The chosen segment chip, and what a tap on a chip does. Without them the field has no chips. */
+  segment?: Segment | null
+  onSegmentChange?: (segment: Segment | null) => void
 }
 
-/** The search field of a platform's or a category's services. It stays at the top while the list scrolls under it. */
-export function ServiceSearchBox({ value, onChange }: Props) {
+/** The search field of a platform's or a category's services, and the segment chips under it. It stays at the top while the list scrolls under it. */
+export function ServiceSearchBox({ value, onChange, segment = null, onSegmentChange }: Props) {
   const t = useT()
   return (
     <div data-testid="service-search" className="sticky top-0 z-10 -mx-5 bg-screen px-5 pb-2 pt-1">
@@ -37,6 +42,7 @@ export function ServiceSearchBox({ value, onChange }: Props) {
           </button>
         )}
       </label>
+      {onSegmentChange && <SegmentChips value={segment} onChange={onSegmentChange} />}
     </div>
   )
 }

@@ -507,6 +507,10 @@ const uk: Record<string, string> = {
   'The assistant is busy right now. Try again in a minute.': 'Асистент зараз зайнятий. Спробуйте за хвилину.',
   'Too many questions. Try again in a few minutes.': 'Забагато запитань. Спробуйте за кілька хвилин.',
   'No connection. Check the network and try again.': 'Немає з’єднання. Перевірте мережу й спробуйте ще раз.',
+  'Premium': 'Premium / Живі',
+  'With guarantee': 'З гарантією',
+  'Safe growth': 'Безпечне зростання',
+  'Filter by type': 'Фільтр за типом',
 }
 
 export default uk

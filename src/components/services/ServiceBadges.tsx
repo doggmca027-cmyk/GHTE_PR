@@ -1,4 +1,5 @@
 import { Globe, Layers, RefreshCw, ShieldOff } from 'lucide-react'
+import { SEGMENT_VIEW } from './SegmentChips'
 import { Badge } from '@/components/ui/Badge'
 import { currentLocale, useT } from '@/i18n'
 import { reactionOf } from '@/lib/reactions'
@@ -23,6 +24,12 @@ export function ServiceBadges({ service }: { service: ICatalogService }) {
   else if (refill === 'lifetime') badges.push(<Badge key="refill"><RefreshCw size={12} strokeWidth={2} /> {t('Recovery: {time}', { time: t('lifetime') })}</Badge>)
   else if (refill === 'none') badges.push(<Badge key="refill"><ShieldOff size={12} strokeWidth={2} /> {t('No refill')}</Badge>)
   else if (service.refillSupported) badges.push(<Badge key="refill"><RefreshCw size={12} strokeWidth={2} /> {t('Refill')}</Badge>)
+  // what the name promises as a whole: premium and safe growth always, the guarantee only when the badge above has not said it already
+  for (const id of service.segments ?? []) {
+    if (id === 'guaranteed' && badges.some((b) => (b as { key?: string }).key === 'refill')) continue
+    const { label, icon: Icon } = SEGMENT_VIEW[id]
+    badges.push(<Badge key={id}><Icon size={12} strokeWidth={2} /> {t(label)}</Badge>)
+  }
   if (country !== '') badges.push(<Badge key="geo"><Globe size={12} strokeWidth={2} /> {country}</Badge>)
   if (service.dripfeedAvailable) badges.push(<Badge key="drip"><Layers size={12} strokeWidth={2} /> Drip-feed</Badge>)
   if (badges.length === 0) return null

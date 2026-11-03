@@ -507,6 +507,10 @@ const ar: Record<string, string> = {
   'The assistant is busy right now. Try again in a minute.': 'المساعد مشغول الآن. حاول مرة أخرى بعد دقيقة.',
   'Too many questions. Try again in a few minutes.': 'أسئلة كثيرة جدًا. حاول مرة أخرى بعد بضع دقائق.',
   'No connection. Check the network and try again.': 'لا يوجد اتصال. تحقق من الشبكة وحاول مرة أخرى.',
+  'Premium': 'مميز / حقيقي',
+  'With guarantee': 'مع ضمان',
+  'Safe growth': 'نمو آمن',
+  'Filter by type': 'تصفية حسب النوع',
 }
 
 export default ar

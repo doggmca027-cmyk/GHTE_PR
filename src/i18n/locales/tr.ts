@@ -507,6 +507,10 @@ const tr: Record<string, string> = {
   'The assistant is busy right now. Try again in a minute.': 'Asistan şu anda meşgul. Bir dakika sonra tekrar deneyin.',
   'Too many questions. Try again in a few minutes.': 'Çok fazla soru. Birkaç dakika sonra tekrar deneyin.',
   'No connection. Check the network and try again.': 'Bağlantı yok. Ağı kontrol edip tekrar deneyin.',
+  'Premium': 'Premium / Gerçek',
+  'With guarantee': 'Garantili',
+  'Safe growth': 'Güvenli büyüme',
+  'Filter by type': 'Türe göre filtrele',
 }
 
 export default tr

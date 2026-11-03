@@ -1,9 +1,10 @@
 import { MOCK_CATALOG, MOCK_PLATFORMS } from '@/constants/dev'
 import type { PlatformInfo } from '@/constants/platforms'
+import { segmentParam, segmentsFromRow } from '@/lib/segments'
 import { serviceMatches, serviceSearchFilter, type SearchTerm } from '@/lib/service-search'
 import type { PlatformCategory } from '@/types/platform'
 import type { AuthSession } from '@/services/api/auth'
-import type { ICatalogService, ICategory, Platform, ServiceAttributes } from '@/types/catalog'
+import type { ICatalogService, ICategory, Platform, Segment, ServiceAttributes } from '@/types/catalog'
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -35,10 +36,11 @@ interface ServiceRow {
   attributes?: ServiceAttributes | null
   variants?: ServiceRow[] | null
   dripfeed_available?: boolean | null
+  segments?: string[] | null
 }
 
 /** The only columns of `services` the app reads (the database also hides the provider-service ids from customers). */
-export const SERVICE_COLUMNS = ['id', 'category_id', 'name', 'description', 'customer_rate_per_1000', 'min_quantity', 'max_quantity', 'refill_supported', 'sort_order', 'name_i18n', 'attributes', 'dripfeed_available'] as const
+export const SERVICE_COLUMNS = ['id', 'category_id', 'name', 'description', 'customer_rate_per_1000', 'min_quantity', 'max_quantity', 'refill_supported', 'sort_order', 'name_i18n', 'attributes', 'dripfeed_available', 'segments'] as const
 
 /** Services shown at a time in a category: a category can hold hundreds, the customer asks for more. */
 export const SERVICES_PAGE = 30
@@ -75,6 +77,7 @@ export const serviceFromRow = (s: ServiceRow): ICatalogService => ({
   ...(s.name_i18n && Object.keys(s.name_i18n).length > 0 ? { nameI18n: s.name_i18n } : {}),
   ...(s.attributes && Object.keys(s.attributes).length > 0 ? { attributes: s.attributes } : {}),
   ...(s.dripfeed_available === true ? { dripfeedAvailable: true } : {}),
+  ...(segmentsFromRow(s.segments).length > 0 ? { segments: segmentsFromRow(s.segments) } : {}),
   ...(s.variants && s.variants.length > 0
     ? { variants: [...s.variants].sort((a, b) => Number(a.customer_rate_per_1000) - Number(b.customer_rate_per_1000)).map(serviceFromRow) }
     : {}),
@@ -112,26 +115,27 @@ export async function fetchCategories(session: AuthSession): Promise<ICategory[]
 }
 
 /**
- * One page of the active services of these categories whose name, description or country match the terms (all of them). The
- * database does the filtering, so the whole catalogue is searched, not only the pages that were opened.
+ * One page of the active services of these categories whose name, description or country match the terms (all of them) and, when a segment is
+ * given, that are of that segment (a segment alone, with no words, lists the cards of that kind). The database does the filtering, so the whole
+ * catalogue is searched, not only the pages that were opened.
  */
 export async function searchServices(
-  session: AuthSession, categoryIds: readonly string[], terms: readonly SearchTerm[], offset = 0, limit = SERVICES_PAGE,
+  session: AuthSession, categoryIds: readonly string[], terms: readonly SearchTerm[], offset = 0, limit = SERVICES_PAGE, segment: Segment | null = null,
 ): Promise<ICatalogService[]> {
-  if (categoryIds.length === 0 || terms.length === 0) return []
+  if (categoryIds.length === 0 || (terms.length === 0 && !segment)) return []
   if (session.isMock) {
     const scope = new Set(categoryIds)
     return MOCK_CATALOG.services
-      .filter((s) => scope.has(s.categoryId) && serviceMatches(s, terms))
+      .filter((s) => scope.has(s.categoryId) && serviceMatches(s, terms) && (!segment || (s.segments ?? []).includes(segment)))
       .sort((a, b) => a.sortOrder - b.sortOrder || a.ratePer1000 - b.ratePer1000 || a.name.localeCompare(b.name))
       .slice(offset, offset + limit)
   }
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
   const filter = serviceSearchFilter(terms)
-  if (!filter) return []
+  if (!filter && !segment) return []
   const ids = categoryIds.map((id) => encodeURIComponent(id)).join(',')
   const rows = await rest<ServiceRow[]>(
-    `services?select=${SERVICE_COLUMNS.join(',')}&category_id=in.(${ids})&is_active=eq.true&and=${encodeURIComponent(filter)}&order=sort_order,customer_rate_per_1000,id&limit=${limit}&offset=${offset}`,
+    `services?select=${SERVICE_COLUMNS.join(',')}&category_id=in.(${ids})&is_active=eq.true${filter ? `&and=${encodeURIComponent(filter)}` : ''}${segment ? `&${segmentParam(segment)}` : ''}&order=sort_order,customer_rate_per_1000,id&limit=${limit}&offset=${offset}`,
     session.token,
   )
   return rows.map(serviceFromRow)

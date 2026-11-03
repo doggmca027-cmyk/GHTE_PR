@@ -5,6 +5,9 @@ export type { ServiceAttributes }
 /** A platform slug from the registry (public.platforms.slug): 'telegram', 'twitch', 'apple-music', ... */
 export type Platform = string
 
+/** What a card's name says it is (services.segments, computed by the database): the storefront shows them as chips and filters on them. */
+export type Segment = 'premium' | 'guaranteed' | 'safe'
+
 /** Active row of public.categories. */
 export interface ICategory {
   id: string
@@ -41,6 +44,8 @@ export interface ICatalogService {
   variants?: ICatalogService[]
   /** The order form offers gradual delivery (drip-feed): at least one routable offer of this service can do it. */
   dripfeedAvailable?: boolean
+  /** premium / guaranteed / safe, in this order; absent when the name says none of them. */
+  segments?: Segment[]
 }
 
 export interface ICatalog {

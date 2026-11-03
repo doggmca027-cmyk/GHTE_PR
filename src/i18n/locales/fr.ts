@@ -507,6 +507,10 @@ const fr: Record<string, string> = {
   'The assistant is busy right now. Try again in a minute.': 'L’assistant est occupé en ce moment. Réessayez dans une minute.',
   'Too many questions. Try again in a few minutes.': 'Trop de questions. Réessayez dans quelques minutes.',
   'No connection. Check the network and try again.': 'Pas de connexion. Vérifiez le réseau et réessayez.',
+  'Premium': 'Premium / Réels',
+  'With guarantee': 'Avec garantie',
+  'Safe growth': 'Croissance sûre',
+  'Filter by type': 'Filtrer par type',
 }
 
 export default fr

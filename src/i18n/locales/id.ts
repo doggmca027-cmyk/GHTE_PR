@@ -507,6 +507,10 @@ const id: Record<string, string> = {
   'The assistant is busy right now. Try again in a minute.': 'Asisten sedang sibuk. Coba lagi dalam semenit.',
   'Too many questions. Try again in a few minutes.': 'Terlalu banyak pertanyaan. Coba lagi dalam beberapa menit.',
   'No connection. Check the network and try again.': 'Tidak ada koneksi. Periksa jaringan dan coba lagi.',
+  'Premium': 'Premium / Asli',
+  'With guarantee': 'Dengan garansi',
+  'Safe growth': 'Pertumbuhan aman',
+  'Filter by type': 'Filter menurut jenis',
 }
 
 export default id

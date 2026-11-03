@@ -507,6 +507,10 @@ const ja: Record<string, string> = {
   'The assistant is busy right now. Try again in a minute.': 'アシスタントはただいま混み合っています。1分後にもう一度お試しください。',
   'Too many questions. Try again in a few minutes.': '質問が多すぎます。数分後にもう一度お試しください。',
   'No connection. Check the network and try again.': '接続がありません。ネットワークを確認してもう一度お試しください。',
+  'Premium': 'プレミアム / 本物',
+  'With guarantee': '保証付き',
+  'Safe growth': '安全な成長',
+  'Filter by type': '種類で絞り込む',
 }
 
 export default ja

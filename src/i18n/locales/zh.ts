@@ -507,6 +507,10 @@ const zh: Record<string, string> = {
   'The assistant is busy right now. Try again in a minute.': '助手现在正忙，请一分钟后重试。',
   'Too many questions. Try again in a few minutes.': '提问过多，请几分钟后重试。',
   'No connection. Check the network and try again.': '无网络连接，请检查网络后重试。',
+  'Premium': '高级 / 真人',
+  'With guarantee': '有保障',
+  'Safe growth': '安全增长',
+  'Filter by type': '按类型筛选',
 }
 
 export default zh

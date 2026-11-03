@@ -507,6 +507,10 @@ const vi: Record<string, string> = {
   'The assistant is busy right now. Try again in a minute.': 'Trợ lý đang bận. Hãy thử lại sau một phút.',
   'Too many questions. Try again in a few minutes.': 'Quá nhiều câu hỏi. Hãy thử lại sau vài phút.',
   'No connection. Check the network and try again.': 'Không có kết nối. Hãy kiểm tra mạng và thử lại.',
+  'Premium': 'Premium / Thật',
+  'With guarantee': 'Có bảo hành',
+  'Safe growth': 'Tăng trưởng an toàn',
+  'Filter by type': 'Lọc theo loại',
 }
 
 export default vi

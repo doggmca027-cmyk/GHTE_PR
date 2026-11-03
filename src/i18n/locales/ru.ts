@@ -507,6 +507,10 @@ const ru: Record<string, string> = {
   'The assistant is busy right now. Try again in a minute.': 'Ассистент сейчас занят. Попробуйте через минуту.',
   'Too many questions. Try again in a few minutes.': 'Слишком много вопросов. Попробуйте через несколько минут.',
   'No connection. Check the network and try again.': 'Нет соединения. Проверьте сеть и попробуйте снова.',
+  'Premium': 'Premium / Живые',
+  'With guarantee': 'С гарантией',
+  'Safe growth': 'Безопасный рост',
+  'Filter by type': 'Фильтр по типу',
 }
 
 export default ru
