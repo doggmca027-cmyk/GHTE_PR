@@ -116,6 +116,7 @@ export function OfferBundlePanel({ session, providers }: { session: AuthSession;
                   <p className="font-semibold text-content-primary">
                     {o.rank ? <span className="mr-1.5 rounded-full bg-emerald-50 px-1.5 text-[11px] font-bold text-emerald-700">#{o.rank}</span> : null}
                     {o.providerName} · услуга №{o.externalServiceId}
+                    {o.sku && <span className="ml-1.5 rounded bg-surface-sub px-1.5 font-mono text-[11px] font-semibold text-content-secondary">{o.sku}</span>}
                   </p>
                   <p className="text-xs text-content-secondary">{usd(o.costPer1000)} за 1000 · {o.minQuantity}–{o.maxQuantity} · баланс {usd(o.providerBalance)}</p>
                   {o.blockedBy && <p className="text-xs font-semibold text-amber-700">Не получает заказы: {BLOCK_LABEL[o.blockedBy]}</p>}

@@ -14,7 +14,7 @@ import type { IProviderService, Platform, PriceRule } from './types.ts'
 
 export const BUNDLE_OFFER_COLUMNS =
   'id, service_id, provider_id, provider_service_id, cost_per_1000, min_quantity, max_quantity, refill_supported, is_active, routing_score, ' +
-  'anomaly_detected, anomaly_reason, provider_service:provider_services(external_service_id, name, is_active), ' +
+  'anomaly_detected, anomaly_reason, provider_service:provider_services(external_service_id, name, is_active, sku), ' +
   'provider:providers(id, name, is_active, routing_enabled, health_status, provider_balance, reliability_penalty_multiplier, catalog_mode, is_premium)'
 
 export interface BundleOfferRow {
@@ -30,7 +30,7 @@ export interface BundleOfferRow {
   routing_score: number
   anomaly_detected?: boolean
   anomaly_reason?: string | null
-  provider_service: { external_service_id: string; name: string; is_active: boolean } | null
+  provider_service: { external_service_id: string; name: string; is_active: boolean; sku?: string | null } | null
   provider: {
     id: string
     name: string
@@ -53,6 +53,8 @@ export interface BundleOffer {
   providerName: string
   externalServiceId: string
   panelName: string
+  /** The internal article number of the panel service (migration 20261228000000). Admin only: this type never reaches a customer. */
+  sku: string | null
   costPer1000: number
   minQuantity: number
   maxQuantity: number
@@ -91,6 +93,7 @@ export function bundleOffers(rows: BundleOfferRow[], customerRate: number, servi
       providerName: r.provider?.name ?? '?',
       externalServiceId: r.provider_service?.external_service_id ?? '?',
       panelName: r.provider_service?.name ?? '',
+      sku: r.provider_service?.sku ?? null,
       costPer1000: cost,
       minQuantity: r.min_quantity,
       maxQuantity: r.max_quantity,

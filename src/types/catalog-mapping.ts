@@ -122,6 +122,8 @@ export interface BundleOffer {
   providerName: string
   externalServiceId: string
   panelName: string
+  /** The internal article number of the panel service: the admin sees it, a customer never does. */
+  sku: string | null
   costPer1000: number
   minQuantity: number
   maxQuantity: number

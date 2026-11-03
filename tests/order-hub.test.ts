@@ -115,7 +115,7 @@ describe('the order hub (real SQL)', () => {
     await db.query(`update orders set status = 'submitted', provider_order_id = 'p-2' where id = $1`, [o.id])
     const [sent] = await hubRows('sent')
     expect(sent.payload).toMatchObject({ from_hub: false })
-    expect(hubMessage(sent.payload as never).text).toBe('✅ <b>Заказ #' + String(o.id).slice(0, 8) + ' отправлен в JAP</b>\n📦 Telegram Post Views × 10,000 | Клиент: $40.00 → Закуп: $10.00 (Маржа: +$30.00)\n🏦 Остаток на JAP: $40.00')
+    expect(hubMessage(sent.payload as never).text).toBe('✅ <b>Заказ #' + String(o.id).slice(0, 8) + ' отправлен в JAP</b>\n📦 Telegram Post Views × 10,000 | Клиент: $40.00 → Закуп: $10.00 (Маржа: +$30.00)\n🏷 Артикул: <code>OTH-VIEW-STD-JAP77</code>\n🏦 Остаток на JAP: $40.00')
   })
 
   it('"not enough funds" at the panel: the claimed order goes back to the hub (no refund), and only through that function', async () => {

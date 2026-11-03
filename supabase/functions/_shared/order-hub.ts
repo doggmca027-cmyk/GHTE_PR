@@ -5,11 +5,11 @@
 export type HubPayload =
   | { event: 'deposit'; amount: number | string; user_id?: string; username?: string | null; telegram_id?: number | string | null }
   | {
-    event: 'waiting'; order_id: string; provider_id: string; provider: string; service: string; quantity: number
+    event: 'waiting'; order_id: string; provider_id: string; provider: string; service: string; sku?: string | null; quantity: number
     charge: number | string; cost: number | string; balance: number | string | null; needed: number | string | null; waiting?: number | string | null
   }
   | {
-    event: 'sent'; order_id: string; provider: string; service: string; quantity: number
+    event: 'sent'; order_id: string; provider: string; service: string; sku?: string | null; quantity: number
     charge: number | string; cost: number | string; balance: number | string | null; from_hub?: boolean
   }
 
@@ -51,6 +51,8 @@ export function hubMessage(p: HubPayload): HubMessage {
   const provider = esc(p.provider)
   const charge = num(p.charge)
   const cost = num(p.cost)
+  // the internal article number of the panel service the order was routed to: the owner reads it here and nowhere a customer can
+  const sku = p.sku ? [`🏷 Артикул: <code>${esc(p.sku)}</code>`] : []
   if (p.event === 'waiting') {
     // what all the waiting orders of this provider need, and the top-up that covers them on top of what the panel already has
     const needed = num(p.needed ?? cost)
@@ -61,6 +63,7 @@ export function hubMessage(p: HubPayload): HubMessage {
         `⏳ <b>Заказ #${shortId(p.order_id)} в Хабе (ждёт баланса провайдера)</b>`,
         `🏢 Провайдер: <b>${provider}</b>`,
         `📦 Услуга: ${service} (Кол-во: ${num(p.quantity).toLocaleString('en-US')})`,
+        ...sku,
         `💵 Оплатил клиент: ${usd(charge)} | Закуп: ${usd(cost)} | Чистая прибыль: ${signed(charge - cost)}`,
         `🏦 Баланс ${provider}: ${usd(p.balance)} (Нужно пополнить минимум на: <b>${usd(topUp)}</b> для всех ждущих заказов этого провайдера: ${waiting} на ${usd(needed)})`,
       ].join('\n'),
@@ -76,6 +79,7 @@ export function hubMessage(p: HubPayload): HubMessage {
     text: [
       `✅ <b>Заказ #${shortId(p.order_id)} отправлен в ${provider}</b>${p.from_hub ? ' (из Хаба)' : ''}`,
       `📦 ${service} × ${num(p.quantity).toLocaleString('en-US')} | Клиент: ${usd(charge)} → Закуп: ${usd(cost)} (Маржа: ${signed(charge - cost)})`,
+      ...sku,
       `🏦 Остаток на ${provider}: ${usd(p.balance)}`,
     ].join('\n'),
   }
