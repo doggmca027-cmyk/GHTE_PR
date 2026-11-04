@@ -119,7 +119,7 @@ ${escapeHtml(clip(e.detail, 600))}`,
 
 const RU: typeof EN = {
   deposit_completed: (e) =>
-    `✅ <b>Пополнение получено</b>\n<b>+${formatUsd(e.amountUsd)}</b>${e.amountCrypto && e.asset ? ` (${escapeHtml(trimCrypto(e.amountCrypto))} ${escapeHtml(e.asset)})` : ''} зачислено на ваш баланс.\nНовый баланс: <b>${formatUsd(e.balance)}</b>`,
+    `💰 <b>Ваш баланс успешно пополнен на ${formatUsd(e.amountUsd)}!</b>\nНовый баланс: <b>${formatUsd(e.balance)}</b>`,
   order_started: (e) =>
     `🚀 <b>Ваш заказ запущен в работу</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nВ пути: ${int(e.quantity)}.`,
   order_completed: (e) =>

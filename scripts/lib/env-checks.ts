@@ -313,6 +313,13 @@ export function checkFunctionSecrets(env: Env): Finding[] {
   if (present(env.CHAT_GATE_SECRET) && env.CHAT_GATE_SECRET.trim().length < 32) {
     out.push(err('CHAT_GATE_SECRET', 'CHAT_GATE_SECRET is shorter than 32 characters (the chat-gate function refuses it). Generate one with: openssl rand -hex 32'))
   }
+  // The Crypto Pay app's token (@CryptoPayBot -> My Apps): it is also the secret its webhooks are signed with.
+  if (present(env.CRYPTO_PAY_API_TOKEN) && !/^\d{1,12}:[A-Za-z0-9]{10,100}$/.test(env.CRYPTO_PAY_API_TOKEN.trim())) {
+    out.push(err('CRYPTO_PAY_API_TOKEN', 'CRYPTO_PAY_API_TOKEN does not look like a Crypto Pay app token (<digits>:<letters and digits>, from @CryptoPayBot -> My Apps).'))
+  }
+  if (present(env.CRYPTO_PAY_NETWORK) && env.CRYPTO_PAY_NETWORK !== 'mainnet' && env.CRYPTO_PAY_NETWORK !== 'testnet') {
+    out.push(err('CRYPTO_PAY_NETWORK', 'CRYPTO_PAY_NETWORK must be exactly "mainnet" or "testnet" (anything else is treated as mainnet).'))
+  }
   if (present(env.AI_CHAT_HOURLY_LIMIT) && !(Number.isInteger(Number(env.AI_CHAT_HOURLY_LIMIT)) && Number(env.AI_CHAT_HOURLY_LIMIT) >= 1 && Number(env.AI_CHAT_HOURLY_LIMIT) <= 1000)) {
     out.push(err('AI_CHAT_HOURLY_LIMIT', 'AI_CHAT_HOURLY_LIMIT must be an integer between 1 and 1000 (questions per person per hour; 20 when unset).'))
   }
@@ -420,6 +427,8 @@ export const FUNCTION_SECRET_NAMES = [
   'SYNC_BATCH_SIZE', 'RECONCILE_AFTER_MINUTES',
   // the AI assistant's hourly limit and log (the chat-gate function); CHAT_GATE_SECRET is also set, with the same value, in the Vercel project
   'CHAT_GATE_SECRET', 'AI_CHAT_HOURLY_LIMIT',
+  // deposits through Crypto Pay (@CryptoBot)
+  'CRYPTO_PAY_API_TOKEN', 'CRYPTO_PAY_NETWORK',
   // dev-only names are kept so the checks can REFUSE them in production
   'MOCK_MODE', 'TON_USD_FALLBACK_RATE',
 ] as const

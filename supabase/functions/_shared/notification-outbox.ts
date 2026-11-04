@@ -15,7 +15,7 @@ import { notifyUser, resolveLang, sendTelegramMessage, type NotifyEvent, type No
 
 export interface OutboxRow {
   id: string
-  kind: 'started' | 'completed' | 'partial' | 'canceled' | 'admin_alert' | 'admin_hub'
+  kind: 'started' | 'completed' | 'partial' | 'canceled' | 'admin_alert' | 'admin_hub' | 'deposit'
   dedupe_key: string
   attempts: number
   /** null for an admin alert (nothing to do with one order). */
@@ -25,7 +25,7 @@ export interface OutboxRow {
   remains: number | null
   charge_amount: number | string | null
   partial_refund_amount: number | string | null
-  /** admin_alert: { headline, detail }; admin_hub: the hub fact (order-hub.ts HubPayload). */
+  /** admin_alert: { headline, detail }; admin_hub: the hub fact (order-hub.ts HubPayload); deposit: { amount_usd, asset, balance }. */
   payload?: Record<string, unknown> | null
   service_name: string | null
   user_id: string
@@ -48,6 +48,10 @@ export function eventFor(row: OutboxRow): NotifyEvent {
   if (row.kind === 'admin_alert') {
     return { type: 'admin_alert', headline: String(row.payload?.headline ?? 'Alert').slice(0, 120), detail: String(row.payload?.detail ?? '').slice(0, 600) }
   }
+  if (row.kind === 'deposit') {
+    const asset = typeof row.payload?.asset === 'string' ? row.payload.asset : undefined
+    return { type: 'deposit_completed', amountUsd: Number(row.payload?.amount_usd ?? 0), balance: Number(row.payload?.balance ?? 0), ...(asset ? { asset } : {}) }
+  }
   const base = { orderId: String(row.order_id), serviceName: row.service_name ?? 'Order', quantity: Number(row.quantity) }
   if (row.kind === 'started') return { type: 'order_started', ...base }
   if (row.kind === 'completed') return { type: 'order_completed', ...base }
@@ -60,7 +64,7 @@ export function eventFor(row: OutboxRow): NotifyEvent {
  * (completed / partial are final; a completed or partial order refunded later by an admin was still completed / partial when announced.)
  */
 export function isReady(row: OutboxRow): boolean {
-  if (row.kind === 'admin_alert' || row.kind === 'admin_hub') return true
+  if (row.kind === 'admin_alert' || row.kind === 'admin_hub' || row.kind === 'deposit') return true
   if (row.kind === 'started') return row.order_status === 'in_progress'
   if (row.kind === 'canceled') return row.order_status === 'refunded'
   if (row.kind === 'partial') return row.order_status === 'partial' || row.order_status === 'refunded'
