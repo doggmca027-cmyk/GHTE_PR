@@ -1,4 +1,4 @@
-import { isQualityCard } from './offer-quality.ts'
+import { isPremiumCard, isQualityCard } from './offer-quality.ts'
 import type { PriceContext, PriceOptions, PriceRule } from './types.ts'
 
 // All arithmetic is done with BigInt on fixed-point integers, so results never
@@ -28,7 +28,7 @@ const hasKeywords = (rule: PriceRule): boolean => (rule.name_all?.length ?? 0) >
 function specificity(rule: PriceRule): number {
   if (rule.service_id) return 4
   if (rule.category_id) return 3
-  if (hasKeywords(rule) || rule.quality_scope === 'quality') return 2
+  if (hasKeywords(rule) || rule.quality_scope != null) return 2
   if (rule.platform) return 1
   return 0
 }
@@ -63,6 +63,8 @@ function matches(rule: PriceRule, rate: number, ctx: PriceContext): boolean {
   if (!keywordsMatch(rule, ctx.serviceName)) return false
   // the same test routing uses, so a card that is routed as quality is also priced as quality
   if (rule.quality_scope === 'quality' && !isQualityCard(ctx.serviceName ?? '')) return false
+  if (rule.quality_scope === 'premium' && !isPremiumCard(ctx.serviceName ?? '')) return false
+  if (rule.quality_scope === 'standard' && isPremiumCard(ctx.serviceName ?? '')) return false
   if (rule.type === 'tier') {
     if (rule.min_rate == null || rate < rule.min_rate) return false
     if (rule.max_rate != null && rate > rule.max_rate) return false

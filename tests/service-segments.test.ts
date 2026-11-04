@@ -28,10 +28,10 @@ describe('what a name says', () => {
   it.each<[string, string[]]>([
     // the order is always premium, guaranteed, safe
     ['Instagram Followers | HQ | Real | Refill 30D', ['premium', 'guaranteed']],
-    ['Instagram Followers ➜ [Speed: 50k+/Day | Refill: 30 Days]', ['guaranteed']],
-    ['Instagram Followers | Organic | 500/Day | R30', ['guaranteed', 'safe']],
+    ['Instagram Followers ➜ [Speed: 50k+/Day | Refill: 30 Days]', ['premium', 'guaranteed']],
+    ['Instagram Followers | Organic | 500/Day | R30', ['premium', 'guaranteed', 'safe']],
     ['TikTok Likes | Real Users | Non-Drop | Slow | 2K/Day', ['premium', 'guaranteed', 'safe']],
-    ['YouTube Views | Lifetime Guarantee', ['guaranteed']],
+    ['YouTube Views | Lifetime Guarantee', ['premium', 'guaranteed']],
     ['Telegram Members | Natural growth', ['safe']],
     ['Telegram Post Views', []],
     // a name that takes the promise back keeps neither premium nor guaranteed ...

@@ -17,6 +17,13 @@ const PROMISE = /\brefill|\bguarantee|\bu?hq\b|\bhigh[\s-]*quality|\bnon[\s-]*dr
 /** The card's name promises quality. */
 export const isQualityCard = (serviceName: string): boolean => !NO_GUARANTEE.test(serviceName) && PROMISE.test(serviceName)
 
+// PREMIUM (migration 20270101000100, service_is_premium): the name promises quality in the words of the storefront. Wider than a quality card (it also
+// takes lifetime, targeted, premium, verified); an explicit no refill / bot takes it back, as everywhere.
+const PREMIUM = /\b(?:real\b(?![\s-]*time)|u?hq\b|premium\b|verified\b|lifetime\b|targeted\b|organic|refill|guarantee|non[\s-]*drop|no[\s-]*drops?\b|high[\s-]*quality|ultra[\s-]*high[\s-]*quality)/i
+
+/** The card is Premium: it sells in the Premium list with its own markup. */
+export const isPremiumCard = (serviceName: string): boolean => !NO_GUARANTEE.test(serviceName) && PREMIUM.test(serviceName)
+
 /** How much this offer keeps a quality card's promise: 2 premium panel, 1 its name says so, 0 nothing. */
 export function offerQualityScore(panelName: string | null | undefined, premium: boolean | null | undefined): number {
   const name = panelName ?? ''
