@@ -168,6 +168,13 @@ describe('what the assistant is told about this customer', () => {
     expect(ask('нужна массовка в тг')).toMatchObject({ audience: 'network' })
     expect(ask('подписчики в инсту').audience).toBeNull()
   })
+  it('a network asking for the cheapest is shown the cheap list and the safe one: "сетка" says who asks, it is not a wish for quality', () => {
+    const intent = ask('лью сетку, нужны самые дешевые лайки в инсту')
+    expect(intent).toMatchObject({ audience: 'network', cheap: true, quality: false, refill: false })
+    expect(searchKinds(intent)).toEqual(['any', 'safe'])
+    // ...while a wish that names quality still gets the safe list only
+    expect(searchKinds(ask('для сетки нужны качественные лайки в инсту'))).toEqual(['safe'])
+  })
   it('a quantity over the limit is worked out per card: runs, price, and drip-feed only where the card has it', () => {
     const cards = [
       card('a', 'Followers A', 1, { max_quantity: 500_000, dripfeed_available: true }),
@@ -246,6 +253,8 @@ describe('the sales rules of the prompt', () => {
     expect(prompt).toContain('Каждый предложенный вариант сопровождай артикулом жирным шрифтом и ценой')
     expect(prompt).toContain('«Вставьте этот артикул в поиск»')
     expect(prompt).toContain('«Вставьте эти артикулы в поиск»')
+    // in the language of the customer
+    expect(prompt).toContain('по-украински «Вставте цей артикул у пошук», по-английски «Paste this SKU into the search»')
   })
   it('no promise that cannot be kept: no guaranteed safety from the platform\'s algorithms, no profit', () => {
     expect(prompt).toContain('Это совет, а не гарантия: не обещай, что аккаунт не заблокируют и аудиторию не спишут')
