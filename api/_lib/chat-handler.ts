@@ -1,7 +1,7 @@
 // The request side of the support chat (api/chat.ts): validation, a small rate limit, retrieval from the public storefront, the system prompt, and
 // the model call. The model call is injected, so this is tested without the AI SDK, a key or a network.
 
-import { addonIntent, buildSearchUrl, buildSystemPrompt, companionActions, extractIntent, rankAddons, rankServices, searchKinds, type StorefrontService } from './chat-rag'
+import { addonIntent, buildSearchUrl, buildSystemPrompt, companionActions, extractIntent, rankAddons, rankServices, searchKinds, situationNote, type StorefrontService } from './chat-rag'
 
 export const MAX_BODY_BYTES = 16_384
 export const MAX_MESSAGES = 12
@@ -66,6 +66,8 @@ export function parseMessages(body: unknown): ChatMessage[] | null {
 interface Found {
   found: StorefrontService[]
   addons: StorefrontService[]
+  /** What is known about this customer (tone, limits worked out for their quantity, the country): see situationNote. */
+  note?: string
 }
 
 async function search(deps: ChatDeps, text: string): Promise<Found> {
@@ -82,10 +84,8 @@ async function search(deps: ChatDeps, text: string): Promise<Found> {
   // the addon of the package: one more request, the cheapest cards of the other action on the same platform
   const addonUrl = companionActions(intent).length > 0 ? buildSearchUrl(deps.env.supabaseUrl!, addonIntent(intent), 'any') : null
   const [lists, addonList] = await Promise.all([Promise.all(urls.map(get)), addonUrl ? get(addonUrl) : Promise.resolve([] as StorefrontService[])])
-  return {
-    found: lists.length === 0 ? [] : rankServices(lists.flat(), intent),
-    addons: addonList.length === 0 ? [] : rankAddons(addonList, intent),
-  }
+  const found = lists.length === 0 ? [] : rankServices(lists.flat(), intent)
+  return { found, addons: addonList.length === 0 ? [] : rankAddons(addonList, intent), note: situationNote(intent, found) }
 }
 
 export async function handleChat(req: Request, deps: ChatDeps): Promise<Response> {
@@ -118,7 +118,7 @@ export async function handleChat(req: Request, deps: ChatDeps): Promise<Response
     return json(503, 'catalog_unavailable', 'The catalogue is not available right now. Try again in a minute.')
   }
 
-  const system = buildSystemPrompt(found.found, found.addons)
+  const system = buildSystemPrompt(found.found, found.addons, found.note)
   for (const model of models) {
     if (req.signal.aborted) break
     try {

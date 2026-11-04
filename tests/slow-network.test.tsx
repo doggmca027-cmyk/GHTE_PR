@@ -209,10 +209,16 @@ describe('the balance', () => {
 })
 
 describe('the document', () => {
-  it('asks Google Fonts for one variable-weight family (a fraction of the stylesheet; the same four files)', () => {
+  it('asks Google Fonts for one variable-weight family (a fraction of the stylesheet; one file per alphabet)', () => {
     const html = src('index.html')
-    expect(html).toContain('family=Plus+Jakarta+Sans:wght@400..800&display=swap')
+    expect(html).toContain('family=Inter:wght@400..800&display=swap')
     expect(html).not.toContain('wght@400;500;600;700;800')
+  })
+  it('the font draws Cyrillic: Plus Jakarta Sans has none, so Russian and Ukrainian text fell back to the system font', () => {
+    // Inter is served in Latin, Latin Extended, Vietnamese (a language of the app) and Cyrillic; the Cyrillic file covers Russian and Ukrainian letters
+    for (const file of ['index.html', 'tailwind.config.js', 'public/legal.css']) expect(src(file)).not.toContain('Jakarta')
+    expect(src('tailwind.config.js')).toMatch(/sans:\s*\['Inter',/)
+    expect(src('public/legal.css')).toMatch(/font:\s*16px\/1\.65 Inter,/)
   })
   it('does not use content-visibility on the cards: Telegram painted skipped cards only after a touch (see performance.test.ts)', () => {
     expect(src('src/index.css')).not.toContain('content-visibility')
