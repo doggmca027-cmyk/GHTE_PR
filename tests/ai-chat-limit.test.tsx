@@ -89,7 +89,6 @@ describe('the assistant sheet', () => {
     vi.stubGlobal('fetch', vi.fn(async () => limited('1380')))
     await ask()
     expect(alert()).toContain('🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in 23 min.')
-    expect(alert()).not.toContain('You can ask me again')
     expect([...host.querySelectorAll('button')].some((b) => b.textContent === 'Try again')).toBe(false)
   })
   it('rounds the wait up', async () => {
@@ -101,6 +100,7 @@ describe('the assistant sheet', () => {
     vi.stubGlobal('fetch', vi.fn(async () => limited()))
     await ask()
     expect(alert()).toContain('🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.')
+    expect(alert()).not.toContain('ask me again in')
   })
   it('the wait goes away with the next question and with a new chat', async () => {
     let attempt = 0
