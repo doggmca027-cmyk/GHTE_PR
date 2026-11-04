@@ -5,7 +5,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ServiceCard } from '../src/components/services/ServiceCard'
-import { SERVICE_COLUMNS, fetchCategoryServices, searchServices, serviceFromRow } from '../src/services/api/services'
+import { SERVICE_COLUMNS, fetchCategoryServices as fetchMock, serviceFromRow } from '../src/services/api/services'
 import { parseServiceQuery } from '../src/lib/service-search'
 import { MOCK_CATALOG } from '../src/constants/dev'
 import type { ICatalogService } from '../src/types/catalog'
@@ -23,10 +23,11 @@ describe('the flag on the card', () => {
 })
 
 describe('the order of the list', () => {
-  beforeEach(() => { vi.stubEnv('VITE_SUPABASE_URL', 'https://example.supabase.co'); vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon') })
+  beforeEach(() => { vi.resetModules(); vi.stubEnv('VITE_SUPABASE_URL', 'https://example.supabase.co'); vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon') })
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
   it('a category and a search ask the database for Premium first, then the usual order', async () => {
+    const { fetchCategoryServices, searchServices } = await import('../src/services/api/services')
     const urls: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (url: string) => { urls.push(decodeURIComponent(url)); return new Response('[]', { status: 200 }) }))
     const session = { token: 't', expiresAt: 0, isMock: false } as never
@@ -40,7 +41,7 @@ describe('the order of the list', () => {
     const session = { token: '', expiresAt: 0, isMock: true } as never
     for (const category of MOCK_CATALOG.categories) {
       const all = MOCK_CATALOG.services.filter((s) => s.categoryId === category.id)
-      const listed = await fetchCategoryServices(session, category.id, 0, 1000)
+      const listed = await fetchMock(session, category.id, 0, 1000)
       expect(listed).toHaveLength(all.length)
       const flags = listed.map((s) => s.isPremium === true)
       expect(flags).toEqual([...flags].sort((a, b) => Number(b) - Number(a)))
