@@ -3,7 +3,7 @@
 
 import type { ChatGate, LogEntry, Who } from './chat-gate'
 import {
-  addonIntent, buildSearchUrl, buildSystemPrompt, cardsFor, companionActions, extractIntent, rankAddons, rankServices, searchKinds, situationNote, withAlternative,
+  addonIntent, buildSearchUrl, buildSkuUrl, buildSystemPrompt, cardsFor, companionActions, extractIntent, rankAddons, rankServices, searchKinds, situationNote, skuInMessage, withAlternative,
   type ChatCard, type ChatIntent, type Recommendation, type SearchKind, type StorefrontService,
 } from './chat-rag'
 
@@ -113,10 +113,17 @@ async function search(deps: ChatDeps, text: string): Promise<Found> {
     .filter((r): r is { kind: SearchKind; url: string } => r.url !== null)
   // the addon of the package: one more request, the cheapest cards of the other action on the same platform
   const addonUrl = companionActions(intent).length > 0 ? buildSearchUrl(deps.env.supabaseUrl!, addonIntent(intent), 'any') : null
-  const [lists, addonList] = await Promise.all([Promise.all(requests.map((r) => get(r.url))), addonUrl ? get(addonUrl) : Promise.resolve([] as StorefrontService[])])
+  // an article in the message: that exact card, from the whole catalogue (it is not limited to the platform or the words of the message)
+  const sku = skuInMessage(text)
+  const [lists, addonList, named] = await Promise.all([
+    Promise.all(requests.map((r) => get(r.url))),
+    addonUrl ? get(addonUrl) : Promise.resolve([] as StorefrontService[]),
+    sku ? get(buildSkuUrl(deps.env.supabaseUrl!, sku)).catch(() => [] as StorefrontService[]) : Promise.resolve([] as StorefrontService[]),
+  ])
   // a country nobody names: the best MIX / worldwide cards still reach the model, whatever their price ranks them
   const mix = lists[requests.findIndex((r) => r.kind === 'worldwide')] ?? []
-  const found = lists.length === 0 ? [] : withAlternative(rankServices(lists.flat(), intent), mix, intent)
+  const ranked = lists.length === 0 ? [] : withAlternative(rankServices(lists.flat(), intent), mix, intent)
+  const found = [...named, ...ranked.filter((s) => !named.some((n) => n.id === s.id))] // the card that was asked for by its article comes first
   return { found, addons: addonList.length === 0 ? [] : rankAddons(addonList, intent), intent, note: situationNote(intent, found) }
 }
 

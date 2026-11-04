@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_MODEL, FALLBACK_MODELS, handleChat, type ChatDeps } from '../api/_lib/chat-handler'
 import { fold, reads, withinEdits } from '../api/_lib/chat-language'
-import { buildSearchUrl, buildSystemPrompt, extractIntent, parseQuantity, rankServices, searchKinds, situationNote, withAlternative, type StorefrontService } from '../api/_lib/chat-rag'
+import { buildSearchUrl, buildSkuUrl, buildSystemPrompt, extractIntent, parseQuantity, rankServices, searchKinds, situationNote, skuInMessage, withAlternative, type StorefrontService } from '../api/_lib/chat-rag'
 
 const card = (id: string, name: string, rate: number, over: Partial<StorefrontService> = {}): StorefrontService => ({
   id, sku: `TT-FOL-STD-ROOT${id.toUpperCase()}`, name, customer_rate_per_1000: rate, min_quantity: 100, max_quantity: 500_000, refill_supported: false,
@@ -235,9 +235,13 @@ describe('the consultant rules of the prompt', () => {
     expect(prompt).toContain('задай один-два коротких вопроса — какой бюджет и что важнее: качество (без списаний, с гарантией) или нужна просто массовка')
     expect(prompt).toContain('вопросов не задавай и сразу предлагай')
   })
-  it('two or three options, each with its pros and cons in a line, with a pattern; prices and guarantees from the list only', () => {
-    expect(prompt).toContain('Предлагай два-три подходящих варианта из списка и коротко, в одну строку, опиши плюсы и минусы каждого')
-    expect(prompt).toContain('Вариант А — **SKU**, $X за 1000: дёшево, но возможны отписки. Вариант Б — **SKU**, $Y за 1000: чуть дороже, зато с гарантией')
+  it('two or three options, each in the strict structure: name, description (pros, cons, why, price), article in backticks; prices and guarantees from the list only', () => {
+    expect(prompt).toContain('Предлагай два-три подходящих варианта из списка. Каждый описывай строго в такой структуре')
+    expect(prompt).toContain('* **Название услуги:** понятное клиенту название, без технических тегов панели')
+    expect(prompt).toContain('* **Описание:** коротко плюсы и минусы и почему это подходит под запрос клиента; сюда же цена за 1000 и гарантия из списка')
+    expect(prompt).toContain('* **Артикул:** `IG-FOL-HQ-3F9A1C` (артикул из списка, только в обратных кавычках, как моноширинный текст)')
+    expect(prompt.indexOf('**Название услуги:**')).toBeLessThan(prompt.indexOf('**Описание:**'))
+    expect(prompt.indexOf('**Описание:**')).toBeLessThan(prompt.indexOf('**Артикул:**'))
     expect(prompt).toContain('не приписывай услугам качеств, которых нет в их названии')
     expect(prompt).toContain('если ему хватает дешёвой, так и скажи, без давления')
     expect(prompt).toContain('Предлагай не больше трёх вариантов основных услуг')
@@ -272,8 +276,9 @@ describe('the consultant rules of the prompt', () => {
     expect(prompt).toContain('про безопасность и органичный рост')
     expect(prompt).toContain('говори нейтрально')
   })
-  it('every option comes with a bold SKU and, without cards, the call to paste it into the search (in the language of the customer)', () => {
-    expect(prompt).toContain('Каждый предложенный вариант сопровождай артикулом жирным шрифтом и ценой')
+  it('the article is always monospace (backticks), and without cards the answer ends with the call to paste it into the search (in the language of the customer)', () => {
+    expect(prompt).toContain('указывай её точный артикул (SKU) в обратных кавычках, как моноширинный текст')
+    expect(prompt).not.toContain('жирным шрифтом')
     expect(prompt).toContain('«Вставьте этот артикул в поиск»')
     expect(prompt).toContain('«Вставьте эти артикулы в поиск»')
     expect(prompt).toContain('по-украински «Вставте цей артикул у пошук», по-английски «Paste this SKU into the search»')
@@ -320,6 +325,39 @@ describe('the consultant rules of the prompt', () => {
   it('the situation of the customer follows the rules and comes before the list', () => {
     expect(prompt.indexOf('СИТУАЦИЯ ЭТОГО КЛИЕНТА (x)')).toBeGreaterThan(prompt.indexOf('19. Списки ниже'))
     expect(prompt.indexOf('СИТУАЦИЯ ЭТОГО КЛИЕНТА (x)')).toBeLessThan(prompt.indexOf('<services>'))
+  })
+})
+
+describe('an article in the message', () => {
+  it('is found in the text, in capitals, also in backticks or bold', () => {
+    expect(skuInMessage('сколько стоит `ig-fol-hq-3f9a1c`?')).toBe('IG-FOL-HQ-3F9A1C')
+    expect(skuInMessage('**TT-LIKE-STD-AB12CD**')).toBe('TT-LIKE-STD-AB12CD')
+    expect(skuInMessage('просто подписчики')).toBeNull()
+  })
+  it('asks for that exact card over the whole catalogue: no platform, no category, only letters, digits and hyphens', () => {
+    const url = decodeURIComponent(buildSkuUrl('https://x.supabase.co/', "ig-fol-hq-3f9a1c'; drop"))
+    expect(url).toContain('/rest/v1/services?')
+    expect(url).toContain('sku=eq.IG-FOL-HQ-3F9A1CDROP')
+    expect(url).toContain('is_active=eq.true')
+    expect(url).not.toMatch(/category_id|category\.platform\.slug|ilike/)
+  })
+  it('the card of the article comes first in what the model is given, whatever else the message says', async () => {
+    const generated: string[] = []
+    const urls: string[] = []
+    const deps: ChatDeps = {
+      env: { apiKey: 'k', supabaseUrl: 'https://x.supabase.co', anonKey: 'anon', models: [DEFAULT_MODEL] },
+      fetch: (async (url: string) => {
+        const u = decodeURIComponent(String(url))
+        urls.push(u)
+        return new Response(JSON.stringify(u.includes('sku=eq.') ? [card('z', 'YouTube Views HQ', 3, { sku: 'YT-VIEW-HQ-3F9A1C', category: { name: 'YouTube Views', platform: { slug: 'youtube', name: 'YouTube' } } })] : [card('a', 'TikTok Followers', 1)]), { status: 200 })
+      }) as unknown as typeof fetch,
+      allow: () => true,
+      generate: async ({ system }) => { generated.push(system); return new Response('ok').body! },
+    }
+    await handleChat(new Request('https://app.test/api/chat', { method: 'POST', body: JSON.stringify({ messages: [{ role: 'user', content: 'расскажи про yt-view-hq-3f9a1c и подписчики в тик ток' }] }), headers: { 'x-forwarded-for': '1.2.3.4' } }), deps)
+    expect(urls.some((u) => u.includes('sku=eq.YT-VIEW-HQ-3F9A1C'))).toBe(true)
+    const list = generated[0]!.split('<services>\n')[1]!
+    expect(list.startsWith('YT-VIEW-HQ-3F9A1C | YouTube Views HQ')).toBe(true)
   })
 })
 

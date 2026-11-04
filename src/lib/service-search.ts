@@ -34,8 +34,8 @@ const COUNTRY_ALIASES: Readonly<Record<string, string>> = {
   kazakhstan: 'KZ', казахстан: 'KZ', uzbekistan: 'UZ', узбекистан: 'UZ',
 }
 
-/** An article: PLATFORM-TYPE-QUALITY-SUPPLIER+NUMBER, and four more characters for a twin. No lookbehind: older iOS webviews cannot even parse one. */
-export const SKU_PATTERN = /\b[A-Z]{2,4}-[A-Z]{2,5}-(?:HQ|STD|CHEAP)-[A-Z]{3,4}[A-Z0-9]{1,12}(?:-[A-F0-9]{4})?\b/i
+/** An article: PLATFORM-TYPE-QUALITY-CODE (IG-FOL-HQ-3F9A1C: the code is a hash of the card, no supplier in it). No lookbehind: older iOS webviews cannot even parse one. */
+export const SKU_PATTERN = /\b[A-Z]{2,4}-[A-Z]{2,5}-(?:HQ|STD|CHEAP)-[A-Z0-9]{4,14}(?:-[A-F0-9]{4})?\b/i
 
 /** The article number in a typed or pasted text (also inside **bold** or [brackets]), in capitals, or null when the text has none. */
 export const skuFromQuery = (raw: string): string | null => SKU_PATTERN.exec(raw)?.[0].toUpperCase() ?? null

@@ -61,8 +61,11 @@ const BOLD = /\*\*([^*\n]+)\*\*/g
 /** A line that starts with "* " or "- " is a bullet, not an asterisk (looked at in the whole answer, so a hyphen in the middle of a line stays one). */
 const bulleted = (answer: string) => answer.replace(/^([ \t]*)[*-][ \t]+/gm, '$1• ')
 
-/** A "**" that has not been closed yet (the answer is still being written) is not shown. */
-const tidy = (text: string) => text.replace(/\*\*/g, '')
+/** A "**" or a backtick that has not been closed yet (the answer is still being written) is not shown. */
+const tidy = (text: string) => text.replace(/\*\*/g, '').replace(/`/g, '')
+
+/** `code` as the assistant writes an article: the backticks go, the article stays and becomes a chip that copies it with one tap. */
+const unticked = (answer: string) => answer.replace(/`([^`\n]+)`/g, '$1')
 
 /** Text with the articles in it taken out, as pieces. */
 function withArticles(text: string, kind: 'text' | 'bold'): Piece[] {
@@ -80,7 +83,7 @@ function withArticles(text: string, kind: 'text' | 'bold'): Piece[] {
 
 /** The answer as pieces: plain text, **bold**, and every article number (in bold or not) on its own so it can be copied. */
 export function splitAnswer(answer: string): Piece[] {
-  const src = bulleted(answer)
+  const src = bulleted(unticked(answer))
   const out: Piece[] = []
   let last = 0
   for (const m of src.matchAll(BOLD)) {
