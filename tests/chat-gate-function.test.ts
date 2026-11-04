@@ -88,8 +88,9 @@ describe('the chat-gate function', () => {
     it('counts one question for a guest by a hash of the address: 20 in 3600 seconds, and passes the verdict on', async () => {
       const res = await call({ action: 'check', ip: '203.0.113.7' })
       expect(res.status).toBe(200)
-      expect(await res.json()).toEqual({ ok: true, allowed: true, limit: 20, remaining: 19, retry_after: 0 })
-      expect(rpcCalls).toEqual([{ name: 'chat_rate_hit', args: { p_identifier: `ip:${(await hmacHex(SECRET, 'ip:203.0.113.7')).slice(0, 16)}`, p_limit: 20, p_window_seconds: 3600 } }])
+      expect(await res.json()).toEqual({ ok: true, allowed: true, limit: 20, remaining: 19, retry_after: 0, paying: false })
+      // a guest has no account: no larger hour is asked for
+      expect(rpcCalls).toEqual([{ name: 'chat_rate_hit', args: { p_identifier: `ip:${(await hmacHex(SECRET, 'ip:203.0.113.7')).slice(0, 16)}`, p_limit: 20, p_window_seconds: 3600, p_user_id: null, p_paying_limit: null } }])
       expect(JSON.stringify(rpcCalls)).not.toContain('203.0.113.7') // the address never reaches the database
     })
     it('a signed-in customer is counted by the Telegram id of their token', async () => {
@@ -100,6 +101,27 @@ describe('the chat-gate function', () => {
       const forged = (await signJwt({ sub: USER_ID, role: 'authenticated', aud: 'authenticated', telegram_id: 42 }, 'another-secret-another-secret-12345', 3600)).token
       await call({ action: 'check', ip: '203.0.113.7', token: forged })
       expect(String(rpcCalls[0]!.args.p_identifier)).toMatch(/^ip:[0-9a-f]{16}$/)
+    })
+    it('a signed-in customer is counted with their account id and the larger hour (100), which the database applies when they have paid', async () => {
+      await call({ action: 'check', ip: '203.0.113.7', token: await token({ telegram_id: 777_000_111 }) })
+      expect(rpcCalls[0]!.args).toMatchObject({ p_identifier: 'tg:777000111', p_limit: 20, p_user_id: USER_ID, p_paying_limit: 100 })
+      rpcAnswer = (c) => ({ data: { allowed: true, limit: c.args.p_paying_limit, remaining: 99, retry_after: 0, paying: true }, error: null })
+      expect(await (await call({ action: 'check', ip: '1.1.1.1', token: await token({ telegram_id: 777_000_111 }) })).json()).toEqual({ ok: true, allowed: true, limit: 100, remaining: 99, retry_after: 0, paying: true })
+    })
+    it('the larger hour is a setting too, never below the ordinary one; a nonsense value is the default', async () => {
+      const t = await token({ telegram_id: 777_000_111 })
+      env.AI_CHAT_PAYING_LIMIT = '250'
+      await call({ action: 'check', ip: '1.1.1.1', token: t })
+      env.AI_CHAT_PAYING_LIMIT = 'lots'
+      await call({ action: 'check', ip: '1.1.1.1', token: t })
+      env.AI_CHAT_PAYING_LIMIT = '5'
+      await call({ action: 'check', ip: '1.1.1.1', token: t })
+      expect(rpcCalls.map((c) => c.args.p_paying_limit)).toEqual([250, 100, 20])
+    })
+    it('a made-up token is a guest: it asks for no larger hour', async () => {
+      const forged = (await signJwt({ sub: USER_ID, role: 'authenticated', aud: 'authenticated', telegram_id: 42 }, 'another-secret-another-secret-12345', 3600)).token
+      await call({ action: 'check', ip: '1.1.1.1', token: forged })
+      expect(rpcCalls[0]!.args).toMatchObject({ p_user_id: null, p_paying_limit: null })
     })
     it('the number of questions is the setting, when it is a sensible one', async () => {
       env.AI_CHAT_HOURLY_LIMIT = '15'
@@ -112,7 +134,7 @@ describe('the chat-gate function', () => {
       rpcAnswer = () => ({ data: { allowed: false, limit: 20, remaining: 0, retry_after: 1380 }, error: null })
       const res = await call({ action: 'check', ip: '1.2.3.4' })
       expect(res.status).toBe(200)
-      expect(await res.json()).toEqual({ ok: true, allowed: false, limit: 20, remaining: 0, retry_after: 1380 })
+      expect(await res.json()).toEqual({ ok: true, allowed: false, limit: 20, remaining: 0, retry_after: 1380, paying: false })
     })
     it('a database that cannot answer is 503 "unavailable": the chat lets the question through', async () => {
       for (const answer of [{ data: null, error: { message: 'boom' } }, { data: null, error: null }, { data: { allowed: 'yes' }, error: null }]) {

@@ -505,7 +505,6 @@ const zh: Record<string, string> = {
   'New chat': '新对话',
   'Copy article number': '复制商品编号',
   'The assistant is busy right now. Try again in a minute.': '助手现在正忙，请一分钟后重试。',
-  'Too many questions. Try again in a few minutes.': '提问过多，请几分钟后重试。',
   'No connection. Check the network and try again.': '无网络连接，请检查网络后重试。',
   'Premium': '高级 / 真人',
   'With guarantee': '有保障',
@@ -518,7 +517,8 @@ const zh: Record<string, string> = {
   'Check the number or ask the AI assistant.': '请检查编号或询问 AI 助手。',
   'Find in the catalogue': '在目录中查找',
   'Select': '选择',
-  'Question limit reached. Try again in {minutes} min.': '提问次数已达上限。请在 {minutes} 分钟后重试。',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 我本小时的 AI 回复额度已用完！请使用目录搜索或联系客服。您可以在 {minutes} 分钟后再次提问。',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 我本小时的 AI 回复额度已用完！请使用目录搜索或联系客服。',
 }
 
 export default zh

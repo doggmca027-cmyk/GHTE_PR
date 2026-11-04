@@ -505,7 +505,6 @@ const it: Record<string, string> = {
   'New chat': 'Nuova chat',
   'Copy article number': 'Copia il numero dell’articolo',
   'The assistant is busy right now. Try again in a minute.': 'L’assistente è occupato in questo momento. Riprova tra un minuto.',
-  'Too many questions. Try again in a few minutes.': 'Troppe domande. Riprova tra qualche minuto.',
   'No connection. Check the network and try again.': 'Nessuna connessione. Controlla la rete e riprova.',
   'Premium': 'Premium / Reali',
   'With guarantee': 'Con garanzia',
@@ -518,7 +517,8 @@ const it: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Controlla il numero o chiedi all’assistente IA.',
   'Find in the catalogue': 'Trova nel catalogo',
   'Select': 'Seleziona',
-  'Question limit reached. Try again in {minutes} min.': 'Limite di domande raggiunto. Riprova tra {minutes} min.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Il mio limite di risposte AI per quest\'ora è esaurito! Usa la ricerca del catalogo o scrivi al supporto. Puoi chiedermelo di nuovo tra {minutes} min.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Il mio limite di risposte AI per quest\'ora è esaurito! Usa la ricerca del catalogo o scrivi al supporto.',
 }
 
 export default it

@@ -505,7 +505,6 @@ const ja: Record<string, string> = {
   'New chat': '新しいチャット',
   'Copy article number': '商品番号をコピー',
   'The assistant is busy right now. Try again in a minute.': 'アシスタントはただいま混み合っています。1分後にもう一度お試しください。',
-  'Too many questions. Try again in a few minutes.': '質問が多すぎます。数分後にもう一度お試しください。',
   'No connection. Check the network and try again.': '接続がありません。ネットワークを確認してもう一度お試しください。',
   'Premium': 'プレミアム / 本物',
   'With guarantee': '保証付き',
@@ -518,7 +517,8 @@ const ja: Record<string, string> = {
   'Check the number or ask the AI assistant.': '番号を確認するか、AIアシスタントに聞いてください。',
   'Find in the catalogue': 'カタログで探す',
   'Select': '選択',
-  'Question limit reached. Try again in {minutes} min.': '質問の上限に達しました。{minutes} 分後にもう一度お試しください。',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 この1時間の AI 返信の上限に達しました！カタログ検索をご利用いただくか、サポートへご連絡ください。{minutes} 分後にもう一度ご質問いただけます。',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 この1時間の AI 返信の上限に達しました！カタログ検索をご利用いただくか、サポートへご連絡ください。',
 }
 
 export default ja

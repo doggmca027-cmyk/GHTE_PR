@@ -154,7 +154,7 @@ describe('the AI assistant', () => {
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('No connection. Check the network and try again.')
     await click(buttonWith('Try again'))
     await flush(10)
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Too many questions. Try again in a few minutes.')
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.')
     expect(buttonWith('Try again')).toBeUndefined() // waiting is the only thing left to do
     await typeInto(host.querySelector('input'), 'cheap followers please')
     await click(byLabel('Send'))

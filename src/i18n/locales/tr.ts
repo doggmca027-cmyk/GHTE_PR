@@ -505,7 +505,6 @@ const tr: Record<string, string> = {
   'New chat': 'Yeni sohbet',
   'Copy article number': 'Ürün numarasını kopyala',
   'The assistant is busy right now. Try again in a minute.': 'Asistan şu anda meşgul. Bir dakika sonra tekrar deneyin.',
-  'Too many questions. Try again in a few minutes.': 'Çok fazla soru. Birkaç dakika sonra tekrar deneyin.',
   'No connection. Check the network and try again.': 'Bağlantı yok. Ağı kontrol edip tekrar deneyin.',
   'Premium': 'Premium / Gerçek',
   'With guarantee': 'Garantili',
@@ -518,7 +517,8 @@ const tr: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Numarayı kontrol edin veya yapay zeka asistanına sorun.',
   'Find in the catalogue': 'Katalogda bul',
   'Select': 'Seç',
-  'Question limit reached. Try again in {minutes} min.': 'Soru sınırına ulaşıldı. {minutes} dk sonra tekrar deneyin.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Bu saat için yapay zekâ yanıt sınırım doldu! Lütfen katalog aramasını kullanın veya destekle iletişime geçin. Bana {minutes} dk sonra tekrar sorabilirsiniz.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Bu saat için yapay zekâ yanıt sınırım doldu! Lütfen katalog aramasını kullanın veya destekle iletişime geçin.',
 }
 
 export default tr

@@ -505,7 +505,6 @@ const ar: Record<string, string> = {
   'New chat': 'محادثة جديدة',
   'Copy article number': 'نسخ رقم المنتج',
   'The assistant is busy right now. Try again in a minute.': 'المساعد مشغول الآن. حاول مرة أخرى بعد دقيقة.',
-  'Too many questions. Try again in a few minutes.': 'أسئلة كثيرة جدًا. حاول مرة أخرى بعد بضع دقائق.',
   'No connection. Check the network and try again.': 'لا يوجد اتصال. تحقق من الشبكة وحاول مرة أخرى.',
   'Premium': 'مميز / حقيقي',
   'With guarantee': 'مع ضمان',
@@ -518,7 +517,8 @@ const ar: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'تحقق من الرقم أو اسأل مساعد الذكاء الاصطناعي.',
   'Find in the catalogue': 'ابحث في الكتالوج',
   'Select': 'اختيار',
-  'Question limit reached. Try again in {minutes} min.': 'تم بلوغ حد الأسئلة. حاول مرة أخرى بعد {minutes} د.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 انتهى حد ردود الذكاء الاصطناعي لدي لهذه الساعة! يرجى استخدام البحث في الكتالوج أو مراسلة الدعم. يمكنك سؤالي مجددًا بعد {minutes} د.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 انتهى حد ردود الذكاء الاصطناعي لدي لهذه الساعة! يرجى استخدام البحث في الكتالوج أو مراسلة الدعم.',
 }
 
 export default ar

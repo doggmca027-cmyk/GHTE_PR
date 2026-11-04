@@ -88,25 +88,25 @@ describe('the assistant sheet', () => {
   it('tells how long to wait when the server said (in whole minutes, at least one), and offers no retry: waiting is the way', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => limited('1380')))
     await ask()
-    expect(alert()).toContain('Question limit reached. Try again in 23 min.')
-    expect(alert()).not.toContain('Try again in a few minutes')
+    expect(alert()).toContain('🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in 23 min.')
+    expect(alert()).not.toContain('You can ask me again')
     expect([...host.querySelectorAll('button')].some((b) => b.textContent === 'Try again')).toBe(false)
   })
   it('rounds the wait up', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => limited('61')))
     await ask()
-    expect(alert()).toContain('Try again in 2 min.')
+    expect(alert()).toContain('You can ask me again in 2 min.')
   })
   it('says the general thing when the server did not say how long', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => limited()))
     await ask()
-    expect(alert()).toContain('Too many questions. Try again in a few minutes.')
+    expect(alert()).toContain('🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.')
   })
   it('the wait goes away with the next question and with a new chat', async () => {
     let attempt = 0
     vi.stubGlobal('fetch', vi.fn(async () => (++attempt === 1 ? limited('600') : new Response('Here you are.', { status: 200 }))))
     await ask()
-    expect(alert()).toContain('Try again in 10 min.')
+    expect(alert()).toContain('You can ask me again in 10 min.')
     await typeInto(host.querySelector('input'), 'and again')
     await click(byLabel('Send'))
     await flush(10)

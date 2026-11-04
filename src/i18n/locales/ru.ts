@@ -505,7 +505,6 @@ const ru: Record<string, string> = {
   'New chat': 'Новый чат',
   'Copy article number': 'Скопировать артикул',
   'The assistant is busy right now. Try again in a minute.': 'Ассистент сейчас занят. Попробуйте через минуту.',
-  'Too many questions. Try again in a few minutes.': 'Слишком много вопросов. Попробуйте через несколько минут.',
   'No connection. Check the network and try again.': 'Нет соединения. Проверьте сеть и попробуйте снова.',
   'Premium': 'Premium / Живые',
   'With guarantee': 'С гарантией',
@@ -518,7 +517,8 @@ const ru: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Проверьте номер или спросите AI-ассистента.',
   'Find in the catalogue': 'Найти в каталоге',
   'Select': 'Выбрать',
-  'Question limit reached. Try again in {minutes} min.': 'Лимит вопросов исчерпан. Попробуйте снова через {minutes} мин.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Мой лимит ответов нейросети на этот час исчерпан! Пожалуйста, воспользуйтесь удобным поиском по каталогу или напишите в поддержку. Спросить меня снова можно через {minutes} мин.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Мой лимит ответов нейросети на этот час исчерпан! Пожалуйста, воспользуйтесь удобным поиском по каталогу или напишите в поддержку.',
 }
 
 export default ru

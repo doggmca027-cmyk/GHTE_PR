@@ -370,7 +370,7 @@ describe('the chat with the limit and the log', () => {
     expect(res.status).toBe(429)
     expect(res.headers.get('Retry-After')).toBe('1380')
     expect(res.headers.get('Content-Type')).toBe('application/json')
-    expect(await res.json()).toEqual({ error: 'rate_limited', message: 'Question limit reached. Try again in 23 min.', retry_after: 1380 })
+    expect(await res.json()).toEqual({ error: 'rate_limited', message: '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in 23 min.', retry_after: 1380 })
     await settle()
     expect(d.generated).toHaveLength(0)
     expect(d.logs).toHaveLength(0)

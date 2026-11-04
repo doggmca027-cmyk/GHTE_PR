@@ -59,7 +59,7 @@ const json = (status: number, error: string, message: string) =>
 /** 429 from the hourly limit: says how long to wait, in the header (seconds) and in the body, so the screen can tell the customer in their language. */
 function tooMany(retryAfter: number): Response {
   const minutes = Math.max(1, Math.ceil(retryAfter / 60))
-  return new Response(JSON.stringify({ error: 'rate_limited', message: `Question limit reached. Try again in ${minutes} min.`, retry_after: retryAfter }), {
+  return new Response(JSON.stringify({ error: 'rate_limited', message: `🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in ${minutes} min.`, retry_after: retryAfter }), {
     status: 429,
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Retry-After': String(retryAfter) },
   })
@@ -133,7 +133,7 @@ export async function handleChat(req: Request, deps: ChatDeps): Promise<Response
   if (!apiKey || !supabaseUrl || !anonKey) return json(503, 'chat_not_configured', 'The assistant is not available yet.')
 
   const caller = (req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown').split(',')[0].trim()
-  if (!deps.allow(caller)) return json(429, 'rate_limited', 'Too many questions. Try again in a few minutes.')
+  if (!deps.allow(caller)) return json(429, 'rate_limited', '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.')
 
   const declared = Number(req.headers.get('content-length'))
   if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return json(413, 'too_large', 'The request is too large.')

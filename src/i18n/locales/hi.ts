@@ -505,7 +505,6 @@ const hi: Record<string, string> = {
   'New chat': 'नई चैट',
   'Copy article number': 'आर्टिकल नंबर कॉपी करें',
   'The assistant is busy right now. Try again in a minute.': 'सहायक अभी व्यस्त है। एक मिनट बाद फिर कोशिश करें।',
-  'Too many questions. Try again in a few minutes.': 'बहुत ज़्यादा सवाल। कुछ मिनट बाद फिर कोशिश करें।',
   'No connection. Check the network and try again.': 'कनेक्शन नहीं है। नेटवर्क जाँचें और फिर कोशिश करें।',
   'Premium': 'प्रीमियम / असली',
   'With guarantee': 'गारंटी के साथ',
@@ -518,7 +517,8 @@ const hi: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'नंबर जाँचें या AI सहायक से पूछें।',
   'Find in the catalogue': 'कैटलॉग में खोजें',
   'Select': 'चुनें',
-  'Question limit reached. Try again in {minutes} min.': 'प्रश्नों की सीमा पूरी हो गई। {minutes} मिनट बाद फिर कोशिश करें।',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 इस घंटे के लिए मेरी AI उत्तर सीमा समाप्त हो गई है! कृपया कैटलॉग खोज का उपयोग करें या सहायता को लिखें। आप {minutes} मिनट बाद फिर पूछ सकते हैं।',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 इस घंटे के लिए मेरी AI उत्तर सीमा समाप्त हो गई है! कृपया कैटलॉग खोज का उपयोग करें या सहायता को लिखें।',
 }
 
 export default hi

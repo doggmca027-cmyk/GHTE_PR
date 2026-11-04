@@ -9,10 +9,12 @@
 //            customer's token (verified here, with the project's JWT secret) or, for a guest, a keyed hash of the IP address.
 //   * log    stores what was asked, what the assistant understood and which services it recommended (see _shared/chat-gate.ts for what is kept).
 // Neither action is ever shown to a customer: if this function is down, the chat answers anyway (api/_lib/chat-gate.ts lets the question through).
-// Secrets: CHAT_GATE_SECRET (32+ characters), JWT_SECRET; optional AI_CHAT_HOURLY_LIMIT. Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
+// The limit follows the money: 20 an hour for a guest or an account that never paid, 100 for a customer with funds on the balance or any completed
+// ledger line (chat_rate_hit decides in the same call that counts the question).
+// Secrets: CHAT_GATE_SECRET (32+ characters), JWT_SECRET; optional AI_CHAT_HOURLY_LIMIT, AI_CHAT_PAYING_LIMIT. Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { MAX_BODY_BYTES, WINDOW_SECONDS, gateAuthorized, hourlyLimit, identify, parseGateRequest } from '../_shared/chat-gate.ts'
+import { MAX_BODY_BYTES, WINDOW_SECONDS, gateAuthorized, hourlyLimit, identifyCaller, parseGateRequest, payingLimit } from '../_shared/chat-gate.ts'
 import { corsHeaders, fail, instrument, json, readBoundedText } from '../_shared/http.ts'
 
 Deno.serve(instrument('chat-gate', async (req: Request, { log }): Promise<Response> => {
@@ -39,19 +41,22 @@ Deno.serve(instrument('chat-gate', async (req: Request, { log }): Promise<Respon
   const request = parseGateRequest(body)
   if (!request) return fail(400, 'invalid_input', 'Unknown action or an empty question.')
 
-  const identifier = await identify(request, { jwtSecret: Deno.env.get('JWT_SECRET') ?? Deno.env.get('SUPABASE_JWT_SECRET'), gateSecret })
+  const { identifier, userId } = await identifyCaller(request, { jwtSecret: Deno.env.get('JWT_SECRET') ?? Deno.env.get('SUPABASE_JWT_SECRET'), gateSecret })
   const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
   if (request.action === 'check') {
+    // one call counts the question and picks the limit: a customer with money on the balance, or any completed ledger line, gets the paying hour
     const limit = hourlyLimit(Deno.env.get('AI_CHAT_HOURLY_LIMIT'))
-    const { data, error } = await db.rpc('chat_rate_hit', { p_identifier: identifier, p_limit: limit, p_window_seconds: WINDOW_SECONDS })
-    const verdict = data as { allowed?: unknown; limit?: unknown; remaining?: unknown; retry_after?: unknown } | null
+    const { data, error } = await db.rpc('chat_rate_hit', {
+      p_identifier: identifier, p_limit: limit, p_window_seconds: WINDOW_SECONDS, p_user_id: userId, p_paying_limit: userId ? payingLimit(Deno.env.get('AI_CHAT_PAYING_LIMIT'), limit) : null,
+    })
+    const verdict = data as { allowed?: unknown; limit?: unknown; remaining?: unknown; retry_after?: unknown; paying?: unknown } | null
     if (error || typeof verdict?.allowed !== 'boolean') {
       log.error('the limit could not be checked', { error_code: 'rate_check_failed' })
       return fail(503, 'unavailable', 'The limit could not be checked.')
     }
-    if (!verdict.allowed) log.info('question limit reached', { kind: identifier.split(':')[0] }) // the kind of caller only, never who
-    return json({ ok: true, allowed: verdict.allowed, limit: verdict.limit, remaining: verdict.remaining, retry_after: verdict.retry_after })
+    if (!verdict.allowed) log.info('question limit reached', { kind: identifier.split(':')[0], paying: verdict.paying === true }) // the kind of caller only, never who
+    return json({ ok: true, allowed: verdict.allowed, limit: verdict.limit, remaining: verdict.remaining, retry_after: verdict.retry_after, paying: verdict.paying === true })
   }
 
   const { entry } = request

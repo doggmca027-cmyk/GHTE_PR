@@ -11,6 +11,8 @@ import { timingSafeEqual } from './telegram.ts'
 /** The window of the limit, and how many questions fit into it (AI_CHAT_HOURLY_LIMIT overrides the count). */
 export const WINDOW_SECONDS = 3_600
 export const DEFAULT_HOURLY_LIMIT = 20
+/** The hour of a paying customer (money on the balance, or a completed ledger line): AI_CHAT_PAYING_LIMIT overrides it. */
+export const DEFAULT_PAYING_LIMIT = 100
 export const MAX_HOURLY_LIMIT = 1_000
 export const MAX_BODY_BYTES = 8_192
 /** A shorter secret is not a secret: the function refuses to work with it. */
@@ -23,6 +25,13 @@ const encoder = new TextEncoder()
 export function hourlyLimit(raw: string | undefined | null): number {
   const n = Number(raw)
   return raw && Number.isInteger(n) && n >= 1 && n <= MAX_HOURLY_LIMIT ? n : DEFAULT_HOURLY_LIMIT
+}
+
+/** The questions per hour of a paying customer: the setting when it is a whole number from 1 to 1000, else 100. Never below the ordinary limit. */
+export function payingLimit(raw: string | undefined | null, ordinary: number = DEFAULT_HOURLY_LIMIT): number {
+  const n = Number(raw)
+  const value = raw && Number.isInteger(n) && n >= 1 && n <= MAX_HOURLY_LIMIT ? n : DEFAULT_PAYING_LIMIT
+  return Math.max(value, ordinary)
 }
 
 /** The caller sent the shared secret (constant time). An unset or short secret matches nothing. */
@@ -165,13 +174,18 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *   ip:<hash>    a guest: 64 bits of HMAC-SHA256(secret, address), so the address itself is neither stored nor recoverable
  */
 export async function identify(who: { ip: string; token: string | null }, secrets: { jwtSecret?: string; gateSecret: string }): Promise<string> {
+  return (await identifyCaller(who, secrets)).identifier
+}
+
+/** identify(), and the account id of a signed-in customer (null for a guest): the database uses it to tell a paying customer from one who has not paid. */
+export async function identifyCaller(who: { ip: string; token: string | null }, secrets: { jwtSecret?: string; gateSecret: string }): Promise<{ identifier: string; userId: string | null }> {
   if (who.token && secrets.jwtSecret) {
     const claims = await verifyJwt(who.token, secrets.jwtSecret)
-    if (claims) {
+    if (claims && UUID_RE.test(claims.sub)) {
+      const userId = claims.sub.toLowerCase()
       const telegram = Number(claims.telegram_id)
-      if (Number.isSafeInteger(telegram) && telegram > 0) return `tg:${telegram}`
-      if (UUID_RE.test(claims.sub)) return `user:${claims.sub.toLowerCase()}`
+      return { identifier: Number.isSafeInteger(telegram) && telegram > 0 ? `tg:${telegram}` : `user:${userId}`, userId }
     }
   }
-  return `ip:${(await hmacHex(secrets.gateSecret, `ip:${who.ip}`)).slice(0, 16)}`
+  return { identifier: `ip:${(await hmacHex(secrets.gateSecret, `ip:${who.ip}`)).slice(0, 16)}`, userId: null }
 }

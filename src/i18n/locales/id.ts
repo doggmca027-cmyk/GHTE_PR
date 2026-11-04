@@ -505,7 +505,6 @@ const id: Record<string, string> = {
   'New chat': 'Obrolan baru',
   'Copy article number': 'Salin nomor artikel',
   'The assistant is busy right now. Try again in a minute.': 'Asisten sedang sibuk. Coba lagi dalam semenit.',
-  'Too many questions. Try again in a few minutes.': 'Terlalu banyak pertanyaan. Coba lagi dalam beberapa menit.',
   'No connection. Check the network and try again.': 'Tidak ada koneksi. Periksa jaringan dan coba lagi.',
   'Premium': 'Premium / Asli',
   'With guarantee': 'Dengan garansi',
@@ -518,7 +517,8 @@ const id: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Periksa nomornya atau tanyakan ke asisten AI.',
   'Find in the catalogue': 'Cari di katalog',
   'Select': 'Pilih',
-  'Question limit reached. Try again in {minutes} min.': 'Batas pertanyaan tercapai. Coba lagi dalam {minutes} menit.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Batas balasan AI saya untuk jam ini sudah habis! Silakan gunakan pencarian katalog atau hubungi dukungan. Anda bisa bertanya lagi dalam {minutes} menit.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Batas balasan AI saya untuk jam ini sudah habis! Silakan gunakan pencarian katalog atau hubungi dukungan.',
 }
 
 export default id

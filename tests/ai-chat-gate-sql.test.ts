@@ -53,7 +53,7 @@ describe('the assistant\'s limit and log (SQL)', () => {
           expect(g!.ok, `${table} ${privilege}`).toBe(false)
         }
       }
-      for (const fn of ['chat_rate_hit(text, integer, integer)', 'purge_ai_chat_logs(integer)', 'record_ai_chat_log(text, text, jsonb, text[], text[], integer, integer, text)']) {
+      for (const fn of ['chat_rate_hit(text, integer, integer, uuid, integer)', 'purge_ai_chat_logs(integer)', 'record_ai_chat_log(text, text, jsonb, text[], text[], integer, integer, text)']) {
         const [g] = await q<{ anon: boolean; authed: boolean; service: boolean; definer: boolean; pinned: boolean }>(`select
           has_function_privilege('anon', '${fn}', 'execute') anon, has_function_privilege('authenticated', '${fn}', 'execute') authed,
           has_function_privilege('service_role', '${fn}', 'execute') service,
@@ -81,9 +81,9 @@ describe('the assistant\'s limit and log (SQL)', () => {
 
   describe('the limit', () => {
     it('lets a person ask up to the limit in the window and says how many places are left', async () => {
-      expect(await hit(TG)).toEqual({ allowed: true, limit: 3, remaining: 2, retry_after: 0 })
-      expect(await hit(TG)).toEqual({ allowed: true, limit: 3, remaining: 1, retry_after: 0 })
-      expect(await hit(TG)).toEqual({ allowed: true, limit: 3, remaining: 0, retry_after: 0 })
+      expect(await hit(TG)).toEqual({ allowed: true, limit: 3, remaining: 2, retry_after: 0, paying: false })
+      expect(await hit(TG)).toEqual({ allowed: true, limit: 3, remaining: 1, retry_after: 0, paying: false })
+      expect(await hit(TG)).toEqual({ allowed: true, limit: 3, remaining: 0, retry_after: 0, paying: false })
       const blocked = await hit(TG)
       expect(blocked).toMatchObject({ allowed: false, limit: 3, remaining: 0 })
       expect(blocked.retry_after).toBeGreaterThanOrEqual(3598)
@@ -130,6 +130,71 @@ describe('the assistant\'s limit and log (SQL)', () => {
       await expect(q('select chat_rate_hit($1, null, 3600)', [TG])).rejects.toThrow(/invalid_parameter_value/)
       await expect(q('select chat_rate_hit($1, 3, null)', [TG])).rejects.toThrow(/invalid_parameter_value/)
     })
+    describe('the limit follows the money', () => {
+      const user = async (telegram: number) => (await q<{ id: string }>('insert into users (telegram_id) values ($1) returning id', [telegram]))[0]!.id
+      const paying = async (id: string, identifier: string, limit = 3, payingLimit = 6) =>
+        (await q<{ r: { allowed: boolean; limit: number; remaining: number; paying: boolean } }>('select chat_rate_hit($1, $2, 3600, $3::uuid, $4) r', [identifier, limit, id, payingLimit]))[0]!.r
+      const fund = (id: string, amount: number) => q(`select process_wallet_transaction($1::uuid, 'deposit', $2::numeric, null, 'fund', $3)`, [id, amount, `fund-${id}-${amount}`])
+
+      it('an account that never paid, and a guest, keep the ordinary limit', async () => {
+        const id = await user(881_001)
+        expect(await paying(id, 'tg:881001')).toMatchObject({ allowed: true, limit: 3, paying: false })
+        for (let i = 0; i < 2; i++) await paying(id, 'tg:881001')
+        expect((await paying(id, 'tg:881001')).allowed).toBe(false) // the 4th question
+        expect(await hit(GUEST)).toMatchObject({ limit: 3 }) // no user id: the plain three-argument call
+      })
+      it('money on the balance gives the larger hour', async () => {
+        const id = await user(881_002)
+        await fund(id, 5)
+        const first = await paying(id, 'tg:881002')
+        expect(first).toMatchObject({ allowed: true, limit: 6, remaining: 5, paying: true })
+        for (let i = 0; i < 5; i++) expect((await paying(id, 'tg:881002')).allowed, `question ${i + 2}`).toBe(true)
+        expect((await paying(id, 'tg:881002')).allowed).toBe(false) // the 7th
+      })
+      it('a customer who spent everything is still a customer: any completed ledger line counts', async () => {
+        const id = await user(881_003)
+        await fund(id, 2)
+        await db.query(`update wallets set balance = 0 where user_id = $1`, [id]).catch(() => undefined) // the ledger forbids it; the balance may stay
+        const wallet = Number((await q<{ b: string }>('select balance b from wallets where user_id = $1', [id]))[0]!.b)
+        expect(wallet).toBeGreaterThanOrEqual(0)
+        expect(await paying(id, 'tg:881003')).toMatchObject({ limit: 6, paying: true })
+      })
+      it('a pending credit is not money: only completed lines and a positive balance count', async () => {
+        const id = await user(881_004)
+        await q(`select process_wallet_transaction($1::uuid, 'deposit', 3::numeric, null, 'pending', $2, 'pending')`, [id, `p-${id}`])
+        expect(await paying(id, 'tg:881004')).toMatchObject({ limit: 3, paying: false })
+      })
+      it('the larger hour is never smaller than the ordinary one', async () => {
+        const id = await user(881_005)
+        await fund(id, 5)
+        expect(await paying(id, 'tg:881005', 10, 4)).toMatchObject({ limit: 10, paying: true })
+      })
+      it('without a paying limit, or for an unknown user, nothing changes', async () => {
+        const id = await user(881_006)
+        await fund(id, 5)
+        expect((await q<{ r: { limit: number } }>('select chat_rate_hit($1, 3, 3600, $2::uuid, null) r', ['tg:881006', id]))[0]!.r.limit).toBe(3)
+        expect(await paying('00000000-0000-4000-8000-00000000beef', 'tg:881007')).toMatchObject({ limit: 3, paying: false })
+      })
+      it('a paying limit that is not positive is refused', async () => {
+        await expect(q('select chat_rate_hit($1, 3, 3600, null, 0)', ['tg:881008'])).rejects.toThrow(/invalid_parameter_value/)
+      })
+      it('once the customer pays the same hour widens at once: the questions already asked count against the new limit', async () => {
+        const id = await user(881_009)
+        for (let i = 0; i < 3; i++) await paying(id, 'tg:881009')
+        expect((await paying(id, 'tg:881009')).allowed).toBe(false)
+        await fund(id, 5)
+        expect(await paying(id, 'tg:881009')).toMatchObject({ allowed: true, limit: 6, remaining: 2, paying: true })
+      })
+      it('the retry hint of a refused paying customer is for their own hour', async () => {
+        const id = await user(881_010)
+        await fund(id, 5)
+        for (let i = 0; i < 6; i++) await paying(id, 'tg:881010')
+        const r = (await q<{ r: { allowed: boolean; retry_after: number } }>('select chat_rate_hit($1, 3, 3600, $2::uuid, 6) r', ['tg:881010', id]))[0]!.r
+        expect(r.allowed).toBe(false)
+        expect(r.retry_after).toBeGreaterThan(3590)
+      })
+    })
+
     it('twenty an hour, as the chat asks for it', async () => {
       for (let i = 0; i < 20; i++) expect((await hit(TG, 20)).allowed, `question ${i + 1}`).toBe(true)
       expect((await hit(TG, 20)).allowed).toBe(false)

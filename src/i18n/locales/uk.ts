@@ -505,7 +505,6 @@ const uk: Record<string, string> = {
   'New chat': 'Новий чат',
   'Copy article number': 'Скопіювати артикул',
   'The assistant is busy right now. Try again in a minute.': 'Асистент зараз зайнятий. Спробуйте за хвилину.',
-  'Too many questions. Try again in a few minutes.': 'Забагато запитань. Спробуйте за кілька хвилин.',
   'No connection. Check the network and try again.': 'Немає з’єднання. Перевірте мережу й спробуйте ще раз.',
   'Premium': 'Premium / Живі',
   'With guarantee': 'З гарантією',
@@ -518,7 +517,8 @@ const uk: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Перевірте номер або запитайте AI-асистента.',
   'Find in the catalogue': 'Знайти в каталозі',
   'Select': 'Обрати',
-  'Question limit reached. Try again in {minutes} min.': 'Ліміт запитань вичерпано. Спробуйте знову через {minutes} хв.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Мій ліміт відповідей нейромережі на цю годину вичерпано! Будь ласка, скористайтеся зручним пошуком за каталогом або напишіть у підтримку. Запитати мене знову можна за {minutes} хв.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Мій ліміт відповідей нейромережі на цю годину вичерпано! Будь ласка, скористайтеся зручним пошуком за каталогом або напишіть у підтримку.',
 }
 
 export default uk

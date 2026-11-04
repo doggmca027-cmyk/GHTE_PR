@@ -505,7 +505,6 @@ const vi: Record<string, string> = {
   'New chat': 'Cuộc trò chuyện mới',
   'Copy article number': 'Sao chép mã sản phẩm',
   'The assistant is busy right now. Try again in a minute.': 'Trợ lý đang bận. Hãy thử lại sau một phút.',
-  'Too many questions. Try again in a few minutes.': 'Quá nhiều câu hỏi. Hãy thử lại sau vài phút.',
   'No connection. Check the network and try again.': 'Không có kết nối. Hãy kiểm tra mạng và thử lại.',
   'Premium': 'Premium / Thật',
   'With guarantee': 'Có bảo hành',
@@ -518,7 +517,8 @@ const vi: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Hãy kiểm tra mã hoặc hỏi trợ lý AI.',
   'Find in the catalogue': 'Tìm trong danh mục',
   'Select': 'Chọn',
-  'Question limit reached. Try again in {minutes} min.': 'Đã hết giới hạn câu hỏi. Hãy thử lại sau {minutes} phút.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Giới hạn trả lời AI của tôi trong giờ này đã hết! Vui lòng dùng tìm kiếm trong danh mục hoặc nhắn cho hỗ trợ. Bạn có thể hỏi lại sau {minutes} phút.',
+  '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Giới hạn trả lời AI của tôi trong giờ này đã hết! Vui lòng dùng tìm kiếm trong danh mục hoặc nhắn cho hỗ trợ.',
 }
 
 export default vi

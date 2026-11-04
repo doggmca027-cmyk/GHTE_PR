@@ -14,7 +14,7 @@ const SUGGESTIONS = [tr('Cheapest Instagram followers'), tr('Real Instagram foll
 
 const FAILURES: Record<ChatFailure, string> = {
   busy: tr('The assistant is busy right now. Try again in a minute.'),
-  rate_limited: tr('Too many questions. Try again in a few minutes.'),
+  rate_limited: tr('🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.'),
   offline: tr('No connection. Check the network and try again.'),
 }
 
@@ -219,7 +219,7 @@ export function AiChat({ session, onFindArticle, onSelectService }: { session: A
           {failure && (
             <div role="alert" className="flex items-start gap-2.5 rounded-2xl bg-rose-50 p-3.5 text-[13px] font-medium text-rose-700">
               <TriangleAlert size={18} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
-              <p className="flex-1">{failure === 'rate_limited' && waitSeconds !== null ? t('Question limit reached. Try again in {minutes} min.', { minutes: Math.max(1, Math.ceil(waitSeconds / 60)) }) : t(FAILURES[failure])}</p>
+              <p className="flex-1">{failure === 'rate_limited' && waitSeconds !== null ? t('🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.', { minutes: Math.max(1, Math.ceil(waitSeconds / 60)) }) : t(FAILURES[failure])}</p>
               {failure !== 'rate_limited' && messages.at(-1)?.role === 'user' && (
                 <button type="button" onClick={retry} className="shrink-0 font-bold underline">{t('Try again')}</button>
               )}
