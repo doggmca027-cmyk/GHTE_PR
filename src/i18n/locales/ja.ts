@@ -517,6 +517,7 @@ const ja: Record<string, string> = {
   'No service with this article number': 'この商品番号のサービスはありません',
   'Check the number or ask the AI assistant.': '番号を確認するか、AIアシスタントに聞いてください。',
   'Find in the catalogue': 'カタログで探す',
+  'Select': '選択',
 }
 
 export default ja

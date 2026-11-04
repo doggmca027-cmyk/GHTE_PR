@@ -517,6 +517,7 @@ const tr: Record<string, string> = {
   'No service with this article number': 'Bu ürün numarasına sahip hizmet yok',
   'Check the number or ask the AI assistant.': 'Numarayı kontrol edin veya yapay zeka asistanına sorun.',
   'Find in the catalogue': 'Katalogda bul',
+  'Select': 'Seç',
 }
 
 export default tr

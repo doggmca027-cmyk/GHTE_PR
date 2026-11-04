@@ -68,7 +68,7 @@ describe('looking an article up', () => {
     vi.stubGlobal('fetch', vi.fn(fakeFetch))
     vi.doMock('../src/context/AuthContext', () => ({ useAuth: () => ({ refreshWallet: async () => {}, applyWallet: () => {} }) }))
     vi.doMock('../src/lib/analytics-client', () => ({ track: () => {}, bindAnalytics: () => {} }))
-    vi.doMock('../src/components/services/OrderModal', () => ({ OrderModal: (p: { service: { name: string }; platform: string; platformName?: string }) => createElement('div', { role: 'dialog', 'data-platform': p.platform, 'data-platform-name': p.platformName }, `order ${p.service.name}`) }))
+    vi.doMock('../src/components/services/OrderModal', () => ({ OrderModal: (p: { service: { name: string }; platform: string; platformName?: string; onClose: () => void }) => createElement('div', { role: 'dialog', 'data-platform': p.platform, 'data-platform-name': p.platformName }, `order ${p.service.name}`, createElement('button', { type: 'button', 'aria-label': 'Close order', onClick: p.onClose }, 'x')) }))
     ScreenModule = await import('../src/components/services/ServicesScreen')
     requests = []
     skuAnswer = (sku) => found(sku)
@@ -176,6 +176,39 @@ describe('looking an article up', () => {
     await click(buttonWith('Retry'), 400)
     expect(titles()).toEqual([`Instagram Followers (${SKU})`])
     expect(skuRequests()).toHaveLength(2)
+  })
+
+  it('"Select" on a card of the assistant opens the order form on the article by itself, on the platform of the card, once', async () => {
+    await mount({ lookupRequest: { sku: SKU, nonce: 1, open: true } })
+    await wait(400)
+    const dialog = host.querySelector('[role="dialog"]')!
+    expect(dialog.textContent).toContain(SKU)
+    expect(dialog.getAttribute('data-platform')).toBe('instagram')
+    expect(dialog.getAttribute('data-platform-name')).toBe('Instagram')
+    expect(skuRequests()).toHaveLength(1)
+    // the form is closed: the card stays in the list under the box, and neither closing it nor the screen drawing again opens it a second time
+    await click(host.querySelector('[aria-label="Close order"]'))
+    expect(host.querySelector('[role="dialog"]')).toBeNull()
+    expect(titles()).toEqual([`Instagram Followers (${SKU})`])
+    await mount({ lookupRequest: { sku: SKU, nonce: 1, open: true } })
+    await wait(50)
+    expect(host.querySelector('[role="dialog"]')).toBeNull()
+    expect(skuRequests()).toHaveLength(1)
+  })
+
+  it('an article only sent to the search (no "open") shows the card and waits for a tap', async () => {
+    await mount({ lookupRequest: { sku: SKU, nonce: 1 } })
+    await wait(400)
+    expect(host.querySelector('[role="dialog"]')).toBeNull()
+    expect(titles()).toEqual([`Instagram Followers (${SKU})`])
+  })
+
+  it('"Select" on an article nobody has opens nothing and says so', async () => {
+    skuAnswer = () => json([])
+    await mount({ lookupRequest: { sku: 'IG-FOL-STD-ROOT00000', nonce: 1, open: true } })
+    await wait(400)
+    expect(host.querySelector('[role="dialog"]')).toBeNull()
+    expect(host.textContent).toContain('No service with this article number')
   })
 
   it('an article the assistant sent starts the catalogue at the top with it in the box; a newer request replaces it, another screen forgets it', async () => {

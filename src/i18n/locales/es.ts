@@ -517,6 +517,7 @@ const es: Record<string, string> = {
   'No service with this article number': 'No hay ningún servicio con este número de artículo',
   'Check the number or ask the AI assistant.': 'Comprueba el número o pregunta al asistente de IA.',
   'Find in the catalogue': 'Buscar en el catálogo',
+  'Select': 'Seleccionar',
 }
 
 export default es

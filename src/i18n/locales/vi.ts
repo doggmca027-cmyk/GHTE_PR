@@ -517,6 +517,7 @@ const vi: Record<string, string> = {
   'No service with this article number': 'Không có dịch vụ với mã sản phẩm này',
   'Check the number or ask the AI assistant.': 'Hãy kiểm tra mã hoặc hỏi trợ lý AI.',
   'Find in the catalogue': 'Tìm trong danh mục',
+  'Select': 'Chọn',
 }
 
 export default vi

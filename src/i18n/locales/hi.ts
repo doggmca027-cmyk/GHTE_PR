@@ -517,6 +517,7 @@ const hi: Record<string, string> = {
   'No service with this article number': 'इस आर्टिकल नंबर की कोई सेवा नहीं है',
   'Check the number or ask the AI assistant.': 'नंबर जाँचें या AI सहायक से पूछें।',
   'Find in the catalogue': 'कैटलॉग में खोजें',
+  'Select': 'चुनें',
 }
 
 export default hi

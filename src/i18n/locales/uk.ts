@@ -517,6 +517,7 @@ const uk: Record<string, string> = {
   'No service with this article number': 'Послуги з таким артикулом немає',
   'Check the number or ask the AI assistant.': 'Перевірте номер або запитайте AI-асистента.',
   'Find in the catalogue': 'Знайти в каталозі',
+  'Select': 'Обрати',
 }
 
 export default uk

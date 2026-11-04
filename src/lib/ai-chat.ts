@@ -1,14 +1,40 @@
 // The support assistant, as the browser sees it: what is sent to /api/chat (api/chat.ts), how the streamed answer is read, and how an answer is cut into
 // pieces so that every article number (SKU) in it can be copied with one tap.
+import type { ChatCard } from '../../api/_lib/chat-rag'
 import { SKU_PATTERN } from '@/lib/service-search'
+
+export type { ChatCard }
 
 /** The server takes up to 12 messages of up to 1000 characters (api/_lib/chat-handler.ts); the last one is the customer's. */
 export const MAX_MESSAGES = 12
 export const MAX_MESSAGE_CHARS = 1000
+/** An answer shows at most this many cards (the server stops at the same number). */
+const MAX_CARDS = 5
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+}
+
+/** A message on the screen: what was said, and for an answer the services it recommended, as cards. Only `role` and `content` go to the server. */
+export interface ChatBubble extends ChatMessage {
+  cards?: ChatCard[]
+}
+
+const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+
+/** A card as the server sends it, or null: the screen shows only what has the shape it expects (a number is a number, a flag is a flag). */
+export function parseCard(raw: unknown): ChatCard | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const c = raw as Record<string, unknown>
+  if (typeof c.sku !== 'string' || c.sku === '' || typeof c.name !== 'string' || typeof c.category !== 'string' || typeof c.platform !== 'string') return null
+  if (!isNumber(c.price) || c.price < 0 || !isNumber(c.min) || !isNumber(c.max)) return null
+  if (typeof c.refill !== 'boolean' || typeof c.dripfeed !== 'boolean' || (c.role !== 'main' && c.role !== 'addon')) return null
+  return {
+    sku: c.sku, name: c.name, price: c.price, category: c.category, platform: c.platform, min: c.min, max: c.max, refill: c.refill, dripfeed: c.dripfeed, role: c.role,
+    ...(isNumber(c.refillDays) ? { refillDays: c.refillDays } : {}),
+    ...(c.lifetime === true ? { lifetime: true as const } : {}),
+  }
 }
 
 /**
@@ -85,12 +111,15 @@ export async function askAssistant(
   onText: (soFar: string) => void,
   signal?: AbortSignal,
   fetcher: typeof fetch = (...args) => fetch(...args),
+  /** `onCards`: the services the assistant recommended, as they arrive (the whole list so far each time). */
+  extras: { onCards?: (cards: ChatCard[]) => void } = {},
 ): Promise<string> {
   let res: Response
   try {
     res = await fetcher('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // asking for ndjson is asking for cards; a server that does not know it answers with plain text, which is read as before
+      headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
       body: JSON.stringify({ messages: requestMessages(history) }),
       signal,
     })
@@ -101,30 +130,70 @@ export async function askAssistant(
   if (res.status === 429) throw new ChatError('rate_limited')
   if (!res.ok || !res.body) throw new ChatError('busy')
 
+  const framed = (res.headers.get('Content-Type') ?? '').includes('application/x-ndjson')
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let text = ''
+  let cards: ChatCard[] = []
+  let pending = '' // the end of a line that has not been completed yet
+
+  /** One line of a framed answer: a piece of text, a card, or the end. A line that is not JSON, or says something unknown, is skipped. */
+  const line = (raw: string) => {
+    let event: { t?: unknown; d?: unknown; c?: unknown }
+    try {
+      event = JSON.parse(raw) as typeof event
+    } catch {
+      return
+    }
+    if (event.t === 'text' && typeof event.d === 'string') {
+      text += event.d
+      onText(text)
+    } else if (event.t === 'card') {
+      const card = parseCard(event.c)
+      if (card && cards.length < MAX_CARDS && !cards.some((c) => c.sku === card.sku)) {
+        cards = [...cards, card]
+        extras.onCards?.(cards)
+      }
+    }
+  }
+  const take = (chunk: string) => {
+    if (!framed) { text += chunk; onText(text); return }
+    pending += chunk
+    const lines = pending.split('\n')
+    pending = lines.pop() ?? ''
+    for (const l of lines) if (l.trim() !== '') line(l)
+  }
+
   try {
     for (;;) {
       const { value, done } = await reader.read()
       if (done) break
-      text += decoder.decode(value, { stream: true })
-      onText(text)
+      take(decoder.decode(value, { stream: true }))
     }
   } catch (e) {
     if (signal?.aborted) throw e
-    if (text.trim() === '') throw new ChatError('offline')
+    if (text.trim() === '' && cards.length === 0) throw new ChatError('offline')
     return text // the connection broke in the middle of an answer: what was written is shown
   }
-  text += decoder.decode()
-  if (text.trim() === '') throw new ChatError('busy')
-  onText(text)
+  const rest = decoder.decode()
+  if (framed) {
+    take(rest)
+    if (pending.trim() !== '') line(pending)
+  } else {
+    text += rest
+  }
+  if (text.trim() === '' && cards.length === 0) throw new ChatError('busy')
+  if (!framed) onText(text)
   return text
 }
 
 /** The development mock (no server behind the app): a fixed answer in the shape of a real one. */
-export async function mockAssistant(onText: (soFar: string) => void): Promise<string> {
+export async function mockAssistant(onText: (soFar: string) => void, onCards?: (cards: ChatCard[]) => void): Promise<string> {
   const text = 'Here is a service that fits (mock answer):\n\n**IG-FOL-STD-ROOT89336** — Instagram Followers, $0.9828 per 1000, 30 days refill.'
   onText(text)
+  onCards?.([{
+    sku: 'IG-FOL-STD-ROOT89336', name: 'Instagram Followers [Refill: 30 Days]', price: 0.9828, category: 'Instagram Followers', platform: 'instagram',
+    min: 50, max: 200_000, refill: true, refillDays: 30, dripfeed: false, role: 'main',
+  }])
   return text
 }

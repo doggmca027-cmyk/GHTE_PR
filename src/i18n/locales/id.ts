@@ -517,6 +517,7 @@ const id: Record<string, string> = {
   'No service with this article number': 'Tidak ada layanan dengan nomor artikel ini',
   'Check the number or ask the AI assistant.': 'Periksa nomornya atau tanyakan ke asisten AI.',
   'Find in the catalogue': 'Cari di katalog',
+  'Select': 'Pilih',
 }
 
 export default id

@@ -440,9 +440,13 @@ describe('what is shipped', () => {
   it('is an Edge function that streams with streamText, on the AI SDK and the Google provider', () => {
     const src = read('api/chat.ts')
     expect(src).toContain("runtime: 'edge'")
-    expect(src).toMatch(/streamText\(/)
-    expect(src).toContain('textStream')
+    expect(src).toContain('answerStream(')
     expect(src).toContain("from '@ai-sdk/google'")
+    // the model call itself (streamText, the recommend tool) lives in a module that takes any model, so it is tested with a scripted one
+    const model = read('api/_lib/chat-model.ts')
+    expect(model).toMatch(/streamText\(/)
+    expect(model).toContain('fullStream')
+    expect(model).not.toContain('@ai-sdk/google')
     const pkg = JSON.parse(read('package.json')) as { dependencies: Record<string, string> }
     expect(Object.keys(pkg.dependencies)).toEqual(expect.arrayContaining(['ai', '@ai-sdk/google']))
   })
@@ -451,7 +455,7 @@ describe('what is shipped', () => {
     expect(read('api/chat.ts')).toContain('GOOGLE_GENERATIVE_AI_API_KEY')
   })
   it('never touches what a customer must not see: no provider table, no service role, no costs, no routing columns', () => {
-    for (const file of ['api/chat.ts', 'api/_lib/chat-handler.ts', 'api/_lib/chat-rag.ts']) {
+    for (const file of ['api/chat.ts', 'api/_lib/chat-handler.ts', 'api/_lib/chat-rag.ts', 'api/_lib/chat-model.ts', 'api/_lib/chat-language.ts']) {
       const src = read(file).replace(/\/\/[^\n]*/g, '') // the comments explain the rule, the code must obey it
       expect(src, file).not.toMatch(/provider_services|SERVICE_ROLE|service_role|cost_basis|provider_service_offers|api_key_encrypted|primary_provider|fallback_provider/i)
     }

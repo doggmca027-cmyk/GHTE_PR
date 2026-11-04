@@ -517,6 +517,7 @@ const ar: Record<string, string> = {
   'No service with this article number': 'لا توجد خدمة بهذا الرقم',
   'Check the number or ask the AI assistant.': 'تحقق من الرقم أو اسأل مساعد الذكاء الاصطناعي.',
   'Find in the catalogue': 'ابحث في الكتالوج',
+  'Select': 'اختيار',
 }
 
 export default ar

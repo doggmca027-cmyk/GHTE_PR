@@ -72,9 +72,11 @@ export default function App() {
   // a platform tile of the Home screen: the services tab opens on it
   const [servicesPlatform, setServicesPlatform] = useState<string | null>(null)
   // an article number the assistant sent to the catalogue's search (a new nonce asks again for the same one)
-  const [lookupRequest, setLookupRequest] = useState<{ sku: string; nonce: number } | null>(null)
+  const [lookupRequest, setLookupRequest] = useState<{ sku: string; nonce: number; open?: boolean } | null>(null)
   const changeTab = (next: TabId) => { setServicesPlatform(null); setTab(next) }
   const findArticle = useCallback((sku: string) => { setServicesPlatform(null); setLookupRequest({ sku, nonce: Date.now() }); setTab('services') }, [])
+  // "Select" on a card of the assistant: the same, and the order form opens on the article once it is found
+  const selectService = useCallback((sku: string) => { setServicesPlatform(null); setLookupRequest({ sku, nonce: Date.now(), open: true }); setTab('services') }, [])
   // the request is for the visit that asked: leaving the catalogue forgets it
   useEffect(() => { if (tab !== 'services') setLookupRequest(null) }, [tab])
   // a website guest asked to sign in (header, Order button, a personal tab)
@@ -161,7 +163,7 @@ export default function App() {
       isAdmin={user.isAdmin}
       guest={guest}
       onSignIn={openSignIn}
-      floating={<Suspense fallback={null}><AiChat session={state.session} onFindArticle={findArticle} /></Suspense>}
+      floating={<Suspense fallback={null}><AiChat session={state.session} onFindArticle={findArticle} onSelectService={selectService} /></Suspense>}
     >
       <Suspense fallback={<Loader2 size={28} strokeWidth={2} className="mx-auto mt-16 animate-spin text-brand" aria-label={t('Loading')} />}>
       {tab === 'services' ? (

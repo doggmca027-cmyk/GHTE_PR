@@ -517,6 +517,7 @@ const zh: Record<string, string> = {
   'No service with this article number': '没有此编号的服务',
   'Check the number or ask the AI assistant.': '请检查编号或询问 AI 助手。',
   'Find in the catalogue': '在目录中查找',
+  'Select': '选择',
 }
 
 export default zh

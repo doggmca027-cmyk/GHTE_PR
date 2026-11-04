@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Check, Copy, Loader2, MessageCircle, RotateCcw, Search, Send, Sparkles, TriangleAlert, X } from 'lucide-react'
 import { tr, useT } from '@/i18n'
-import { askAssistant, ChatError, MAX_MESSAGE_CHARS, mockAssistant, splitAnswer, type ChatFailure, type ChatMessage } from '@/lib/ai-chat'
+import { askAssistant, ChatError, MAX_MESSAGE_CHARS, mockAssistant, splitAnswer, type ChatBubble, type ChatCard, type ChatFailure } from '@/lib/ai-chat'
 import { copyText } from '@/lib/clipboard'
 import { haptic } from '@/lib/haptics'
 import { sheetOverlayClass, sheetPanelClass, useWide } from '@/lib/layout-mode'
 import { cn } from '@/lib/utils'
 import type { AuthSession } from '@/services/api/auth'
+import { ChatServiceCard } from './ChatServiceCard'
 
 /** What to ask first: one tap starts the conversation. */
 const SUGGESTIONS = [tr('Cheapest Instagram followers'), tr('Real Instagram followers that do not drop'), tr('TikTok views')]
@@ -18,7 +19,7 @@ const FAILURES: Record<ChatFailure, string> = {
 }
 
 /** An answer of the assistant: text and **bold** as they are, every article number as a chip that copies it. */
-function Answer({ text, copied, onCopy, onFind }: { text: string; copied: string | null; onCopy: (article: string) => void; onFind?: (article: string) => void }) {
+function Answer({ text, copied, onCopy, onFind, carded }: { text: string; copied: string | null; onCopy: (article: string) => void; onFind?: (article: string) => void; carded: ReadonlySet<string> }) {
   const t = useT()
   return (
     <>
@@ -36,7 +37,7 @@ function Answer({ text, copied, onCopy, onFind }: { text: string; copied: string
             {piece.text}
             {copied === piece.text ? <Check size={13} strokeWidth={2.5} aria-hidden="true" /> : <Copy size={13} strokeWidth={2} aria-hidden="true" />}
           </button>
-          {onFind && (
+          {onFind && !carded.has(piece.text) && (
             <button
               type="button"
               onClick={() => onFind(piece.text)}
@@ -58,11 +59,11 @@ function Answer({ text, copied, onCopy, onFind }: { text: string; copied: string
  * so it names real services with their article numbers and prices; an article is copied with one tap and pasted into the catalogue's search.
  * Open to a website guest as well: it reads only what the catalogue shows to everyone.
  */
-export function AiChat({ session, onFindArticle }: { session: AuthSession; onFindArticle?: (article: string) => void }) {
+export function AiChat({ session, onFindArticle, onSelectService }: { session: AuthSession; onFindArticle?: (article: string) => void; onSelectService?: (article: string) => void }) {
   const t = useT()
   const wide = useWide()
   const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatBubble[]>([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ChatFailure | null>(null)
@@ -75,16 +76,19 @@ export function AiChat({ session, onFindArticle }: { session: AuthSession; onFin
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'end' }) }, [messages, failure, open])
 
   /** Asks for the answer to this conversation (it ends with the customer's question) and shows it as it is written. */
-  const ask = useCallback(async (history: ChatMessage[]) => {
+  const ask = useCallback(async (history: ChatBubble[]) => {
     const controller = new AbortController()
     running.current = controller
     setFailure(null)
     setBusy(true)
     setMessages([...history, { role: 'assistant', content: '' }])
-    const show = (soFar: string) => setMessages([...history, { role: 'assistant', content: soFar }])
+    let cards: ChatCard[] = [] // the services the assistant recommends arrive as it finishes
+    let soFar = ''
+    const show = (text: string) => { soFar = text; setMessages([...history, { role: 'assistant', content: text, ...(cards.length > 0 ? { cards } : {}) }]) }
+    const showCards = (list: ChatCard[]) => { cards = list; show(soFar) }
     try {
-      const answer = session.isMock ? await mockAssistant(show) : await askAssistant(history, show, controller.signal)
-      setMessages([...history, { role: 'assistant', content: answer }])
+      const answer = session.isMock ? await mockAssistant(show, showCards) : await askAssistant(history, show, controller.signal, undefined, { onCards: showCards })
+      setMessages([...history, { role: 'assistant', content: answer, ...(cards.length > 0 ? { cards } : {}) }])
     } catch (e) {
       if (controller.signal.aborted) return
       setMessages(history) // the question stays, the empty answer goes
@@ -96,6 +100,13 @@ export function AiChat({ session, onFindArticle }: { session: AuthSession; onFin
       }
     }
   }, [session.isMock])
+
+  /** "Select" on a card: the sheet closes and the order form opens on the article. */
+  const selectCard = (article: string) => {
+    haptic.tap()
+    setOpen(false)
+    onSelectService?.(article)
+  }
 
   const send = (text: string) => {
     const question = text.trim()
@@ -179,17 +190,25 @@ export function AiChat({ session, onFindArticle }: { session: AuthSession; onFin
             </div>
           )}
           {messages.map((m, i) => (
-            <div key={i} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
-              <div className={cn(
-                'max-w-[88%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-[14px] leading-relaxed',
-                m.role === 'user' ? 'bg-brand text-white' : 'bg-surface-sub text-content-primary',
-              )}>
-                {m.role === 'user'
-                  ? m.content
-                  : m.content === ''
-                    ? <Loader2 size={16} strokeWidth={2} className="animate-spin text-brand" aria-label={t('Loading')} />
-                    : <Answer text={m.content} copied={copied} onCopy={(article) => void copyArticle(article)} onFind={onFindArticle && ((article) => { setOpen(false); onFindArticle(article) })} />}
-              </div>
+            <div key={i} className={cn('flex flex-col gap-2', m.role === 'user' ? 'items-end' : 'items-start')}>
+              {/* an answer that is only cards (the model recommended and said nothing) has no empty bubble above them */}
+              {(m.role === 'user' || m.content !== '' || !m.cards?.length) && (
+                <div className={cn(
+                  'max-w-[88%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-[14px] leading-relaxed',
+                  m.role === 'user' ? 'bg-brand text-white' : 'bg-surface-sub text-content-primary',
+                )}>
+                  {m.role === 'user'
+                    ? m.content
+                    : m.content === ''
+                      ? <Loader2 size={16} strokeWidth={2} className="animate-spin text-brand" aria-label={t('Loading')} />
+                      : <Answer text={m.content} copied={copied} carded={new Set(m.cards?.map((c) => c.sku))} onCopy={(article) => void copyArticle(article)} onFind={onFindArticle && ((article) => { setOpen(false); onFindArticle(article) })} />}
+                </div>
+              )}
+              {m.cards && m.cards.length > 0 && (
+                <div className="w-[88%] space-y-2" data-testid="chat-cards">
+                  {m.cards.map((card) => <ChatServiceCard key={card.sku} card={card} onSelect={selectCard} />)}
+                </div>
+              )}
             </div>
           ))}
           {failure && (

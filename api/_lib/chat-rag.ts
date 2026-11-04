@@ -275,12 +275,20 @@ const hasRefill = (s: StorefrontService) => !NO_REFILL.test(s.name) && (s.refill
 /** Safe for the account: a refill or guarantee, or a quality label (HQ, Real, Premium). */
 const isSafe = (s: StorefrontService) => hasRefill(s) || (!NO_REFILL.test(s.name) && HQ.test(s.name))
 
+/** What the card promises as a refill: none, or one with the term its name gives (for life, or a number of days). */
+export function refillTerm(s: StorefrontService): { refill: boolean; lifetime?: true; days?: number } {
+  if (!hasRefill(s)) return { refill: false }
+  if (LIFETIME.test(s.name)) return { refill: true, lifetime: true }
+  const days = DAYS_AFTER.exec(s.name)?.[1] ?? DAYS_BEFORE.exec(s.name)?.[1] ?? DAYS_SHORT.exec(s.name)?.[1]
+  return days === undefined ? { refill: true } : { refill: true, days: Number(days) }
+}
+
 /** The "Гарантия (Refill)" of a line: "нет", or "да" with the term when the name gives one. */
 export function refillLabel(s: StorefrontService): string {
-  if (!hasRefill(s)) return 'нет'
-  if (LIFETIME.test(s.name)) return 'да, пожизненная'
-  const days = DAYS_AFTER.exec(s.name)?.[1] ?? DAYS_BEFORE.exec(s.name)?.[1] ?? DAYS_SHORT.exec(s.name)?.[1]
-  return days ? `да, ${Number(days)} дн.` : 'да'
+  const term = refillTerm(s)
+  if (!term.refill) return 'нет'
+  if (term.lifetime) return 'да, пожизненная'
+  return term.days === undefined ? 'да' : `да, ${term.days} дн.`
 }
 
 const byPrice = (a: StorefrontService, b: StorefrontService) => price(a) - price(b) || a.id.localeCompare(b.id)
@@ -358,6 +366,74 @@ export function serviceLine(s: StorefrontService): string {
   ].join(' | ')
 }
 
+// ---- the cards: services the assistant recommends, shown to the customer as a card with a button ------------------------------------------------
+
+/** The tool the model calls, once for every article it recommends (the chat turns each call into a card). */
+export const RECOMMEND_TOOL = 'recommend_service'
+/** How many cards one answer may show: the rules allow three services and two addons. */
+export const MAX_CARDS = 5
+
+/** What the model said when it called the tool. Only the article is believed: the rest is taken from the catalogue (see cardsFor). */
+export interface Recommendation { sku: string; name?: string; price?: number }
+
+/** A recommended service as the customer sees it: the catalogue's own values, never the model's words. */
+export interface ChatCard {
+  sku: string
+  name: string
+  /** Retail price per 1000, USD. */
+  price: number
+  category: string
+  /** Slug of the platform. */
+  platform: string
+  min: number
+  max: number
+  refill: boolean
+  /** The days of the refill, when the name gives them. */
+  refillDays?: number
+  lifetime?: true
+  dripfeed: boolean
+  /** 'main': a service of the wish; 'addon': what completes the package (views for followers). */
+  role: 'main' | 'addon'
+}
+
+/** An article as it is compared: the model may write it in lower case, in bold or with a full stop. */
+const articleOf = (raw: unknown): string => (typeof raw === 'string' ? raw.replace(/[^A-Za-z0-9-]/g, '').toUpperCase() : '')
+
+export function cardOf(s: StorefrontService, role: ChatCard['role']): ChatCard {
+  const term = refillTerm(s)
+  return {
+    sku: clean(s.sku, 40),
+    name: clean(s.name, 160),
+    price: Number(price(s).toFixed(4)),
+    category: clean(s.category.name, 60),
+    platform: clean(s.category.platform.slug, 40),
+    min: s.min_quantity,
+    max: s.max_quantity,
+    refill: term.refill,
+    ...(term.days !== undefined ? { refillDays: term.days } : {}),
+    ...(term.lifetime ? { lifetime: true as const } : {}),
+    dripfeed: s.dripfeed_available === true,
+    role,
+  }
+}
+
+/**
+ * The cards for what the model recommended: only articles that were in the lists it was given (it cannot make a service up or show another
+ * price), each once, in the order it named them, at most MAX_CARDS. Name and price are the catalogue's, whatever the model wrote.
+ */
+export function cardsFor(calls: readonly Recommendation[], found: readonly StorefrontService[], addons: readonly StorefrontService[]): ChatCard[] {
+  const listed = new Map<string, ChatCard>()
+  for (const s of addons) listed.set(articleOf(s.sku), cardOf(s, 'addon'))
+  for (const s of found) listed.set(articleOf(s.sku), cardOf(s, 'main')) // a service in both lists is a main one
+  const out: ChatCard[] = []
+  for (const call of calls) {
+    const card = listed.get(articleOf(call.sku))
+    if (card && !out.some((c) => c.sku === card.sku)) out.push(card)
+    if (out.length >= MAX_CARDS) break
+  }
+  return out
+}
+
 const count = (n: number) => n.toLocaleString('en-US')
 const MAX_NOTE_CARDS = 4
 /** "2 запуска", "5 запусков", "21 запуск": the form that goes with the number. */
@@ -412,8 +488,15 @@ export function situationNote(intent: ChatIntent, found: StorefrontService[]): s
   return lines.length === 0 ? undefined : ['СИТУАЦИЯ ЭТОГО КЛИЕНТА (рассчитано по списку ниже; опирайся на эти числа и выводы):', ...lines].join('\n')
 }
 
-/** `found`: the services that fit the wish; `addons`: the views or likes that complete a package with them. */
-export function buildSystemPrompt(found: StorefrontService[], addons: StorefrontService[] = [], note?: string): string {
+/** How the answer ends. Without the tool the customer is asked to paste the article into the search; with it, each recommended article becomes a card. */
+const ENDING_WITHOUT_CARDS = '10. Каждый предложенный вариант сопровождай артикулом жирным шрифтом и ценой, а ответ ВСЕГДА завершай призывом скопировать артикул: «Вставьте этот артикул в поиск» (если артикулов несколько — «Вставьте эти артикулы в поиск»). Призыв пиши на языке клиента: по-украински «Вставте цей артикул у пошук», по-английски «Paste this SKU into the search». По артикулу клиент находит услугу в каталоге.'
+const ENDING_WITH_CARDS = `10. Каждый предложенный вариант сопровождай артикулом жирным шрифтом и ценой. Написав ответ, вызови инструмент ${RECOMMEND_TOOL} отдельно для каждого артикула, который ты предложил (все вызовы подряд, в том же ответе, не больше пяти): sku — точный артикул из списка, name — его название, price — цена за 1000 в долларах. После вызова клиент видит под ответом карточку услуги с кнопкой «Выбрать», поэтому не проси его копировать артикул или вставлять его в поиск. Для артикула, которого нет в списке, инструмент не вызывай.`
+
+/**
+ * `found`: the services that fit the wish; `addons`: the views or likes that complete a package with them; `note`: what is known about this customer.
+ * `cards`: the model has the recommend tool in this call, so it is told to use it (never when it has not: it would write the call as text).
+ */
+export function buildSystemPrompt(found: StorefrontService[], addons: StorefrontService[] = [], note?: string, { cards = false }: { cards?: boolean } = {}): string {
   const list = found.length > 0 ? found.map(serviceLine).join('\n') : '(по запросу клиента ничего не найдено)'
   const addonList = addons.length > 0 ? addons.map(serviceLine).join('\n') : '(дополнений нет)'
   return [
@@ -433,7 +516,7 @@ export function buildSystemPrompt(found: StorefrontService[], addons: Storefront
     '7. Если клиент сомневается, сравнивает цены или спрашивает, чем отличаются дешёвая и премиальная услуга, объясни разницу по колонке «Гарантия (Refill)» и по названиям: у дешёвой нет гарантии и возможны списания (Drop), она подходит для разовой массовки; премиальная (HQ, Real, Refill, Non-Drop) дороже, но её докручивают при списаниях, так что деньги не пропадают зря. Посоветуй премиальную услугу из списка как основной выбор, а дешёвую назови бюджетной альтернативой. Говори только то, что видно в списке, не дави на клиента: если ему подходит дешёвая услуга, так и скажи.',
     '8. Умный upsell. Если клиент просит «самое дешёвое», сначала дай артикул дешёвой услуги и её цену, но сразу назови риски: гарантии нет, возможны списания (Drop). Затем предложи премиальную альтернативу из списка (HQ, Real, Refill, Non-Drop): артикул, цена, в чём разница. Если в разделе «СИТУАЦИЯ ЭТОГО КЛИЕНТА» названа премиальная альтернатива, предложи именно её. Образец: «Я могу дать вам базу за $1 (**SKU**), но для вашей задачи (чтобы не было отписок) выгоднее взять **SKU премиум** с докруткой: если часть упадёт, её докрутят, и бюджет не сгорит на дистанции». О докрутке и её сроке говори только то, что указано в колонке «Гарантия (Refill)». Если премиальной услуги в списке нет, предложи дешёвую и посоветуй начать с небольшого объёма.',
     '9. Подстраивай тон под клиента. Тому, кто льёт сетки аккаунтов или массовку, говори языком ROI и массовости: цена за 1000, объём, скорость, выгода на дистанции. Владельцу личного блога или бренда делай акцент на безопасности и органичности роста. Если из сообщения не ясно, кто клиент, говори нейтрально. Не обещай доходность и результат. Если ниже есть раздел «СИТУАЦИЯ ЭТОГО КЛИЕНТА», в нём уже указан тон и посчитаны лимиты: опирайся на него.',
-    '10. Каждый предложенный вариант сопровождай артикулом жирным шрифтом и ценой, а ответ ВСЕГДА завершай призывом скопировать артикул: «Вставьте этот артикул в поиск» (если артикулов несколько — «Вставьте эти артикулы в поиск»). Призыв пиши на языке клиента: по-украински «Вставте цей артикул у пошук», по-английски «Paste this SKU into the search». По артикулу клиент находит услугу в каталоге.',
+    cards ? ENDING_WITH_CARDS : ENDING_WITHOUT_CARDS,
     '',
     'КОГДА ТОЧНОГО СОВПАДЕНИЯ НЕТ (отказывать нельзя, предлагай решение):',
     '11. Лимит услуги (колонка «Количество (мин–макс)») меньше, чем просит клиент. Предложи рабочие пути: (а) запустить услугу несколько раз, части не больше максимума; второй запуск на ту же ссылку лучше начинать, когда выполнен первый; (б) Drip-feed, но только если в колонке Drip-feed стоит «да»: в форме заказа включается переключатель Drip-feed, клиент вводит количество одной порции и число порций, и общее количество может быть больше лимита одного заказа; (в) другая услуга из списка с большим лимитом, если подходит по цене. Назови число запусков и итоговую цену; в разделе «СИТУАЦИЯ ЭТОГО КЛИЕНТА» эти числа уже посчитаны.',

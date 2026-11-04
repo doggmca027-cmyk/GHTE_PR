@@ -35,8 +35,11 @@ interface Props {
   onViewOrders: () => void
   /** Open straight on this platform (a tile of the Home screen was tapped). */
   initialPlatform?: string | null
-  /** An article number to look up across the whole catalogue (the assistant's answer sent it here); a new `nonce` asks again for the same article. */
-  lookupRequest?: { sku: string; nonce: number } | null
+  /**
+   * An article number to look up across the whole catalogue (the assistant's answer sent it here); a new `nonce` asks again for the same article.
+   * `open`: the customer pressed "Select" on the assistant's card, so the order form opens on the article as soon as it is found.
+   */
+  lookupRequest?: { sku: string; nonce: number; open?: boolean } | null
 }
 
 function SkeletonCard() {
@@ -170,14 +173,24 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null, 
   }, [refreshWallet])
 
   // the assistant sent an article: the catalogue starts at the top with it in the search box
+  const openFor = useRef<string | null>(null)
   useEffect(() => {
     if (!lookupRequest) return
+    openFor.current = lookupRequest.open ? lookupRequest.sku.toUpperCase() : null
     setPlatform(null)
     setCategoryId(null)
     setServiceQuery('')
     setSegment(null)
     setPlatformQuery(lookupRequest.sku)
   }, [lookupRequest?.nonce]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ...and when it was "Select" on a card, the order form opens on the card that was found (once: closing it leaves the card in the list)
+  useEffect(() => {
+    if (openFor.current === null || skuLookup.status !== 'found' || sku?.toUpperCase() !== openFor.current) return
+    openFor.current = null
+    setSkuPlatform(skuLookup.hit.platform)
+    open(skuLookup.hit.service)
+  }, [skuLookup.status, sku]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectPlatform = (slug: string) => {
     const own = categories.filter((c) => c.platform === slug)
