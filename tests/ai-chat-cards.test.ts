@@ -5,7 +5,8 @@ import type { LanguageModelV4StreamPart } from '@ai-sdk/provider'
 import { describe, expect, it } from 'vitest'
 import { answerStream } from '../api/_lib/chat-model'
 import { DEFAULT_MODEL, FALLBACK_MODELS, handleChat, type ChatDeps } from '../api/_lib/chat-handler'
-import { MAX_CARDS, RECOMMEND_TOOL, buildSystemPrompt, cardOf, cardsFor, refillLabel, refillTerm, type Recommendation, type StorefrontService } from '../api/_lib/chat-rag'
+import { MAX_CARDS, RECOMMEND_TOOL, SKU_IN_TEXT, buildSystemPrompt, cardOf, cardsFor, refillLabel, refillTerm, type Recommendation, type StorefrontService } from '../api/_lib/chat-rag'
+import { SKU_PATTERN } from '../src/lib/service-search'
 
 const service = (id: string, name: string, rate: number, over: Partial<StorefrontService> = {}): StorefrontService => ({
   id, sku: `IG-FOL-STD-ROOT${id.toUpperCase()}`, name, customer_rate_per_1000: rate, min_quantity: 100, max_quantity: 100_000, refill_supported: false,
@@ -62,6 +63,18 @@ describe('which cards an answer gets', () => {
     expect(cards.map((c) => [c.sku, c.role])).toEqual([['IG-VIEW-STD-ROOTV', 'addon'], ['IG-FOL-STD-ROOTA', 'main']])
     const both = cardsFor([call('IG-FOL-STD-ROOTA')], found, [found[0]!])
     expect(both[0]!.role).toBe('main')
+  })
+  it('an article the text names is a recommendation too: Gemini Flash-Lite writes "choose below" and often calls nothing', () => {
+    const text = 'Take **IG-FOL-STD-ROOTA** for the followers and IG-VIEW-STD-ROOTV for the views.'
+    expect(cardsFor([], found, addons, text).map((c) => [c.sku, c.role])).toEqual([['IG-FOL-STD-ROOTA', 'main'], ['IG-VIEW-STD-ROOTV', 'addon']])
+  })
+  it('what the model asked for with the tool comes first, then the articles of the text, each once; a made-up article in the text is no card', () => {
+    const text = 'Besides **IG-FOL-STD-ROOTB**, **IG-VIEW-STD-ROOTV** and the made-up **IG-FOL-STD-FAKE9** take **IG-FOL-STD-ROOTA**.'
+    expect(cardsFor([call('IG-FOL-STD-ROOTA')], found, addons, text).map((c) => c.sku)).toEqual(['IG-FOL-STD-ROOTA', 'IG-FOL-STD-ROOTB', 'IG-VIEW-STD-ROOTV'])
+  })
+  it('the articles of the text are found the way the search box finds them: the two patterns are one', () => {
+    expect(SKU_IN_TEXT.source).toBe(SKU_PATTERN.source)
+    expect(SKU_IN_TEXT.flags).toBe(`g${SKU_PATTERN.flags}`)
   })
   it(`at most ${MAX_CARDS} cards`, () => {
     const many = Array.from({ length: 9 }, (_, i) => service(`s${i}`, `Followers ${i}`, 1 + i))
@@ -173,6 +186,7 @@ describe('the answer with cards (the request)', () => {
     expect(res.headers.get('X-Chat-Model')).toBe(DEFAULT_MODEL)
     const out = await lines(res)
     expect(out.map((e) => e.t)).toEqual(['text', 'text', 'card', 'card', 'end'])
+    expect(out.at(-1)).toMatchObject({ t: 'end', calls: 3 }) // how many times the model called the tool: the owner can see whether it does
     expect(out.filter((e) => e.t === 'text').map((e) => e.d).join('')).toBe('Take **IG-FOL-STD-ROOTA**.')
     expect(out.filter((e) => e.t === 'card').map((e) => e.c)).toEqual([
       expect.objectContaining({ sku: 'IG-FOL-STD-ROOTA', name: 'Instagram Followers [Refill: 30 Days]', price: 1.2, refill: true, refillDays: 30, role: 'main' }),
@@ -186,6 +200,12 @@ describe('the answer with cards (the request)', () => {
     expect(d.seen[0]!.system).toContain(`вызови инструмент ${RECOMMEND_TOOL} отдельно для каждого артикула`)
     expect(d.seen[0]!.system).toContain('не проси его копировать артикул или вставлять его в поиск')
     expect(d.seen[0]!.system).not.toContain('Вставьте этот артикул в поиск')
+  })
+  it('an answer whose text names articles has their cards although the model called nothing', async () => {
+    const d = deps(async () => stream('Take **IG-FOL-STD-ROOTA** and IG-VIEW-STD-ROOTV. Choose below!'))
+    const out = await lines(await handleChat(ask('application/x-ndjson'), d))
+    expect(out.filter((e) => e.t === 'card').map((e) => e.c!.sku)).toEqual(['IG-FOL-STD-ROOTA', 'IG-VIEW-STD-ROOTV'])
+    expect(out.at(-1)).toMatchObject({ t: 'end', calls: 0 })
   })
   it('a client that did not ask for ndjson gets the plain text of before: no tool, the old ending of the answer', async () => {
     const d = deps(async () => stream('Здравствуйте!'))
@@ -220,11 +240,13 @@ describe('the answer with cards (the request)', () => {
     expect((await handleChat(ask(), plain)).status).toBe(503)
     expect(plain.seen).toHaveLength(2)
   })
-  it('the prompt with cards differs from the plain one only in the way the answer ends', () => {
+  it('the prompt with cards differs from the plain one only in the way the answer ends, and ends with a reminder where a small model still listens', () => {
     const plain = buildSystemPrompt([service('a', 'Followers', 1)])
     const cards = buildSystemPrompt([service('a', 'Followers', 1)], [], undefined, { cards: true })
     const diff = plain.split('\n').filter((l, i) => l !== cards.split('\n')[i])
     expect(diff).toHaveLength(1)
     expect(diff[0]).toMatch(/^10\. /)
+    expect(cards.endsWith(`НАПОМИНАНИЕ: после текста ответа вызови инструмент ${RECOMMEND_TOOL} отдельно для каждого артикула, который ты назвал в ответе.`)).toBe(true)
+    expect(plain).not.toContain('НАПОМИНАНИЕ')
   })
 })

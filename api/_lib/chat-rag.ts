@@ -396,6 +396,13 @@ export interface ChatCard {
   role: 'main' | 'addon'
 }
 
+/**
+ * An article number inside a text. The same pattern as the app's search box (src/lib/service-search.ts SKU_PATTERN: a test keeps them equal); the
+ * assistant names the articles it recommends in bold, and an article in its text is a recommendation even when the model did not call the tool
+ * (Gemini Flash-Lite often writes "choose below" and calls nothing).
+ */
+export const SKU_IN_TEXT = /\b[A-Z]{2,4}-[A-Z]{2,5}-(?:HQ|STD|CHEAP)-[A-Z]{3,4}[A-Z0-9]{1,12}(?:-[A-F0-9]{4})?\b/gi
+
 /** An article as it is compared: the model may write it in lower case, in bold or with a full stop. */
 const articleOf = (raw: unknown): string => (typeof raw === 'string' ? raw.replace(/[^A-Za-z0-9-]/g, '').toUpperCase() : '')
 
@@ -418,15 +425,17 @@ export function cardOf(s: StorefrontService, role: ChatCard['role']): ChatCard {
 }
 
 /**
- * The cards for what the model recommended: only articles that were in the lists it was given (it cannot make a service up or show another
- * price), each once, in the order it named them, at most MAX_CARDS. Name and price are the catalogue's, whatever the model wrote.
+ * The cards for what the model recommended: first what it asked for with the tool, then every other article its text names. Only articles that were
+ * in the lists it was given (it cannot make a service up or show another price), each once, at most MAX_CARDS. Name and price are the catalogue's,
+ * whatever the model wrote.
  */
-export function cardsFor(calls: readonly Recommendation[], found: readonly StorefrontService[], addons: readonly StorefrontService[]): ChatCard[] {
+export function cardsFor(calls: readonly Recommendation[], found: readonly StorefrontService[], addons: readonly StorefrontService[], text = ''): ChatCard[] {
   const listed = new Map<string, ChatCard>()
   for (const s of addons) listed.set(articleOf(s.sku), cardOf(s, 'addon'))
   for (const s of found) listed.set(articleOf(s.sku), cardOf(s, 'main')) // a service in both lists is a main one
   const out: ChatCard[] = []
-  for (const call of calls) {
+  const named: Recommendation[] = [...text.matchAll(SKU_IN_TEXT)].map((m) => ({ sku: m[0] }))
+  for (const call of [...calls, ...named]) {
     const card = listed.get(articleOf(call.sku))
     if (card && !out.some((c) => c.sku === card.sku)) out.push(card)
     if (out.length >= MAX_CARDS) break
@@ -540,5 +549,6 @@ export function buildSystemPrompt(found: StorefrontService[], addons: Storefront
     '<addons>',
     addonList,
     '</addons>',
+    ...(cards ? ['', `НАПОМИНАНИЕ: после текста ответа вызови инструмент ${RECOMMEND_TOOL} отдельно для каждого артикула, который ты назвал в ответе.`] : []),
   ].join('\n')
 }

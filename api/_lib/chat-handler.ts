@@ -147,7 +147,7 @@ export async function handleChat(req: Request, deps: ChatDeps): Promise<Response
       })
       const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Chat-Model': model }
       return wantsCards
-        ? new Response(framed(answer, () => cardsFor(calls, found.found, found.addons)), { headers: { ...headers, 'Content-Type': `${NDJSON}; charset=utf-8` } })
+        ? new Response(framed(answer, (text) => ({ cards: cardsFor(calls, found.found, found.addons, text), calls: calls.length })), { headers: { ...headers, 'Content-Type': `${NDJSON}; charset=utf-8` } })
         : new Response(answer, { headers: { ...headers, 'Content-Type': 'text/plain; charset=utf-8' } })
     } catch {
       // overloaded, retired, over its quota: the next model takes over
@@ -163,22 +163,27 @@ const PLAIN_RETRY_BUDGET_MS = 14_000
 
 /**
  * The answer as lines of JSON: {"t":"text","d":"..."} for every piece of text as it is written, then, once the model has finished, one
- * {"t":"card","c":{...}} for every recommended service, and {"t":"end"}. A stream without the end line was cut short.
+ * {"t":"card","c":{...}} for every recommended service, and {"t":"end","calls":N} (N: how many times the model called the tool; the cards also come from
+ * the articles its text names). A stream without the end line was cut short. `finish` gets the whole text, once the model is done.
  */
-function framed(answer: ReadableStream<Uint8Array>, cards: () => ChatCard[]): ReadableStream<Uint8Array> {
+function framed(answer: ReadableStream<Uint8Array>, finish: (text: string) => { cards: ChatCard[]; calls: number }): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder()
   const encoder = new TextEncoder()
   const line = (event: object) => encoder.encode(`${JSON.stringify(event)}\n`)
+  let text = ''
   return answer.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
       const d = decoder.decode(chunk, { stream: true })
-      if (d !== '') controller.enqueue(line({ t: 'text', d }))
+      if (d === '') return
+      text += d
+      controller.enqueue(line({ t: 'text', d }))
     },
     flush(controller) {
       const rest = decoder.decode()
-      if (rest !== '') controller.enqueue(line({ t: 'text', d: rest }))
-      for (const c of cards()) controller.enqueue(line({ t: 'card', c }))
-      controller.enqueue(line({ t: 'end' }))
+      if (rest !== '') { text += rest; controller.enqueue(line({ t: 'text', d: rest })) }
+      const done = finish(text)
+      for (const c of done.cards) controller.enqueue(line({ t: 'card', c }))
+      controller.enqueue(line({ t: 'end', calls: done.calls }))
     },
   }))
 }
