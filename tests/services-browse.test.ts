@@ -189,7 +189,7 @@ describe('browsing the services', () => {
     expect(first).toHaveLength(1)
     expect(first[0]).toContain('category_id=eq.c-tg-views')
     expect(first[0]).toContain('is_active=eq.true')
-    expect(first[0]).toContain('order=sort_order,customer_rate_per_1000,id')
+    expect(first[0]).toContain('order=is_premium.desc,sort_order,customer_rate_per_1000,id')
     expect(first[0]).toContain('limit=30')
     expect(first[0]).toContain('offset=0')
     expect(titles()).toHaveLength(30)

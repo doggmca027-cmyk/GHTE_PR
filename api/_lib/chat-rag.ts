@@ -39,6 +39,8 @@ export interface StorefrontService {
   refill_supported: boolean
   /** The card can be delivered gradually (drip-feed), so its order may exceed the limit of one delivery. */
   dripfeed_available?: boolean | null
+  /** The name promises quality (services.is_premium): the line of the list carries a 💎. */
+  is_premium?: boolean | null
   category: { name: string; platform: { slug: string; name: string } }
 }
 
@@ -183,7 +185,7 @@ const REFILL_TERMS = ['refill', 'guarantee', 'non drop', 'non-drop', 'nondrop', 
 const QUALITY_TERMS = ['hq', 'high quality', 'real', 'premium']
 /** What a service that is safe for the account is called: a guarantee or a quality label. */
 const SAFE_TERMS = [...REFILL_TERMS, ...QUALITY_TERMS]
-const SELECT = 'id,sku,name,customer_rate_per_1000,min_quantity,max_quantity,refill_supported,dripfeed_available,category:categories!inner(name,platform:platforms!inner(slug,name))'
+const SELECT = 'id,sku,name,customer_rate_per_1000,min_quantity,max_quantity,refill_supported,dripfeed_available,is_premium,category:categories!inner(name,platform:platforms!inner(slug,name))'
 export const CANDIDATES = 100
 /** How many cards go to the model. */
 export const TOP = 6
@@ -357,7 +359,7 @@ const usd = (n: number) => `$${Number(n.toFixed(4))}`
 export function serviceLine(s: StorefrontService): string {
   return [
     clean(s.sku, 40),
-    clean(s.name, 160),
+    `${s.is_premium === true ? '💎 ' : ''}${clean(s.name, 160)}`,
     clean(s.category.name, 60),
     `${usd(price(s))} за 1000`,
     refillLabel(s),
@@ -528,6 +530,7 @@ export function buildSystemPrompt(found: StorefrontService[], addons: Storefront
     '2. Анализируй потребность:',
     '   - Если просят "самое дешевое" или "для массовки" — предлагай базовые услуги (без гарантии/Refill). Предупреждай о возможных списаниях (Drop).',
     '   - Если просят "качественно", "чтобы не списывали" или "живых" — предлагай услуги с метками HQ, Real, Premium, Non-Drop, Refill, Auto-Refill. Объясняй, что это дороже, но безопасно для аккаунта (особенно важно для сетки).',
+    '   - PREMIUM. Услуги с 💎 в начале названия — Premium (в каталоге у них золотая рамка и значок «Premium», в выдаче они стоят первыми). Если клиент ищет высокое качество, боится блокировок или списаний, спрашивает про «живых» подписчиков или про качество — предлагай сначала Premium. Объясни выгоду простыми словами: у этих услуг в названии прямо указаны Refill, гарантия, Real, Non-Drop или другая метка качества (называй только ту, что написана), поэтому результат держится стабильнее, а аккаунту это безопаснее; цена остаётся выгодной, и второй раз покупать то же самое не придётся. Продавай ощущение безопасности и очевидную выгоду, а не страх. Не обещай, что аккаунт не заблокируют, и не называй людей «живыми» там, где в названии нет Real или Organic. Дешёвые услуги без 💎 тоже предлагай, если клиенту нужна именно цена или массовка.',
     '3. ВСЕГДА при рекомендации услуги указывай её точный артикул (SKU) в обратных кавычках, как моноширинный текст (например, `IG-FOL-HQ-3F9A1C`), и итоговую розничную цену. Клиент копирует артикул одним касанием и использует его для заказа.',
     '4. Отвечай кратко, эмпатично и по делу. Не пиши длинные простыни текста. Пиши на том же языке, на котором к тебе обратился клиент.',
     '',

@@ -17,6 +17,7 @@ export function ServiceBadges({ service }: { service: ICatalogService }) {
   const refill = service.attributes?.refill
   const country = serviceCountries(service.attributes, locale)
   const badges: React.ReactNode[] = []
+  if (service.isPremium) badges.push(<Badge key="premium" className="bg-amber-100 text-amber-800"><span aria-hidden>💎</span> {t('Premium')}</Badge>)
   // the reaction it delivers comes first: two cards of a group may differ in nothing else
   const reaction = reactionOf(service.name, service.nameI18n)
   if (reaction) badges.push(<Badge key="reaction"><span aria-hidden>{reaction.emoji}</span> {t(reaction.label)}</Badge>)
@@ -26,6 +27,7 @@ export function ServiceBadges({ service }: { service: ICatalogService }) {
   else if (service.refillSupported) badges.push(<Badge key="refill"><RefreshCw size={12} strokeWidth={2} /> {t('Refill')}</Badge>)
   // what the name promises as a whole: premium and safe growth always, the guarantee only when the badge above has not said it already
   for (const id of service.segments ?? []) {
+    if (id === 'premium') continue // shown first, as the 💎 badge
     if (id === 'guaranteed' && badges.some((b) => (b as { key?: string }).key === 'refill')) continue
     const { label, icon: Icon } = SEGMENT_VIEW[id]
     badges.push(<Badge key={id}><Icon size={12} strokeWidth={2} /> {t(label)}</Badge>)

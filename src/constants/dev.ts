@@ -30,6 +30,7 @@ const svc = (
   id: `00000000-0000-4000-8000-00000000d00${n}`, categoryId: c.id, name, description: null,
   ratePer1000: rate, minQuantity: min, maxQuantity: max, refillSupported: refill, sortOrder: sort,
   ...(mockSegments(name).length > 0 ? { segments: mockSegments(name) } : {}),
+  ...(mockSegments(name).includes('premium') ? { isPremium: true } : {}),
 })
 
 const tgViews = cat(1, 'telegram', 'Telegram Views', 'telegram-views')

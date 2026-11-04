@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { cn } from '@/lib/utils'
 import { useLanguage, useT } from '@/i18n'
 import { localizedName } from '@/lib/service-view'
 import { formatCompact, formatMoneyAmount } from '@/lib/order-calc'
@@ -25,7 +26,11 @@ export const ServiceCard = memo(function ServiceCard({ service, platform, platfo
     <button
       type="button"
       onClick={() => onSelect(service)}
-      className="w-full rounded-3xl border border-blue-100/70 bg-surface p-4 text-start shadow-card transition-all duration-200 hover:border-brand/30 active:scale-[0.985]"
+      className={cn(
+        'w-full rounded-3xl border bg-surface p-4 text-start shadow-card transition-all duration-200 active:scale-[0.985]',
+        service.isPremium ? 'border-amber-300 bg-amber-50/40 hover:border-amber-400' : 'border-blue-100/70 hover:border-brand/30',
+      )}
+      data-premium={service.isPremium ? 'true' : undefined}
     >
       <div className="flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-light text-brand">

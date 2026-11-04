@@ -44,6 +44,8 @@ export interface ICatalogService {
   variants?: ICatalogService[]
   /** The order form offers gradual delivery (drip-feed): at least one routable offer of this service can do it. */
   dripfeedAvailable?: boolean
+  /** The name promises quality (real, HQ, refill, guarantee, lifetime, non-drop, organic...): the card is Premium, sorts first and wears the 💎 badge (services.is_premium). */
+  isPremium?: boolean
   /** premium / guaranteed / safe, in this order; absent when the name says none of them. */
   segments?: Segment[]
 }

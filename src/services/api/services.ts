@@ -37,10 +37,15 @@ interface ServiceRow {
   variants?: ServiceRow[] | null
   dripfeed_available?: boolean | null
   segments?: string[] | null
+  is_premium?: boolean | null
 }
 
+/** Premium cards first, then the rest (nothing is hidden); inside each group the usual order. The database sorts the same way (order=is_premium.desc,...). */
+const premiumFirst = (a: ICatalogService, b: ICatalogService): number =>
+  Number(b.isPremium === true) - Number(a.isPremium === true) || a.sortOrder - b.sortOrder || a.ratePer1000 - b.ratePer1000 || a.name.localeCompare(b.name)
+
 /** The only columns of `services` the app reads (the database also hides the provider-service ids from customers). */
-export const SERVICE_COLUMNS = ['id', 'category_id', 'name', 'description', 'customer_rate_per_1000', 'min_quantity', 'max_quantity', 'refill_supported', 'sort_order', 'name_i18n', 'attributes', 'dripfeed_available', 'segments'] as const
+export const SERVICE_COLUMNS = ['id', 'category_id', 'name', 'description', 'customer_rate_per_1000', 'min_quantity', 'max_quantity', 'refill_supported', 'sort_order', 'name_i18n', 'attributes', 'dripfeed_available', 'segments', 'is_premium'] as const
 
 /** Services shown at a time in a category: a category can hold hundreds, the customer asks for more. */
 export const SERVICES_PAGE = 30
@@ -77,6 +82,7 @@ export const serviceFromRow = (s: ServiceRow): ICatalogService => ({
   ...(s.name_i18n && Object.keys(s.name_i18n).length > 0 ? { nameI18n: s.name_i18n } : {}),
   ...(s.attributes && Object.keys(s.attributes).length > 0 ? { attributes: s.attributes } : {}),
   ...(s.dripfeed_available === true ? { dripfeedAvailable: true } : {}),
+  ...(s.is_premium === true ? { isPremium: true } : {}),
   ...(segmentsFromRow(s.segments).length > 0 ? { segments: segmentsFromRow(s.segments) } : {}),
   ...(s.variants && s.variants.length > 0
     ? { variants: [...s.variants].sort((a, b) => Number(a.customer_rate_per_1000) - Number(b.customer_rate_per_1000)).map(serviceFromRow) }
@@ -156,7 +162,7 @@ export async function searchServices(
     const scope = new Set(categoryIds)
     return MOCK_CATALOG.services
       .filter((s) => scope.has(s.categoryId) && serviceMatches(s, terms) && (!segment || (s.segments ?? []).includes(segment)))
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.ratePer1000 - b.ratePer1000 || a.name.localeCompare(b.name))
+      .sort(premiumFirst)
       .slice(offset, offset + limit)
   }
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
@@ -164,7 +170,7 @@ export async function searchServices(
   if (!filter && !segment) return []
   const ids = categoryIds.map((id) => encodeURIComponent(id)).join(',')
   const rows = await rest<ServiceRow[]>(
-    `services?select=${SERVICE_COLUMNS.join(',')}&category_id=in.(${ids})&is_active=eq.true${filter ? `&and=${encodeURIComponent(filter)}` : ''}${segment ? `&${segmentParam(segment)}` : ''}&order=sort_order,customer_rate_per_1000,id&limit=${limit}&offset=${offset}`,
+    `services?select=${SERVICE_COLUMNS.join(',')}&category_id=in.(${ids})&is_active=eq.true${filter ? `&and=${encodeURIComponent(filter)}` : ''}${segment ? `&${segmentParam(segment)}` : ''}&order=is_premium.desc,sort_order,customer_rate_per_1000,id&limit=${limit}&offset=${offset}`,
     session.token,
   )
   return rows.map(serviceFromRow)
@@ -175,12 +181,12 @@ export async function fetchCategoryServices(session: AuthSession, categoryId: st
   if (session.isMock) {
     const all = MOCK_CATALOG.services
       .filter((s) => s.categoryId === categoryId)
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.ratePer1000 - b.ratePer1000 || a.name.localeCompare(b.name))
+      .sort(premiumFirst)
     return all.slice(offset, offset + limit)
   }
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
   const rows = await rest<ServiceRow[]>(
-    `services?select=${CATEGORY_SELECT}&category_id=eq.${encodeURIComponent(categoryId)}&is_active=eq.true&parent_service_id=is.null&variants.is_active=eq.true&order=sort_order,customer_rate_per_1000,id&limit=${limit}&offset=${offset}`,
+    `services?select=${CATEGORY_SELECT}&category_id=eq.${encodeURIComponent(categoryId)}&is_active=eq.true&parent_service_id=is.null&variants.is_active=eq.true&order=is_premium.desc,sort_order,customer_rate_per_1000,id&limit=${limit}&offset=${offset}`,
     session.token,
   )
   return rows.map(serviceFromRow)
