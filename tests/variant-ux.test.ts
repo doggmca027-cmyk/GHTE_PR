@@ -56,6 +56,53 @@ describe('the variant card', () => {
   })
 })
 
+describe('the variant card in a long list', () => {
+  // a long list draws only the cards near the screen: a card that scrolls away and back is a new one, so the list keeps the choice for it
+  const main = v('a', 'Members [refill: 7 days]', 1, {
+    attributes: { refill: 7 },
+    variants: [v('c', 'Members [refill: 30 days]', 2, { attributes: { refill: 30 } }), v('d', 'Members [refill: 90 days]', 3, { attributes: { refill: 90 } })],
+  })
+  const checked = (host: HTMLElement) => [...host.querySelectorAll('[role="radio"]')].map((r) => r.getAttribute('aria-checked'))
+
+  it('starts on the variant it is told to, and reports a choice', () => {
+    const chosen: number[] = []
+    const host = document.createElement('div')
+    const root = createRoot(host)
+    act(() => root.render(createElement(VariantCard, { service: main, platform: 'telegram', onSelect: () => {}, initialIndex: 1, onChoose: (i: number) => chosen.push(i) })))
+    expect(checked(host)).toEqual(['false', 'true', 'false'])
+    act(() => (host.querySelectorAll('[role="radio"]')[2] as HTMLElement).click())
+    expect(chosen).toEqual([2])
+    expect(checked(host)).toEqual(['false', 'false', 'true'])
+    act(() => root.unmount())
+  })
+
+  it('a card made again with the remembered choice shows the same variant', () => {
+    const remembered = new Map<string, number>()
+    const mount = () => {
+      const host = document.createElement('div')
+      const root = createRoot(host)
+      act(() => root.render(createElement(VariantCard, { service: main, platform: 'telegram', onSelect: () => {}, initialIndex: remembered.get(main.id) ?? 0, onChoose: (i: number) => remembered.set(main.id, i) })))
+      return { host, root }
+    }
+    const first = mount()
+    act(() => (first.host.querySelectorAll('[role="radio"]')[1] as HTMLElement).click())
+    act(() => first.root.unmount()) // scrolled out of the page
+    const again = mount() // ...and back
+    expect(checked(again.host)).toEqual(['false', 'true', 'false'])
+    act(() => again.root.unmount())
+  })
+
+  it('without them it is the card it was: the first variant, remembering for itself', () => {
+    const host = document.createElement('div')
+    const root = createRoot(host)
+    act(() => root.render(createElement(VariantCard, { service: main, platform: 'telegram', onSelect: () => {} })))
+    expect(checked(host)).toEqual(['true', 'false', 'false'])
+    act(() => (host.querySelectorAll('[role="radio"]')[1] as HTMLElement).click())
+    expect(checked(host)).toEqual(['false', 'true', 'false'])
+    act(() => root.unmount())
+  })
+})
+
 describe('bulk prices', () => {
   const steps = [{ minQuantity: 0, ratePer1000: 5 }, { minQuantity: 1000, ratePer1000: 4 }, { minQuantity: 10000, ratePer1000: 3.5 }, { minQuantity: 100000, ratePer1000: 3.2 }]
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, ArrowLeft, Loader2, SearchX } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -8,6 +8,7 @@ import { useServiceSearch } from '@/hooks/useServiceSearch'
 import { useSkuLookup } from '@/hooks/useSkuLookup'
 import { useLanguage, useT } from '@/i18n'
 import { track } from '@/lib/analytics-client'
+import { canPrefetch } from '@/lib/connection'
 import { haptic } from '@/lib/haptics'
 import { useWide } from '@/lib/layout-mode'
 import { resetScroll } from '@/lib/scroll'
@@ -25,6 +26,11 @@ import { ServiceSearchBox } from './ServiceSearchBox'
 import { SkuResult } from './SkuResult'
 import { VariantCard } from './VariantCard'
 
+// The list that keeps only the cards near the screen is its own chunk (it carries react-virtuoso): fetched when the first list is shown, or a moment
+// earlier, when a category is pressed
+const loadVirtualCards = () => import('./VirtualCards')
+const VirtualCards = lazy(() => loadVirtualCards().then((m) => ({ default: m.VirtualCards }))) as unknown as typeof import('./VirtualCards').VirtualCards
+
 type Overview = { status: 'loading' } | { status: 'error' } | { status: 'ready'; categories: ICategory[]; platforms: PlatformInfo[] }
 
 /** The services of the opened category, loaded a page at a time. */
@@ -40,6 +46,11 @@ interface Props {
    * `open`: the customer pressed "Select" on the assistant's card, so the order form opens on the article as soon as it is found.
    */
   lookupRequest?: { sku: string; nonce: number; open?: boolean } | null
+}
+
+/** Shown while the list's module is on its way. */
+function SkeletonCards() {
+  return <div className="space-y-3">{[0, 1, 2].map((i) => <SkeletonCard key={i} />)}</div>
 }
 
 function SkeletonCard() {
@@ -90,6 +101,8 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null, 
   // the platform of the card an article number found: it can be another than the one open
   const [skuPlatform, setSkuPlatform] = useState<{ slug: string; name: string } | null>(null)
   const request = useRef(0)
+  // the variant picked on each variant card: a card that scrolls out of the page and back is a new one (see VirtualCards)
+  const variantChoice = useRef(new Map<string, number>())
   // into a platform or a category and back out: the new level opens at its top
   useLayoutEffect(() => { resetScroll() }, [platform, categoryId])
 
@@ -147,7 +160,10 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null, 
     )
   }, [categoryId, session.token, session.isMock]) // eslint-disable-line react-hooks/exhaustive-deps
   /** A category row is being pressed: its first page starts loading now (errors are ignored here; opening shows them). */
-  const prefetch = (id: string) => { if (!isFresh(firstPageKey(id))) loadFirstPage(id).catch(() => undefined) }
+  const prefetch = (id: string) => {
+    if (!isFresh(firstPageKey(id))) loadFirstPage(id).catch(() => undefined)
+    if (canPrefetch()) void loadVirtualCards()
+  }
 
   const loadMore = () => {
     if (!page || page.status !== 'ready' || page.loadingMore || !page.more) return
@@ -283,15 +299,24 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null, 
             </Card>
           )}
 
-          {search.status === 'ready' && search.items.map((service) => (
-            <ServiceCard key={service.id} service={service} platform={platform} platformName={current?.name} onSelect={open} />
-          ))}
+        </div>
+      )}
 
-          {search.status === 'ready' && search.more && (
-            <Button className="col-span-full w-full" onClick={search.loadMore} disabled={search.loadingMore} aria-busy={search.loadingMore}>
-              {search.loadingMore && <Loader2 size={16} strokeWidth={2} className="animate-spin" />} {t('Show more')}
-            </Button>
-          )}
+      {state.status === 'ready' && platform !== null && !sku && search.active && search.status === 'ready' && search.items.length > 0 && (
+        <div className="mt-1">
+          <Suspense fallback={<SkeletonCards />}>
+            <VirtualCards
+              items={search.items}
+              itemKey={(service) => service.id}
+              wide={wide}
+              renderItem={(service) => <ServiceCard service={service} platform={platform} platformName={current?.name} onSelect={open} />}
+              footer={search.more ? (
+                <Button className="w-full" onClick={search.loadMore} disabled={search.loadingMore} aria-busy={search.loadingMore}>
+                  {search.loadingMore && <Loader2 size={16} strokeWidth={2} className="animate-spin" />} {t('Show more')}
+                </Button>
+              ) : undefined}
+            />
+          </Suspense>
         </div>
       )}
 
@@ -327,17 +352,25 @@ export function ServicesScreen({ session, onViewOrders, initialPlatform = null, 
             </Card>
           )}
 
-          {page?.status === 'ready' && page.items.map((service) => (service.variants?.length
-            ? <VariantCard key={service.id} service={service} platform={platform} platformName={current?.name} onSelect={open} />
-            : <ServiceCard key={service.id} service={service} platform={platform} platformName={current?.name} onSelect={open} />
-          ))}
-
-          {page?.status === 'ready' && page.more && (
-            <Button className="col-span-full w-full" onClick={loadMore} disabled={page.loadingMore} aria-busy={page.loadingMore}>
-              {page.loadingMore && <Loader2 size={16} strokeWidth={2} className="animate-spin" />} {t('Show more')}
-            </Button>
-          )}
         </div>
+      )}
+
+      {state.status === 'ready' && platform !== null && !sku && !search.active && categoryId !== null && page?.status === 'ready' && page.items.length > 0 && (
+        <Suspense fallback={<SkeletonCards />}>
+          <VirtualCards
+            items={page.items}
+            itemKey={(service) => service.id}
+            wide={wide}
+            renderItem={(service) => (service.variants?.length
+              ? <VariantCard service={service} platform={platform} platformName={current?.name} onSelect={open} initialIndex={variantChoice.current.get(service.id) ?? 0} onChoose={(i) => variantChoice.current.set(service.id, i)} />
+              : <ServiceCard service={service} platform={platform} platformName={current?.name} onSelect={open} />)}
+            footer={page.more ? (
+              <Button className="w-full" onClick={loadMore} disabled={page.loadingMore} aria-busy={page.loadingMore}>
+                {page.loadingMore && <Loader2 size={16} strokeWidth={2} className="animate-spin" />} {t('Show more')}
+              </Button>
+            ) : undefined}
+          />
+        </Suspense>
       )}
 
       {selected && (skuPlatform?.slug ?? platform) && (

@@ -12,19 +12,25 @@ interface Props {
   platform: Platform
   platformName?: string
   onSelect: (service: ICatalogService) => void
+  /**
+   * The variant shown first, and where a choice is reported: a long list keeps only the cards near the screen, so a card that scrolls away and comes
+   * back is a new one and would forget what was picked (see VirtualCards). Without them the card remembers for itself, as before.
+   */
+  initialIndex?: number
+  onChoose?: (index: number) => void
 }
 
 /**
  * One card for a group of variants: the chosen variant's card, and a switch per variant with what sets it apart from the others (its
  * guarantee, quality, speed...) and its price. Memoised like ServiceCard.
  */
-export const VariantCard = memo(function VariantCard({ service, platform, platformName, onSelect }: Props) {
+export const VariantCard = memo(function VariantCard({ service, platform, platformName, onSelect, initialIndex = 0, onChoose }: Props) {
   const t = useT()
   const { lang } = useLanguage()
   // variants that differ only by the panel's server and cost the same are one choice
   const all = useMemo(() => collapseTechnicalDuplicates([service, ...(service.variants ?? [])]), [service])
   const labels = useMemo(() => variantDiffLabels(all, lang, currentLocale()), [all, lang])
-  const [index, setIndex] = useState(0)
+  const [index, setIndex] = useState(initialIndex)
   const shown = all[Math.min(index, all.length - 1)]
 
   // every variant was a technical duplicate of one: a plain card, no switch
@@ -40,7 +46,7 @@ export const VariantCard = memo(function VariantCard({ service, platform, platfo
             type="button"
             role="radio"
             aria-checked={i === index}
-            onClick={() => { if (i !== index) haptic.select(); setIndex(i) }}
+            onClick={() => { if (i !== index) haptic.select(); setIndex(i); onChoose?.(i) }}
             className={cn(
               'flex shrink-0 flex-col items-start rounded-2xl border px-3 py-1.5 text-start transition-colors active:scale-95',
               i === index ? 'border-brand bg-brand text-white' : 'border-blue-100/70 bg-surface text-content-secondary',

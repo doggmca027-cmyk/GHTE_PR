@@ -26,6 +26,8 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   server: { host: true },
   test: {
+    // the long lists draw only the cards near the screen, which needs a layout engine; jsdom has none (see the file)
+    setupFiles: ['./tests/setup/virtuoso-plain.ts'],
     // On a developer machine: one test file at a time, in one worker. Several of the suites build a whole database (PGlite) per file, so a worker per
     // core ate all the memory and the processor. (Vitest 5 has no `poolOptions.threads`: `maxWorkers` is the limit, and `fileParallelism: false`
     // forces it to 1.) The CI of GitHub (CI=true) keeps Vitest's own default: it runs the suite in three shards, and a single worker would triple
