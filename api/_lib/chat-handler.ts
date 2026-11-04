@@ -145,7 +145,8 @@ export async function handleChat(req: Request, deps: ChatDeps): Promise<Response
         system: buildSystemPrompt(found.found, found.addons, found.note, { cards: tools }),
         ...(tools ? { recommend: (call: Recommendation) => { calls.push(call) } } : {}),
       })
-      const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Chat-Model': model }
+      // X-Chat-Tools: whether the answer that went out was made with the recommend tool (off: every try with the tool failed and the plain one answered)
+      const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Chat-Model': model, ...(wantsCards ? { 'X-Chat-Tools': tools ? 'on' : 'off' } : {}) }
       return wantsCards
         ? new Response(framed(answer, (text) => ({ cards: cardsFor(calls, found.found, found.addons, text), calls: calls.length })), { headers: { ...headers, 'Content-Type': `${NDJSON}; charset=utf-8` } })
         : new Response(answer, { headers: { ...headers, 'Content-Type': 'text/plain; charset=utf-8' } })

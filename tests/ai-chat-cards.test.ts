@@ -184,6 +184,7 @@ describe('the answer with cards (the request)', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson; charset=utf-8')
     expect(res.headers.get('X-Chat-Model')).toBe(DEFAULT_MODEL)
+    expect(res.headers.get('X-Chat-Tools')).toBe('on')
     const out = await lines(res)
     expect(out.map((e) => e.t)).toEqual(['text', 'text', 'card', 'card', 'end'])
     expect(out.at(-1)).toMatchObject({ t: 'end', calls: 3 }) // how many times the model called the tool: the owner can see whether it does
@@ -228,6 +229,7 @@ describe('the answer with cards (the request)', () => {
     const d = deps(async ({ recommend }) => { if (recommend) throw new Error('tools are not supported'); return stream('Plain answer.') })
     const res = await handleChat(ask('application/x-ndjson'), d)
     expect(res.status).toBe(200)
+    expect(res.headers.get('X-Chat-Tools')).toBe('off') // the owner can tell that the tool never worked
     expect(d.seen.map((s) => [s.model, s.recommend !== undefined])).toEqual([[DEFAULT_MODEL, true], [FALLBACK_MODELS[0], true], [DEFAULT_MODEL, false]])
     expect(d.seen[2]!.system).toContain('«Вставьте этот артикул в поиск»') // the last try is the plain assistant
     expect((await lines(res)).map((e) => e.t)).toEqual(['text', 'end'])
