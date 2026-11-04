@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
@@ -24,6 +25,13 @@ export default defineConfig({
   plugins: [react()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   server: { host: true },
+  test: {
+    // On a developer machine: one test file at a time, in one worker. Several of the suites build a whole database (PGlite) per file, so a worker per
+    // core ate all the memory and the processor. (Vitest 5 has no `poolOptions.threads`: `maxWorkers` is the limit, and `fileParallelism: false`
+    // forces it to 1.) The CI of GitHub (CI=true) keeps Vitest's own default: it runs the suite in three shards, and a single worker would triple
+    // the time of every shard.
+    ...(process.env.CI ? {} : { maxWorkers: 1, fileParallelism: false }),
+  },
   build: {
     // Production hygiene, stated explicitly so a future default change cannot silently alter it:
     // no source maps in the public bundle (they would publish the original TypeScript), and an
