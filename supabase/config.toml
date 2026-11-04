@@ -108,11 +108,3 @@ verify_jwt = false
 # question of the AI assistant against the caller's hour and writes the assistant's log. Never called by a browser.
 [functions.chat-gate]
 verify_jwt = false
-
-# Signed-in customers: a deposit through Crypto Pay (@CryptoBot). Authenticates the JWT itself.
-[functions.create-crypto-invoice]
-verify_jwt = false
-
-# Called by CryptoBot only: authenticates itself by the signature of the raw body (HMAC-SHA256 under SHA256 of the API token), see _shared/crypto-pay.ts.
-[functions.cryptopay-webhook]
-verify_jwt = false

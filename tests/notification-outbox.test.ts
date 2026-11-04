@@ -37,15 +37,6 @@ describe('messages', () => {
     expect(buildMessage(eventFor(row({ kind: 'canceled', order_status: 'refunded' })), 'ru')).toMatch(/отменён[\s\S]*\$4\.00<\/b> возвращено/)
   })
 
-  it('a deposit row (CryptoBot) becomes "balance topped up", with the amount and the new balance, in the customer\'s language', () => {
-    const deposit = row({ kind: 'deposit', order_id: null, order_status: null, quantity: null, service_name: null, payload: { amount_usd: 25, asset: 'USDT', balance: 35.5 } })
-    expect(eventFor(deposit)).toEqual({ type: 'deposit_completed', amountUsd: 25, balance: 35.5, asset: 'USDT' })
-    expect(buildMessage(eventFor(deposit), 'ru')).toBe('💰 <b>Ваш баланс успешно пополнен на $25.00!</b>\nНовый баланс: <b>$35.50</b>')
-    expect(buildMessage(eventFor(deposit), 'en')).toMatch(/Deposit received[\s\S]*\+\$25\.00/)
-    expect(buildMessage(eventFor(deposit), 'uk')).toMatch(/Поповнення отримано[\s\S]*\+\$25\.00/)
-    expect(isReady(deposit)).toBe(true) // nothing to wait for: the credit is booked
-  })
-
   it('"started" is told only while it is true', () => {
     expect(isReady(row({ kind: 'started', order_status: 'in_progress' }))).toBe(true)
     expect(isReady(row({ kind: 'started', order_status: 'completed' }))).toBe(false)
