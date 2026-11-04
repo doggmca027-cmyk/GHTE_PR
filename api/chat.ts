@@ -17,7 +17,8 @@ import { createRateLimiter, DEFAULT_MODEL, FALLBACK_MODELS, handleChat, type Cha
 
 export const config = { runtime: 'edge' }
 
-const allow = createRateLimiter()
+// The small limit of this instance's memory only stops a loop: with the gate on, the hourly limit (20) is the real one and must be reached first
+const allow = createRateLimiter(process.env.CHAT_GATE_SECRET ? 60 : 20)
 
 const generate: ChatDeps['generate'] = ({ apiKey, model, ...call }) => answerStream({ model: createGoogleGenerativeAI({ apiKey })(model), ...call })
 
