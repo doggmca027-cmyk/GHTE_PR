@@ -238,7 +238,8 @@ describe('the flight test, step by step, on the real schema', () => {
 
     const side = await run('side-effects', { 'ORDER ID': orderId })
     expect(side[0]).toEqual({ what: 'open reconciliation cases', value: '0' })
-    expect(side[1].what).toBe('notification completed')
+    // the customer is told when the order starts and when it is completed
+    expect(side.slice(1).map((r) => r.what)).toEqual(['notification started', 'notification completed'])
   })
 
   it('step 5: the money identity for an order the provider canceled: the refund brings the wallet effect back to zero', async () => {
