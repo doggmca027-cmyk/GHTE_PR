@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Send } from 'lucide-react'
 import { platformColor, platformInitials } from '@/constants/platforms'
-import { logoFailed, logoLoaded, logoUrl, markLogoFailed, markLogoLoaded } from '@/lib/platform-logo'
+import { logoFailed, logoUrl, markLogoFailed, markLogoLoaded } from '@/lib/platform-logo'
 import type { Platform } from '@/types/catalog'
 
 interface Props {
@@ -59,7 +59,16 @@ export function PlatformIcon({ platform, name, size = 20, strokeWidth = 1.75, cl
  */
 export function PlatformBadge({ slug, name, size = 44 }: { slug: string; name: string; size?: number }) {
   const url = logoUrl(slug, name)
-  const [status, setStatus] = useState<'loading' | 'loaded' | 'failed'>(url === null || logoFailed(url) ? 'failed' : logoLoaded(url) ? 'loaded' : 'loading')
+  // The white tile is shown only for an image that is really in this element: a logo that loaded before (a row mounted again, a list shown again) is
+  // not taken on trust, because the new <img> may still be waiting for the network or have lost it, and a white tile with nothing in it is worse than
+  // the initials. Until the element says it has the picture, the coloured tile stays.
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'failed'>(url === null || logoFailed(url) ? 'failed' : 'loading')
+  const img = useRef<HTMLImageElement>(null)
+  const retried = useRef(false)
+  useEffect(() => {
+    const el = img.current
+    if (url !== null && el && el.complete && el.naturalWidth > 0) { markLogoLoaded(url); setStatus('loaded') } // from the cache before React listened
+  }, [url])
   const loaded = status === 'loaded'
   return (
     <span
@@ -75,13 +84,19 @@ export function PlatformBadge({ slug, name, size = 44 }: { slug: string; name: s
       {url !== null && status !== 'failed' && (
         <img
           src={url}
+          ref={img}
           alt=""
-          loading="lazy"
+          loading="eager"
           decoding="async"
           referrerPolicy="no-referrer"
           draggable={false}
           onLoad={() => { markLogoLoaded(url); setStatus('loaded') }}
-          onError={() => { markLogoFailed(url); setStatus('failed') }}
+          onError={(e) => {
+            // one more try (a dropped request in a mobile webview is common), then the tile with initials stays for the session
+            if (!retried.current) { retried.current = true; const el = e.currentTarget; window.setTimeout(() => { el.src = `${url}?r=1` }, 1200); return }
+            markLogoFailed(url)
+            setStatus('failed')
+          }}
           className={loaded ? 'h-[58%] w-[58%] object-contain' : 'absolute inset-0 h-full w-full opacity-0'}
         />
       )}

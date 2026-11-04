@@ -49,6 +49,8 @@ const badge = (name: string): HTMLElement => {
 }
 const imgOf = (name: string) => badge(name).querySelector('img') as HTMLImageElement | null
 const fire = (el: Element, type: 'load' | 'error') => act(() => void el.dispatchEvent(new Event(type)))
+// a failed request is tried once more (a dropped request in a mobile webview is common); the second failure is final
+const fail = (el: Element) => { fire(el, 'error'); fire(el, 'error') }
 
 describe('the sticky search bar', () => {
   it('is stuck to the top of the scrolling screen, above the list, with a background that matches the screen', () => {
@@ -115,11 +117,11 @@ describe('the sticky search bar', () => {
 })
 
 describe('the platform logos', () => {
-  it('ask the SimpleIcons CDN lazily, without a referrer, and start hidden behind the coloured tile with initials', () => {
+  it('ask the SimpleIcons CDN at once, without a referrer, and start hidden behind the coloured tile with initials', () => {
     mount()
     const img = imgOf('Telegram')!
     expect(img.getAttribute('src')).toBe('https://cdn.simpleicons.org/telegram')
-    expect(img.getAttribute('loading')).toBe('lazy')
+    expect(img.getAttribute('loading')).toBe('eager')
     expect(img.getAttribute('referrerpolicy')).toBe('no-referrer')
     expect(img.getAttribute('alt')).toBe('')
     expect(img.className).toContain('opacity-0')
@@ -142,7 +144,7 @@ describe('the platform logos', () => {
   it('FALLBACK: if the CDN fails (offline, blocked, 404) the image is removed and the coloured initials tile stays', () => {
     mount()
     const img = imgOf('Instagram')!
-    fire(img, 'error')
+    fail(img)
     const tile = badge('Instagram')
     expect(tile.dataset.logo).toBe('failed')
     expect(tile.querySelector('img')).toBeNull()
@@ -152,7 +154,7 @@ describe('the platform logos', () => {
 
   it('one failure does not touch the other platforms', () => {
     mount()
-    fire(imgOf('Instagram')!, 'error')
+    fail(imgOf('Instagram')!)
     expect(badge('Instagram').dataset.logo).toBe('failed')
     expect(badge('TikTok').dataset.logo).toBe('loading')
     expect(imgOf('TikTok')).not.toBeNull()
@@ -160,13 +162,35 @@ describe('the platform logos', () => {
 
   it('a failed logo is not asked for again when the list is shown again (search, new screen)', () => {
     mount()
-    fire(imgOf('VK')!, 'error')
+    fail(imgOf('VK')!)
     act(() => root.unmount())
     root = createRoot(host)
     mount()
     expect(badge('VK').dataset.logo).toBe('failed')
     expect(imgOf('VK')).toBeNull()
     expect(imgOf('Telegram')).not.toBeNull() // the others are still tried
+  })
+
+  it('a request that fails once is tried again: the coloured tile stays meanwhile and the white one never shows', () => {
+    mount()
+    const img = imgOf('Instagram')!
+    fire(img, 'error')
+    expect(badge('Instagram').dataset.logo).toBe('loading')
+    expect(badge('Instagram').style.backgroundColor).not.toMatch(/255, 255, 255|#fff/i)
+    fire(img, 'error')
+    expect(badge('Instagram').dataset.logo).toBe('failed')
+  })
+
+  it('a logo that loaded before is not taken on trust when the list is shown again: the new image must say it has the picture', () => {
+    mount()
+    fire(imgOf('YouTube')!, 'load')
+    act(() => root.unmount())
+    root = createRoot(host)
+    mount()
+    expect(badge('YouTube').dataset.logo).toBe('loading')
+    expect(badge('YouTube').style.backgroundColor).not.toMatch(/255, 255, 255|#fff/i)
+    fire(imgOf('YouTube')!, 'load')
+    expect(badge('YouTube').dataset.logo).toBe('loaded')
   })
 
   it('a platform that is not a brand makes no request and shows its tile at once', () => {
@@ -181,14 +205,16 @@ describe('the platform logos', () => {
     expect(imgOf('X (Twitter)')!.getAttribute('src')).toBe('https://cdn.simpleicons.org/x')
   })
 
-  it('a loaded logo survives filtering (the row stays mounted) and a failed one stays failed', () => {
+  it('a loaded logo comes back after filtering and a failed one stays failed', () => {
     mount()
     fire(imgOf('YouTube')!, 'load')
-    fire(imgOf('Telegram')!, 'error')
+    fail(imgOf('Telegram')!)
     type('t') // keeps Telegram and YouTube in the list
     expect(rows()).toContain('Telegram')
     expect(badge('Telegram').dataset.logo).toBe('failed')
     type('')
+    // the row may be mounted anew: its image has to say it has the picture (a cached one does at once, here the event stands for it)
+    fire(imgOf('YouTube')!, 'load')
     expect(badge('YouTube').dataset.logo).toBe('loaded')
   })
 })
