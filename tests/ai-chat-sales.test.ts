@@ -175,6 +175,22 @@ describe('what the assistant is told about this customer', () => {
     // ...while a wish that names quality still gets the safe list only
     expect(searchKinds(ask('для сетки нужны качественные лайки в инсту'))).toEqual(['safe'])
   })
+  it('the cheapest asked for: the budget card and the premium one next to it are named in code, with the price difference', () => {
+    const list = [card('a', 'Followers [no refill]', 0.25), card('b', 'Followers Basic', 0.4), card('p', 'Followers [Refill: 30 Days]', 0.6, { refill_supported: true }), card('h', 'Followers HQ', 0.9)]
+    const note = situationNote(ask('самые дешевые подписчики в тик ток'), list)!
+    expect(note).toContain('- Клиент просит дешёвое. Сначала дай TT-FOL-STD-ROOTA ($0.25 за 1000, гарантии нет) и назови риски (возможны списания), затем сразу предложи премиальную альтернативу TT-FOL-STD-ROOTP ($0.6 за 1000, гарантия: да, 30 дн.): она дороже на $0.35 за 1000.')
+    // a label without a guarantee is said as it is
+    expect(situationNote(ask('самые дешевые подписчики в тик ток'), [list[0]!, list[3]!])).toContain('($0.9 за 1000, метка качества в названии, гарантия не указана)')
+    // the safe card costs no more: it is simply the better buy
+    expect(situationNote(ask('самые дешевые подписчики в тик ток'), [card('a', 'Followers Basic', 0.5), card('p', 'Followers HQ Refill 30D', 0.4, { refill_supported: true })])).toContain('стоит не дороже, чем TT-FOL-STD-ROOTA')
+  })
+  it('...but not when safety was asked for, when nothing cheap was asked, or when the list has only one kind', () => {
+    const list = [card('a', 'Followers [no refill]', 0.25), card('p', 'Followers [Refill: 30 Days]', 0.6, { refill_supported: true })]
+    expect(situationNote(ask('самые дешевые подписчики в тик ток с гарантией'), list)).toBeUndefined()
+    expect(situationNote(ask('подписчики в тик ток'), list)).toBeUndefined()
+    expect(situationNote(ask('самые дешевые подписчики в тик ток'), [list[0]!])).toBeUndefined()
+    expect(situationNote(ask('самые дешевые подписчики в тик ток'), [list[1]!])).toBeUndefined()
+  })
   it('a quantity over the limit is worked out per card: runs, price, and drip-feed only where the card has it', () => {
     const cards = [
       card('a', 'Followers A', 1, { max_quantity: 500_000, dripfeed_available: true }),
@@ -240,6 +256,7 @@ describe('the sales rules of the prompt', () => {
   })
   it('upsell: the cheap one with its risks first, then the premium one with the difference; the pattern of the brief', () => {
     expect(prompt).toContain('Умный upsell')
+    expect(prompt).toContain('Если в разделе «СИТУАЦИЯ ЭТОГО КЛИЕНТА» названа премиальная альтернатива, предложи именно её')
     expect(prompt).toContain('сначала дай артикул дешёвой услуги и её цену, но сразу назови риски')
     expect(prompt).toContain('Я могу дать вам базу за $1 (**SKU**), но для вашей задачи (чтобы не было отписок) выгоднее взять **SKU премиум** с докруткой')
     expect(prompt).toContain('бюджет не сгорит на дистанции')
