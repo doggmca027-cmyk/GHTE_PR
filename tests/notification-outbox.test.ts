@@ -24,6 +24,24 @@ describe('messages', () => {
     expect(buildMessage(eventFor(row({ kind: 'canceled', order_status: 'refunded' })), 'uk')).toContain('повернено')
   })
 
+  it('"started" says the order is in progress, in the language of the customer (English, Ukrainian, Russian)', () => {
+    const started = row({ kind: 'started', order_status: 'in_progress' })
+    expect(buildMessage(eventFor(started), 'en')).toMatch(/in progress[\s\S]*#o1abcdef[\s\S]*Telegram Views[\s\S]*1,000/)
+    expect(buildMessage(eventFor(started), 'uk')).toMatch(/запущено в роботу[\s\S]*Telegram Views/)
+    expect(buildMessage(eventFor(started), 'ru')).toMatch(/запущен в работу[\s\S]*#o1abcdef[\s\S]*Telegram Views/)
+  })
+
+  it('the Russian messages for the end of an order say what the customer was promised', () => {
+    expect(buildMessage(eventFor(row()), 'ru')).toMatch(/успешно выполнен/)
+    expect(buildMessage(eventFor(row({ kind: 'partial', order_status: 'partial', remains: 400, partial_refund_amount: '1.6000' })), 'ru')).toMatch(/частично[\s\S]*600 из 1,000[\s\S]*\$1\.60<\/b>/)
+    expect(buildMessage(eventFor(row({ kind: 'canceled', order_status: 'refunded' })), 'ru')).toMatch(/отменён[\s\S]*\$4\.00<\/b> возвращено/)
+  })
+
+  it('"started" is told only while it is true', () => {
+    expect(isReady(row({ kind: 'started', order_status: 'in_progress' }))).toBe(true)
+    expect(isReady(row({ kind: 'started', order_status: 'completed' }))).toBe(false)
+  })
+
   it('a cancellation is announced only once its refund is booked', () => {
     expect(isReady(row({ kind: 'canceled', order_status: 'canceled' }))).toBe(false)
     expect(isReady(row({ kind: 'canceled', order_status: 'failed' }))).toBe(false)
@@ -159,6 +177,14 @@ describe('runOutbox', () => {
     return { deps, done, sent }
   }
   const rows = (n: number) => Array.from({ length: n }, (_, i) => row({ id: `r${i}`, dedupe_key: `order:o${i}:completed`, order_id: `o${i}-aaaa`, telegram_id: 1000 + i }))
+
+  it('an order that has finished by the time "started" is sent is not told it has started: skipped, nothing sent', async () => {
+    const t = mk([row({ id: 's1', kind: 'started', dedupe_key: 'order:o1:started', order_status: 'completed' }), row({ id: 's2', kind: 'started', dedupe_key: 'order:o2:started', order_status: 'in_progress', telegram_id: 1002 })])
+    const stats = await runOutbox(t.deps)
+    expect(t.done.get('s1')).toEqual({ outcome: 'skipped', error: 'already_finished' })
+    expect(t.done.get('s2')).toEqual({ outcome: 'sent' })
+    expect(stats).toMatchObject({ claimed: 2, sent: 1, skipped: 1 })
+  })
 
   it('delivers a batch and records every outcome', async () => {
     const t = mk(rows(3))
@@ -323,9 +349,18 @@ describe('notification_outbox (SQL)', () => {
     await db.query(`update orders set status = 'failed' where id = $1`, [f])
     expect((await outbox(f)).map((r) => [r.kind, r.dedupe_key])).toEqual([['canceled', `order:${f}:canceled`]])
 
-    const i = await placed(u)
-    await db.query(`update orders set status = 'in_progress' where id = $1`, [i])
-    expect(await outbox(i)).toEqual([])
+    const s = await placed(u)
+    await db.query(`update orders set error_message = 'x' where id = $1`, [s]) // not a status change: nothing
+    expect(await outbox(s)).toEqual([])
+  })
+
+  it('in progress is queued as "started": at once (no hold), once, and the final message comes after it', async () => {
+    const u = await newUser()
+    const o = await placed(u)
+    await db.query(`update orders set status = 'in_progress' where id = $1`, [o])
+    expect(await outbox(o)).toEqual([{ kind: 'started', s: 'pending', attempts: 0, dedupe_key: `order:${o}:started`, held: false }])
+    await db.query(`update orders set status = 'completed' where id = $1`, [o])
+    expect((await outbox(o)).map((r) => [r.kind, r.held])).toEqual([['started', false], ['completed', true]])
   })
 
   it('an outbox failure never fails the order', async () => {
@@ -342,7 +377,7 @@ describe('notification_outbox (SQL)', () => {
     const u = await newUser()
     const o = await placed(u)
     await db.query(`select apply_partial_refund($1::uuid, 400, 1)`, [o])
-    expect(await call(`claim_notification_batch(10)`)).toEqual([]) // still inside the 30 s hold
+    expect((await call(`claim_notification_batch(10)`)).filter((b: any) => b.order_id === o)).toEqual([]) // still inside the 30 s hold
     await due()
     const batch = await call(`claim_notification_batch(10)`)
     const mine = batch.find((b: any) => b.order_id === o)

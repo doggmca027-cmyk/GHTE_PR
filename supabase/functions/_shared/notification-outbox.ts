@@ -15,7 +15,7 @@ import { notifyUser, resolveLang, sendTelegramMessage, type NotifyEvent, type No
 
 export interface OutboxRow {
   id: string
-  kind: 'completed' | 'partial' | 'canceled' | 'admin_alert' | 'admin_hub'
+  kind: 'started' | 'completed' | 'partial' | 'canceled' | 'admin_alert' | 'admin_hub'
   dedupe_key: string
   attempts: number
   /** null for an admin alert (nothing to do with one order). */
@@ -49,6 +49,7 @@ export function eventFor(row: OutboxRow): NotifyEvent {
     return { type: 'admin_alert', headline: String(row.payload?.headline ?? 'Alert').slice(0, 120), detail: String(row.payload?.detail ?? '').slice(0, 600) }
   }
   const base = { orderId: String(row.order_id), serviceName: row.service_name ?? 'Order', quantity: Number(row.quantity) }
+  if (row.kind === 'started') return { type: 'order_started', ...base }
   if (row.kind === 'completed') return { type: 'order_completed', ...base }
   if (row.kind === 'partial') return { type: 'order_partial', ...base, remains: Number(row.remains ?? 0), refundAmount: Number(row.partial_refund_amount ?? 0) }
   return { type: 'order_canceled', ...base, refundAmount: Number(row.charge_amount ?? 0) - Number(row.partial_refund_amount ?? 0) }
@@ -60,6 +61,7 @@ export function eventFor(row: OutboxRow): NotifyEvent {
  */
 export function isReady(row: OutboxRow): boolean {
   if (row.kind === 'admin_alert' || row.kind === 'admin_hub') return true
+  if (row.kind === 'started') return row.order_status === 'in_progress'
   if (row.kind === 'canceled') return row.order_status === 'refunded'
   if (row.kind === 'partial') return row.order_status === 'partial' || row.order_status === 'refunded'
   return row.order_status === 'completed' || row.order_status === 'refunded'
@@ -105,6 +107,8 @@ export async function deliver(row: OutboxRow, deps: RunDeps): Promise<{ completi
   try {
     if (!row.notifications_enabled) return { completion: { outcome: 'skipped', error: 'notifications_off' }, rateLimited: false }
     if (row.bot_blocked_recently) return { completion: { outcome: 'skipped', error: 'bot_blocked' }, rateLimited: false }
+    // "in progress" is told only while it is true: an order that has already finished is announced by its final message, not by a late "started"
+    if (row.kind === 'started' && row.order_status !== 'in_progress') return { completion: { outcome: 'skipped', error: 'already_finished' }, rateLimited: false }
     if (!isReady(row)) return { completion: { outcome: 'wait', error: 'refund_not_booked' }, rateLimited: false }
 
     let last: SendResult | null = null

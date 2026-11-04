@@ -9,10 +9,12 @@
 
 import { hubMessage, type HubPayload, type InlineButton } from './order-hub.ts'
 
-export type NotifyLang = 'en' | 'uk'
+export type NotifyLang = 'en' | 'uk' | 'ru'
 
 export type NotifyEvent =
   | { type: 'deposit_completed'; amountUsd: number; asset?: string; amountCrypto?: string; balance: number }
+  /** The provider began the order (status in progress). */
+  | { type: 'order_started'; orderId: string; serviceName: string; quantity: number }
   | { type: 'order_completed'; orderId: string; serviceName: string; quantity: number }
   | { type: 'order_canceled'; orderId: string; serviceName: string; quantity: number; refundAmount: number }
   | { type: 'order_partial'; orderId: string; serviceName: string; quantity: number; remains: number; refundAmount: number }
@@ -27,9 +29,10 @@ export type NotifyEvent =
   /** Admin alert from provider-health-monitor: a provider's balance fell to or below its threshold. */
   | { type: 'provider_low_balance'; providerName: string; balance: number; currency: string; /** Amount of the top-up proposal that was filed, if any. */ proposalAmount?: number }
 
-/** Ukrainian for uk-*, English for everything else. */
+/** Ukrainian for uk-*, Russian for ru-*, English for everything else. */
 export function resolveLang(languageCode: string | null | undefined): NotifyLang {
-  return /^uk(\b|-|_)/i.test(languageCode ?? '') ? 'uk' : 'en'
+  const code = languageCode ?? ''
+  return /^uk(\b|-|_)/i.test(code) ? 'uk' : /^ru(\b|-|_)/i.test(code) ? 'ru' : 'en'
 }
 
 /** Escapes the three characters Telegram's HTML parse mode treats specially (plus quotes for safety). */
@@ -61,6 +64,8 @@ type Template<E extends NotifyEvent> = (e: E) => string
 const EN: { [K in NotifyEvent['type']]: Template<Extract<NotifyEvent, { type: K }>> } = {
   deposit_completed: (e) =>
     `✅ <b>Deposit received</b>\n<b>+${formatUsd(e.amountUsd)}</b>${e.amountCrypto && e.asset ? ` (${escapeHtml(trimCrypto(e.amountCrypto))} ${escapeHtml(e.asset)})` : ''} was added to your balance.\nNew balance: <b>${formatUsd(e.balance)}</b>`,
+  order_started: (e) =>
+    `🚀 <b>Your order is in progress</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\n${int(e.quantity)} are on their way.`,
   order_completed: (e) =>
     `🎉 <b>Order completed</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\n${int(e.quantity)} delivered.`,
   order_canceled: (e) =>
@@ -87,6 +92,8 @@ Open the app, Support, to read the reply.`,
 const UK: typeof EN = {
   deposit_completed: (e) =>
     `✅ <b>Поповнення отримано</b>\n<b>+${formatUsd(e.amountUsd)}</b>${e.amountCrypto && e.asset ? ` (${escapeHtml(trimCrypto(e.amountCrypto))} ${escapeHtml(e.asset)})` : ''} зараховано на ваш баланс.\nНовий баланс: <b>${formatUsd(e.balance)}</b>`,
+  order_started: (e) =>
+    `🚀 <b>Ваше замовлення запущено в роботу</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nУ дорозі: ${int(e.quantity)}.`,
   order_completed: (e) =>
     `🎉 <b>Замовлення виконано</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nДоставлено: ${int(e.quantity)}.`,
   order_canceled: (e) =>
@@ -110,7 +117,32 @@ ${escapeHtml(clip(e.detail, 600))}`,
       : `⚠️ <b>Баланс провайдера ${name(e.providerName)} критично низький:</b> ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`,
 }
 
-const TEMPLATES: Record<NotifyLang, typeof EN> = { en: EN, uk: UK }
+const RU: typeof EN = {
+  deposit_completed: (e) =>
+    `✅ <b>Пополнение получено</b>\n<b>+${formatUsd(e.amountUsd)}</b>${e.amountCrypto && e.asset ? ` (${escapeHtml(trimCrypto(e.amountCrypto))} ${escapeHtml(e.asset)})` : ''} зачислено на ваш баланс.\nНовый баланс: <b>${formatUsd(e.balance)}</b>`,
+  order_started: (e) =>
+    `🚀 <b>Ваш заказ запущен в работу</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nВ пути: ${int(e.quantity)}.`,
+  order_completed: (e) =>
+    `✅ <b>Заказ успешно выполнен</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nДоставлено: ${int(e.quantity)}.`,
+  order_canceled: (e) =>
+    `⚠️ <b>Заказ отменён</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nПоставщик не смог его выполнить. <b>${formatUsd(e.refundAmount)}</b> возвращено на ваш баланс.`,
+  order_partial: (e) =>
+    `⚠️ <b>Заказ выполнен частично</b>\n#${shortId(e.orderId)} · ${name(e.serviceName)}\nДоставлено ${int(e.quantity - e.remains)} из ${int(e.quantity)}, не доставлено ${int(e.remains)}.\nНа ваш баланс возвращено <b>${formatUsd(e.refundAmount)}</b>.`,
+  admin_alert: (e) => `🚨 <b>${name(e.headline)}</b>\n${escapeHtml(clip(e.detail, 600))}`,
+  admin_hub: (e) => hubMessage(e.payload).text,
+  ticket_reply: (e) =>
+    `💬 <b>Поддержка ответила на ваше обращение</b>\n#${shortId(e.ticketId)} · ${name(e.subject)}\nОткройте приложение, раздел «Поддержка», чтобы прочитать ответ.`,
+  provider_health: (e) =>
+    e.status === 'unavailable'
+      ? `🚨 <b>Провайдер ${name(e.providerName)} НЕДОСТУПЕН</b>\nТрафик переведён на резервного.`
+      : `✅ <b>Провайдер ${name(e.providerName)} снова ONLINE</b>\nМаршрутизация восстановлена.`,
+  provider_low_balance: (e) =>
+    e.proposalAmount
+      ? `⚠️ <b>Баланс провайдера ${name(e.providerName)} низкий.</b> Создана заявка на пополнение на <b>${plainAmount(e.proposalAmount)} ${escapeHtml(e.currency)}</b>.\nБаланс: ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`
+      : `⚠️ <b>Баланс провайдера ${name(e.providerName)} критически низкий:</b> ${plainAmount(e.balance)} ${escapeHtml(e.currency)}.`,
+}
+
+const TEMPLATES: Record<NotifyLang, typeof EN> = { en: EN, uk: UK, ru: RU }
 
 /** Telegram HTML message for an event. Always <= 4096 chars. */
 export function buildMessage(event: NotifyEvent, lang: NotifyLang = 'en'): string {

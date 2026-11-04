@@ -59,9 +59,10 @@ describe('notification templates', () => {
     expect(buildMessage(EVENTS.partial, 'uk')).toContain('Доставлено 700 з 1,000, не доставлено 300')
   })
 
-  it('picks the language from the Telegram language code (Ukrainian, otherwise English)', () => {
+  it('picks the language from the Telegram language code (Ukrainian, Russian, otherwise English)', () => {
     for (const code of ['uk', 'uk-UA', 'UK', 'uk_UA']) expect(resolveLang(code)).toBe('uk')
-    for (const code of ['en', 'en-US', 'ru', 'de', 'ukr', '', null, undefined]) expect(resolveLang(code as string)).toBe('en')
+    for (const code of ['ru', 'ru-RU', 'RU', 'ru_RU']) expect(resolveLang(code)).toBe('ru')
+    for (const code of ['en', 'en-US', 'de', 'ukr', 'rus', 'run', '', null, undefined]) expect(resolveLang(code as string)).toBe('en')
   })
 
   it('formats money with at least cents and up to 4 decimals', () => {
