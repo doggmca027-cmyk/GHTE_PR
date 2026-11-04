@@ -3,7 +3,7 @@
 import { t } from '@/i18n'
 import type { ICatalogService } from '@/types/catalog'
 import { reactionOf } from './reactions'
-import { localizedName } from './service-view'
+import { serviceName } from './service-view'
 
 /** Tags that only say which of the panel's servers delivers ("[server 2]", "[s3]", "[backup server]"): nothing the customer chooses. */
 const TECHNICAL_TAG = /\[(?:(?:server|сервер|s)\s*:?\s*#?\d+|backup server|резервный сервер)\]/gi
@@ -95,7 +95,7 @@ const FEATURES: Feature[] = [
   (v, { locale }) => t('up to {n}', { n: compact(v.maxQuantity, locale) }),
   // what is left: a tag of its own name the other variants do not have ("1 Hour" / "2 Hours")
   (v, { lang, common }) => {
-    const own = nameTags(localizedName(v.name, v.nameI18n, lang)).find((tag) => !common.has(tag.toLowerCase()))
+    const own = nameTags(serviceName(v, lang)).find((tag) => !common.has(tag.toLowerCase()))
     return own ? (own.length > 22 ? `${own.slice(0, 21)}…` : own) : null
   },
 ]
@@ -107,7 +107,7 @@ const FEATURES: Feature[] = [
  */
 export function variantDiffLabels(variants: readonly ICatalogService[], lang: string, locale: string): string[] {
   if (variants.length <= 1) return variants.map(() => '')
-  const tagSets = variants.map((v) => new Set(nameTags(localizedName(v.name, v.nameI18n, lang)).map((x) => x.toLowerCase())))
+  const tagSets = variants.map((v) => new Set(nameTags(serviceName(v, lang)).map((x) => x.toLowerCase())))
   const common = new Set([...tagSets[0]].filter((x) => tagSets.every((s) => s.has(x))))
   const ctx: Ctx = { locale, lang, common }
   const chosen: (string | null)[][] = []

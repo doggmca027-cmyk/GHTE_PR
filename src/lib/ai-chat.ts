@@ -19,6 +19,8 @@ export interface ChatMessage {
 /** A message on the screen: what was said, and for an answer the services it recommended, as cards. Only `role` and `content` go to the server. */
 export interface ChatBubble extends ChatMessage {
   cards?: ChatCard[]
+  /** The answer is still being written: its end may be half a word, half an article number or an unclosed backtick (see splitAnswer). */
+  streaming?: boolean
 }
 
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
@@ -67,12 +69,16 @@ const tidy = (text: string) => text.replace(/\*\*/g, '').replace(/`/g, '')
 /** `code` as the assistant writes an article: the backticks go, the article stays and becomes a chip that copies it with one tap. */
 const unticked = (answer: string) => answer.replace(/`([^`\n]+)`/g, '$1')
 
-/** Text with the articles in it taken out, as pieces. */
-function withArticles(text: string, kind: 'text' | 'bold'): Piece[] {
+/**
+ * Text with the articles in it taken out, as pieces. `openEnd`: the text ends where the answer so far ends, so an article that touches its end may be
+ * only the beginning of one ("IG-FOL-HQ-3F9A" of "IG-FOL-HQ-3F9A1C"): it stays text until the answer goes on or ends.
+ */
+function withArticles(text: string, kind: 'text' | 'bold', openEnd = false): Piece[] {
   const out: Piece[] = []
   const re = new RegExp(SKU_PATTERN.source, 'gi')
   let last = 0
   for (let m = re.exec(text); m; m = re.exec(text)) {
+    if (openEnd && m.index + m[0].length === text.length) break // the rest, this article included, is written out below as it stands
     if (m.index > last) out.push({ kind, text: text.slice(last, m.index) })
     out.push({ kind: 'sku', text: m[0].toUpperCase() })
     last = m.index + m[0].length
@@ -81,18 +87,26 @@ function withArticles(text: string, kind: 'text' | 'bold'): Piece[] {
   return out
 }
 
-/** The answer as pieces: plain text, **bold**, and every article number (in bold or not) on its own so it can be copied. */
-export function splitAnswer(answer: string): Piece[] {
+/**
+ * The answer as pieces: plain text, **bold**, and every article number (in bold or not) on its own so it can be copied.
+ *
+ * `streaming`: the answer is still arriving, token by token, and every call sees a different prefix of the final text. Then nothing may show that the
+ * final text will not have: an unclosed backtick or "**" is not shown (tidy), and an article number at the very end that no character follows yet is
+ * not a chip (it may still grow, and a chip copies what it shows). It becomes one as soon as a character after it arrives, or the answer ends
+ * (a call without `streaming`). A closing backtick or any punctuation counts as that character.
+ */
+export function splitAnswer(answer: string, { streaming = false }: { streaming?: boolean } = {}): Piece[] {
+  const open = streaming && /[A-Za-z0-9-]$/.test(answer)
   const src = bulleted(unticked(answer))
   const out: Piece[] = []
   let last = 0
   for (const m of src.matchAll(BOLD)) {
     const at = m.index ?? 0
     if (at > last) out.push(...withArticles(tidy(src.slice(last, at)), 'text'))
-    out.push(...withArticles(m[1]!, 'bold'))
+    out.push(...withArticles(m[1]!, 'bold', open && at + m[0].length === src.length))
     last = at + m[0].length
   }
-  if (last < src.length) out.push(...withArticles(tidy(src.slice(last)), 'text'))
+  if (last < src.length) out.push(...withArticles(tidy(src.slice(last)), 'text', open))
   return out.filter((p) => p.text !== '')
 }
 

@@ -14,7 +14,7 @@ import { currentLocale, tr, useLanguage, useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
 import { SERVICES_FALLBACK, featuredCategories, quickPlatforms, totalServices } from '@/lib/home-view'
 import { formatMoneyAmount } from '@/lib/order-calc'
-import { localizedName } from '@/lib/service-view'
+import { serviceName } from '@/lib/service-view'
 import { telegramBotUsername } from '@/lib/telegram-bot'
 import { cn, formatMoney } from '@/lib/utils'
 import { fetchCategories, fetchCategoryServices, fetchLowestRate, fetchPlatforms } from '@/services/api/services'
@@ -221,7 +221,7 @@ export function WebHome({ session, onBrowse, onTopUp, onViewOrders }: Props) {
                       <PlatformIcon platform={f.platform} name={f.platformName} size={24} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="line-clamp-2 text-sm font-bold leading-snug text-content-primary">{localizedName(f.service.name, f.service.nameI18n, lang)}</span>
+                      <span className="line-clamp-2 text-sm font-bold leading-snug text-content-primary">{serviceName(f.service, lang)}</span>
                       <span className="mt-0.5 block text-[15px] font-extrabold text-content-primary">
                         {formatMoneyAmount(f.service.ratePer1000)} <span className="text-xs font-semibold text-content-muted">/ 1,000</span>
                       </span>

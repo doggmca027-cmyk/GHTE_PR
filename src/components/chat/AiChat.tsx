@@ -19,11 +19,11 @@ const FAILURES: Record<ChatFailure, string> = {
 }
 
 /** An answer of the assistant: text and **bold** as they are, every article number as a chip that copies it. */
-function Answer({ text, copied, onCopy, onFind, carded }: { text: string; copied: string | null; onCopy: (article: string) => void; onFind?: (article: string) => void; carded: ReadonlySet<string> }) {
+function Answer({ text, streaming, copied, onCopy, onFind, carded }: { text: string; streaming?: boolean; copied: string | null; onCopy: (article: string) => void; onFind?: (article: string) => void; carded: ReadonlySet<string> }) {
   const t = useT()
   return (
     <>
-      {splitAnswer(text).map((piece, i) => {
+      {splitAnswer(text, { streaming }).map((piece, i) => {
         if (piece.kind === 'bold') return <strong key={i} className="font-bold">{piece.text}</strong>
         if (piece.kind === 'text') return <span key={i}>{piece.text}</span>
         return (
@@ -87,7 +87,7 @@ export function AiChat({ session, onFindArticle, onSelectService }: { session: A
     setMessages([...history, { role: 'assistant', content: '' }])
     let cards: ChatCard[] = [] // the services the assistant recommends arrive as it finishes
     let soFar = ''
-    const show = (text: string) => { soFar = text; setMessages([...history, { role: 'assistant', content: text, ...(cards.length > 0 ? { cards } : {}) }]) }
+    const show = (text: string) => { soFar = text; setMessages([...history, { role: 'assistant', content: text, streaming: true, ...(cards.length > 0 ? { cards } : {}) }]) }
     const showCards = (list: ChatCard[]) => { cards = list; show(soFar) }
     try {
       const answer = session.isMock ? await mockAssistant(show, showCards) : await askAssistant(history, show, controller.signal, undefined, { onCards: showCards, token: session.token })
@@ -206,7 +206,7 @@ export function AiChat({ session, onFindArticle, onSelectService }: { session: A
                     ? m.content
                     : m.content === ''
                       ? <Loader2 size={16} strokeWidth={2} className="animate-spin text-brand" aria-label={t('Loading')} />
-                      : <Answer text={m.content} copied={copied} carded={new Set(m.cards?.map((c) => c.sku))} onCopy={(article) => void copyArticle(article)} onFind={onFindArticle && ((article) => { setOpen(false); onFindArticle(article) })} />}
+                      : <Answer text={m.content} streaming={m.streaming} copied={copied} carded={new Set(m.cards?.map((c) => c.sku))} onCopy={(article) => void copyArticle(article)} onFind={onFindArticle && ((article) => { setOpen(false); onFindArticle(article) })} />}
                 </div>
               )}
               {m.cards && m.cards.length > 0 && (

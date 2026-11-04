@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { cn } from '@/lib/utils'
 import { useLanguage, useT } from '@/i18n'
-import { localizedName } from '@/lib/service-view'
+import { serviceName } from '@/lib/service-view'
 import { formatCompact, formatMoneyAmount } from '@/lib/order-calc'
 import { ServiceBadges } from './ServiceBadges'
 import type { ICatalogService, Platform } from '@/types/catalog'
@@ -37,7 +37,7 @@ export const ServiceCard = memo(function ServiceCard({ service, platform, platfo
           <PlatformIcon platform={platform} name={platformName} size={22} />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="line-clamp-3 text-[15px] font-bold leading-snug text-content-primary">{localizedName(service.name, service.nameI18n, lang)}</h3>
+          <h3 className="line-clamp-3 text-[15px] font-bold leading-snug text-content-primary">{serviceName(service, lang)}</h3>
           {/* what the service really offers (guarantee, countries, drip-feed), not a guessed speed grade */}
           <ServiceBadges service={service} />
         </div>

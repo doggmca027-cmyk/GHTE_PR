@@ -4,7 +4,7 @@ import { CheckCircle2, Clock, Gem, Globe, Hourglass, Link2, Loader2, RefreshCw, 
 import { Button } from '@/components/ui/Button'
 import { Toast, type ToastMessage } from '@/components/ui/Toast'
 import { currentLocale, tr, useLanguage, useT } from '@/i18n'
-import { describeServiceDetails, localizedName, type DetailKind } from '@/lib/service-view'
+import { describeServiceDetails, type DetailKind, serviceName } from '@/lib/service-view'
 import { tm } from '@/i18n/messages'
 import { useAuth } from '@/context/AuthContext'
 import { useSignIn } from '@/context/SignInContext'
@@ -235,7 +235,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
                 <PlatformIcon platform={platform} name={platformName} size={22} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-bold leading-snug text-content-primary">{localizedName(service.name, service.nameI18n, lang)}</p>
+                <p className="text-[15px] font-bold leading-snug text-content-primary">{serviceName(service, lang)}</p>
                 <ServiceBadges service={service} />
                 <p className="mt-2 text-xs font-medium text-content-secondary">
                   {t('{rate} per 1,000 · {min} – {max}', { rate: formatMoneyAmount(service.ratePer1000), min: formatInt(service.minQuantity), max: formatInt(service.maxQuantity) })}

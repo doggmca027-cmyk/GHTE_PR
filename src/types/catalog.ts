@@ -48,6 +48,8 @@ export interface ICatalogService {
   isPremium?: boolean
   /** premium / guaranteed / safe, in this order; absent when the name says none of them. */
   segments?: Segment[]
+  /** The name in the customer's languages ({"es": "..."}, services.name_translations): shown instead of the English name when there is one for the language. */
+  nameTranslations?: Record<string, string>
 }
 
 export interface ICatalog {

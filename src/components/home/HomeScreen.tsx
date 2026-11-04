@@ -13,7 +13,7 @@ import { copyText } from '@/lib/clipboard'
 import { haptic } from '@/lib/haptics'
 import { SERVICES_FALLBACK, featuredCategories, ordersSummary, quickPlatforms, referralLink, totalServices, type OrdersSummary } from '@/lib/home-view'
 import { formatMoneyAmount } from '@/lib/order-calc'
-import { localizedName } from '@/lib/service-view'
+import { serviceName } from '@/lib/service-view'
 import { cn } from '@/lib/utils'
 import { getOrders } from '@/services/api/orders'
 import { getReferralSummary, type ReferralSummary } from '@/services/api/referrals'
@@ -173,7 +173,7 @@ export function HomeScreen({ session, onBrowse, onTopUp, onViewOrders }: Props) 
                       <PlatformIcon platform={f.platform} name={f.platformName} size={22} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="line-clamp-2 text-[13px] font-bold leading-snug text-content-primary">{localizedName(f.service.name, f.service.nameI18n, lang)}</span>
+                      <span className="line-clamp-2 text-[13px] font-bold leading-snug text-content-primary">{serviceName(f.service, lang)}</span>
                       <span className="mt-0.5 block text-sm font-extrabold text-content-primary">
                         {formatMoneyAmount(f.service.ratePer1000)}
                         <span className="ms-1 text-[11px] font-semibold text-content-muted">/ 1,000</span>

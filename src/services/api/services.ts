@@ -38,6 +38,7 @@ interface ServiceRow {
   dripfeed_available?: boolean | null
   segments?: string[] | null
   is_premium?: boolean | null
+  name_translations?: Record<string, string> | null
 }
 
 /** Premium cards first, then the rest (nothing is hidden); inside each group the usual order. The database sorts the same way (order=is_premium.desc,...). */
@@ -45,7 +46,7 @@ const premiumFirst = (a: ICatalogService, b: ICatalogService): number =>
   Number(b.isPremium === true) - Number(a.isPremium === true) || a.sortOrder - b.sortOrder || a.ratePer1000 - b.ratePer1000 || a.name.localeCompare(b.name)
 
 /** The only columns of `services` the app reads (the database also hides the provider-service ids from customers). */
-export const SERVICE_COLUMNS = ['id', 'category_id', 'name', 'description', 'customer_rate_per_1000', 'min_quantity', 'max_quantity', 'refill_supported', 'sort_order', 'name_i18n', 'attributes', 'dripfeed_available', 'segments', 'is_premium'] as const
+export const SERVICE_COLUMNS = ['id', 'category_id', 'name', 'description', 'customer_rate_per_1000', 'min_quantity', 'max_quantity', 'refill_supported', 'sort_order', 'name_i18n', 'attributes', 'dripfeed_available', 'segments', 'is_premium', 'name_translations'] as const
 
 /** Services shown at a time in a category: a category can hold hundreds, the customer asks for more. */
 export const SERVICES_PAGE = 30
@@ -83,6 +84,7 @@ export const serviceFromRow = (s: ServiceRow): ICatalogService => ({
   ...(s.attributes && Object.keys(s.attributes).length > 0 ? { attributes: s.attributes } : {}),
   ...(s.dripfeed_available === true ? { dripfeedAvailable: true } : {}),
   ...(s.is_premium === true ? { isPremium: true } : {}),
+  ...(s.name_translations && Object.keys(s.name_translations).length > 0 ? { nameTranslations: s.name_translations } : {}),
   ...(segmentsFromRow(s.segments).length > 0 ? { segments: segmentsFromRow(s.segments) } : {}),
   ...(s.variants && s.variants.length > 0
     ? { variants: [...s.variants].sort((a, b) => Number(a.customer_rate_per_1000) - Number(b.customer_rate_per_1000)).map(serviceFromRow) }

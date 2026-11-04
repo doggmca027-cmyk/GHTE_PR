@@ -7,11 +7,22 @@ import type { ServiceAttributes } from '@/types/catalog'
 // Names the panel wrote in Russian are kept as name_i18n.ru. Russian and Ukrainian readers get that one; everybody else the English.
 const RUSSIAN_READERS = new Set(['ru', 'uk'])
 
-/** The name to show: the original Russian for ru / uk when there is one, the English name otherwise. */
-export function localizedName(name: string, nameI18n: Record<string, string> | undefined, lang: string): string {
+/**
+ * The name to show. translations (services.name_translations, written by the translator): the name in the customer's language, when there is one.
+ * Russian readers get the provider's own Russian name first (it is the original, name_i18n.ru), Ukrainian readers their translation first and the
+ * Russian original after it; every other language its translation; and the English name whenever there is nothing in the language.
+ */
+export function localizedName(name: string, nameI18n: Record<string, string> | undefined, lang: string, translations?: Record<string, string>): string {
   const original = nameI18n?.ru
-  return RUSSIAN_READERS.has(lang) && original ? original : name
+  const own = translations?.[lang] || translations?.[lang.split('-')[0] ?? lang]
+  if (lang === 'ru') return original || own || name
+  if (lang === 'uk') return own || original || name
+  return own || (RUSSIAN_READERS.has(lang) && original ? original : name)
 }
+
+/** The name of a service card in the customer's language (see localizedName). */
+export const serviceName = (s: { name: string; nameI18n?: Record<string, string>; nameTranslations?: Record<string, string> }, lang: string): string =>
+  localizedName(s.name, s.nameI18n, lang, s.nameTranslations)
 
 function unit(n: number, u: 'day' | 'hour' | 'minute', locale: string): string {
   try {
