@@ -67,6 +67,8 @@ export function AiChat({ session, onFindArticle, onSelectService }: { session: A
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ChatFailure | null>(null)
+  // seconds until the next question is allowed, when the hourly limit said so
+  const [waitSeconds, setWaitSeconds] = useState<number | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const running = useRef<AbortController | null>(null)
   const end = useRef<HTMLDivElement>(null)
@@ -80,6 +82,7 @@ export function AiChat({ session, onFindArticle, onSelectService }: { session: A
     const controller = new AbortController()
     running.current = controller
     setFailure(null)
+    setWaitSeconds(null)
     setBusy(true)
     setMessages([...history, { role: 'assistant', content: '' }])
     let cards: ChatCard[] = [] // the services the assistant recommends arrive as it finishes
@@ -87,19 +90,20 @@ export function AiChat({ session, onFindArticle, onSelectService }: { session: A
     const show = (text: string) => { soFar = text; setMessages([...history, { role: 'assistant', content: text, ...(cards.length > 0 ? { cards } : {}) }]) }
     const showCards = (list: ChatCard[]) => { cards = list; show(soFar) }
     try {
-      const answer = session.isMock ? await mockAssistant(show, showCards) : await askAssistant(history, show, controller.signal, undefined, { onCards: showCards })
+      const answer = session.isMock ? await mockAssistant(show, showCards) : await askAssistant(history, show, controller.signal, undefined, { onCards: showCards, token: session.token })
       setMessages([...history, { role: 'assistant', content: answer, ...(cards.length > 0 ? { cards } : {}) }])
     } catch (e) {
       if (controller.signal.aborted) return
       setMessages(history) // the question stays, the empty answer goes
       setFailure(e instanceof ChatError ? e.kind : 'busy')
+      setWaitSeconds(e instanceof ChatError ? e.retryAfter ?? null : null)
     } finally {
       if (running.current === controller) {
         running.current = null
         setBusy(false)
       }
     }
-  }, [session.isMock])
+  }, [session.isMock, session.token])
 
   /** "Select" on a card: the sheet closes and the order form opens on the article. */
   const selectCard = (article: string) => {
@@ -122,6 +126,7 @@ export function AiChat({ session, onFindArticle, onSelectService }: { session: A
     setBusy(false)
     setMessages([])
     setFailure(null)
+    setWaitSeconds(null)
     setDraft('')
   }
   const copyArticle = async (article: string) => {
@@ -214,7 +219,7 @@ export function AiChat({ session, onFindArticle, onSelectService }: { session: A
           {failure && (
             <div role="alert" className="flex items-start gap-2.5 rounded-2xl bg-rose-50 p-3.5 text-[13px] font-medium text-rose-700">
               <TriangleAlert size={18} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
-              <p className="flex-1">{t(FAILURES[failure])}</p>
+              <p className="flex-1">{failure === 'rate_limited' && waitSeconds !== null ? t('Question limit reached. Try again in {minutes} min.', { minutes: Math.max(1, Math.ceil(waitSeconds / 60)) }) : t(FAILURES[failure])}</p>
               {failure !== 'rate_limited' && messages.at(-1)?.role === 'user' && (
                 <button type="button" onClick={retry} className="shrink-0 font-bold underline">{t('Try again')}</button>
               )}

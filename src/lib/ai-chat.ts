@@ -97,9 +97,16 @@ export type ChatFailure = 'busy' | 'rate_limited' | 'offline'
 
 /** Why an answer did not come: the screen shows a sentence in the customer's language for each kind. */
 export class ChatError extends Error {
-  constructor(readonly kind: ChatFailure) {
+  /** `retryAfter`: seconds until the customer may ask again, when the server said (the hourly limit does). */
+  constructor(readonly kind: ChatFailure, readonly retryAfter?: number) {
     super(kind)
   }
+}
+
+/** The seconds of a `Retry-After` header (a whole number, within a day), else undefined: a date or nonsense is not worth a guess. */
+export function retryAfterOf(res: Pick<Response, 'headers'>): number | undefined {
+  const n = Number(res.headers.get('Retry-After'))
+  return Number.isInteger(n) && n >= 1 && n <= 86_400 ? n : undefined
 }
 
 /**
@@ -111,15 +118,16 @@ export async function askAssistant(
   onText: (soFar: string) => void,
   signal?: AbortSignal,
   fetcher: typeof fetch = (...args) => fetch(...args),
-  /** `onCards`: the services the assistant recommended, as they arrive (the whole list so far each time). */
-  extras: { onCards?: (cards: ChatCard[]) => void } = {},
+  /** `onCards`: the services the assistant recommended, as they arrive (the whole list so far each time). `token`: a signed-in customer's token. */
+  extras: { onCards?: (cards: ChatCard[]) => void; token?: string } = {},
 ): Promise<string> {
   let res: Response
   try {
     res = await fetcher('/api/chat', {
       method: 'POST',
       // asking for ndjson is asking for cards; a server that does not know it answers with plain text, which is read as before
-      headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+      // the token (when there is one) tells the server who is asking, so the hourly limit is the customer's own and not that of a shared address
+      headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson', ...(extras.token ? { Authorization: `Bearer ${extras.token}` } : {}) },
       body: JSON.stringify({ messages: requestMessages(history) }),
       signal,
     })
@@ -127,7 +135,7 @@ export async function askAssistant(
     if (signal?.aborted) throw e
     throw new ChatError('offline')
   }
-  if (res.status === 429) throw new ChatError('rate_limited')
+  if (res.status === 429) throw new ChatError('rate_limited', retryAfterOf(res))
   if (!res.ok || !res.body) throw new ChatError('busy')
 
   const framed = (res.headers.get('Content-Type') ?? '').includes('application/x-ndjson')

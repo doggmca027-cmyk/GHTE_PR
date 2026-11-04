@@ -454,8 +454,15 @@ describe('what is shipped', () => {
     expect(read('.env.example')).toMatch(/^GOOGLE_GENERATIVE_AI_API_KEY=$/m)
     expect(read('api/chat.ts')).toContain('GOOGLE_GENERATIVE_AI_API_KEY')
   })
+  it('the shared secret of the gate: in .env.example, read by name on the Vercel side and by the function; the database key is never in the chat', () => {
+    expect(read('.env.example')).toMatch(/^CHAT_GATE_SECRET=$/m)
+    expect(read('api/chat.ts')).toContain('CHAT_GATE_SECRET')
+    expect(read('supabase/functions/chat-gate/index.ts')).toContain('CHAT_GATE_SECRET')
+    expect(read('supabase/config.toml')).toMatch(/\[functions\.chat-gate\]\s+verify_jwt = false/)
+    for (const file of ['api/chat.ts', 'api/_lib/chat-handler.ts', 'api/_lib/chat-gate.ts']) expect(read(file), file).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE|JWT_SECRET/)
+  })
   it('never touches what a customer must not see: no provider table, no service role, no costs, no routing columns', () => {
-    for (const file of ['api/chat.ts', 'api/_lib/chat-handler.ts', 'api/_lib/chat-rag.ts', 'api/_lib/chat-model.ts', 'api/_lib/chat-language.ts']) {
+    for (const file of ['api/chat.ts', 'api/_lib/chat-handler.ts', 'api/_lib/chat-rag.ts', 'api/_lib/chat-model.ts', 'api/_lib/chat-language.ts', 'api/_lib/chat-gate.ts', 'api/_lib/chat-hold.ts']) {
       const src = read(file).replace(/\/\/[^\n]*/g, '') // the comments explain the rule, the code must obey it
       expect(src, file).not.toMatch(/provider_services|SERVICE_ROLE|service_role|cost_basis|provider_service_offers|api_key_encrypted|primary_provider|fallback_provider/i)
     }

@@ -518,6 +518,7 @@ const it: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Controlla il numero o chiedi all’assistente IA.',
   'Find in the catalogue': 'Trova nel catalogo',
   'Select': 'Seleziona',
+  'Question limit reached. Try again in {minutes} min.': 'Limite di domande raggiunto. Riprova tra {minutes} min.',
 }
 
 export default it

@@ -518,6 +518,7 @@ const uk: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Перевірте номер або запитайте AI-асистента.',
   'Find in the catalogue': 'Знайти в каталозі',
   'Select': 'Обрати',
+  'Question limit reached. Try again in {minutes} min.': 'Ліміт запитань вичерпано. Спробуйте знову через {minutes} хв.',
 }
 
 export default uk

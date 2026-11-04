@@ -1,9 +1,10 @@
-// The request side of the support chat (api/chat.ts): validation, a small rate limit, retrieval from the public storefront, the system prompt, and
-// the model call. The model call is injected, so this is tested without the AI SDK, a key or a network.
+// The request side of the support chat (api/chat.ts): validation, the limits, retrieval from the public storefront, the system prompt, the model call,
+// and the log. The model call and the gate are injected, so this is tested without the AI SDK, a key or a network.
 
+import type { ChatGate, LogEntry, Who } from './chat-gate'
 import {
   addonIntent, buildSearchUrl, buildSystemPrompt, cardsFor, companionActions, extractIntent, rankAddons, rankServices, searchKinds, situationNote, withAlternative,
-  type ChatCard, type Recommendation, type SearchKind, type StorefrontService,
+  type ChatCard, type ChatIntent, type Recommendation, type SearchKind, type StorefrontService,
 } from './chat-rag'
 
 export const MAX_BODY_BYTES = 16_384
@@ -28,13 +29,20 @@ export interface ChatEnv {
 export interface ChatDeps {
   env: ChatEnv
   fetch: typeof fetch
-  /** True when this caller may ask again. */
+  /** True when this caller may ask again (a small limit kept in this instance's memory: it stops a burst, not a determined abuser). */
   allow: (caller: string) => boolean
   /**
    * Starts the model's answer: resolves with the text, as a stream, once it has begun; rejects when the model cannot answer. With `recommend` the model
    * has the recommend tool, and every call of it is passed to `recommend` (before the stream ends).
    */
   generate: (args: { apiKey: string; model: string; system: string; messages: ChatMessage[]; signal: AbortSignal; recommend?: (call: Recommendation) => void }) => Promise<ReadableStream<Uint8Array>>
+  /** The hourly limit and the log (Supabase, through the chat-gate function). Absent: no hourly limit and no log. */
+  gate?: ChatGate
+  /**
+   * Keeps the request alive after its response has gone (Vercel's waitUntil) so that the log can still be written: called once, inside the request,
+   * it returns the function that lets the request go. Absent: the log is simply started and not waited for.
+   */
+  hold?: () => () => void
 }
 
 /**
@@ -47,6 +55,18 @@ export const FALLBACK_MODELS = ['gemini-flash-lite-latest']
 
 const json = (status: number, error: string, message: string) =>
   new Response(JSON.stringify({ error, message }), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
+
+/** 429 from the hourly limit: says how long to wait, in the header (seconds) and in the body, so the screen can tell the customer in their language. */
+function tooMany(retryAfter: number): Response {
+  const minutes = Math.max(1, Math.ceil(retryAfter / 60))
+  return new Response(JSON.stringify({ error: 'rate_limited', message: `Question limit reached. Try again in ${minutes} min.`, retry_after: retryAfter }), {
+    status: 429,
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Retry-After': String(retryAfter) },
+  })
+}
+
+/** The token of a signed-in customer, when the app sent one. It is not checked here: the gate verifies it (the signing secret is not in Vercel). */
+const bearerOf = (req: Request): string | undefined => /^Bearer\s+(\S{1,2048})$/i.exec(req.headers.get('authorization') ?? '')?.[1]
 
 /** The messages of a request: plain `{role, content}` or the AI SDK's UI messages (`parts`). Null when anything is wrong with them. */
 export function parseMessages(body: unknown): ChatMessage[] | null {
@@ -72,6 +92,8 @@ export function parseMessages(body: unknown): ChatMessage[] | null {
 interface Found {
   found: StorefrontService[]
   addons: StorefrontService[]
+  /** What the wish was understood as (kept in the log). */
+  intent: ChatIntent
   /** What is known about this customer (tone, limits worked out for their quantity, the country): see situationNote. */
   note?: string
 }
@@ -95,7 +117,7 @@ async function search(deps: ChatDeps, text: string): Promise<Found> {
   // a country nobody names: the best MIX / worldwide cards still reach the model, whatever their price ranks them
   const mix = lists[requests.findIndex((r) => r.kind === 'worldwide')] ?? []
   const found = lists.length === 0 ? [] : withAlternative(rankServices(lists.flat(), intent), mix, intent)
-  return { found, addons: addonList.length === 0 ? [] : rankAddons(addonList, intent), note: situationNote(intent, found) }
+  return { found, addons: addonList.length === 0 ? [] : rankAddons(addonList, intent), intent, note: situationNote(intent, found) }
 }
 
 export async function handleChat(req: Request, deps: ChatDeps): Promise<Response> {
@@ -118,11 +140,19 @@ export async function handleChat(req: Request, deps: ChatDeps): Promise<Response
   }
   if (!messages) return json(400, 'invalid_input', `Send {"messages": [{"role": "user", "content": "..."}]}: up to ${MAX_MESSAGES} messages of up to ${MAX_MESSAGE_CHARS} characters, the last one from the user.`)
 
+  // The hourly limit is asked at the same time as the catalogue is searched, so a question that is let through loses no time to it. The gate never
+  // rejects: when it cannot say (it is down, slow, or not set up) the question goes on. A refused question does not look at the catalogue's answer.
+  const who: Who = { ip: caller, token: bearerOf(req) }
+  const verdict = deps.gate ? deps.gate.check(who).catch(() => null) : Promise.resolve(null)
   // What to look for comes from the customer's recent wishes: the last two of their messages ("and with a refill?" follows an earlier "Instagram followers")
   const wish = messages.filter((m) => m.role === 'user').slice(-2).map((m) => m.content).join(' ')
+  const searching = search(deps, wish)
+  searching.catch(() => undefined) // read below, after the verdict; a refused question never reads it
+  const turn = await verdict
+  if (turn && !turn.allowed) return tooMany(turn.retryAfter)
   let found: Found
   try {
-    found = await search(deps, wish)
+    found = await searching
   } catch {
     // Without the catalogue the model would answer from nothing: refuse, never let it guess
     return json(503, 'catalog_unavailable', 'The catalogue is not available right now. Try again in a minute.')
@@ -135,6 +165,11 @@ export async function handleChat(req: Request, deps: ChatDeps): Promise<Response
   // that does not take tools can never take the whole chat down with it. (The last try is skipped when the others have used up the time.)
   const attempts = [...models.map((model) => ({ model, tools: wantsCards })), ...(wantsCards && models[0] ? [{ model: models[0], tools: false }] : [])]
   const started = Date.now()
+  // The log of this question is written after the answer, never before it and never waited for: the request is kept alive for it (waitUntil) and let go
+  // when it is written. Taken now, while the request is surely the current one.
+  const release = deps.gate ? deps.hold?.() : undefined
+  const prompt = messages[messages.length - 1].content
+  const written = { text: '' }
   for (const { model, tools } of attempts) {
     if (req.signal.aborted) break
     if (wantsCards && !tools && Date.now() - started > PLAIN_RETRY_BUDGET_MS) break
@@ -145,15 +180,33 @@ export async function handleChat(req: Request, deps: ChatDeps): Promise<Response
         system: buildSystemPrompt(found.found, found.addons, found.note, { cards: tools }),
         ...(tools ? { recommend: (call: Recommendation) => { calls.push(call) } } : {}),
       })
+      // Once, when the answer has ended or the customer has gone, whichever comes first.
+      let recorded = false
+      const record = (cards: ChatCard[] = cardsFor(calls, found.found, found.addons, written.text)) => {
+        if (recorded) return
+        recorded = true
+        const entry: LogEntry = {
+          prompt, intent: found.intent, matched: [...found.found, ...found.addons].map((s) => s.sku), recommended: cards.map((c) => c.sku),
+          found: found.found.length, toolCalls: calls.length, model,
+        }
+        void (deps.gate ? deps.gate.log(who, entry) : Promise.resolve()).catch(() => undefined).finally(() => release?.())
+      }
+      req.signal.addEventListener('abort', () => record(), { once: true })
+
       // X-Chat-Tools: whether the answer that went out was made with the recommend tool (off: every try with the tool failed and the plain one answered)
       const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Chat-Model': model, ...(wantsCards ? { 'X-Chat-Tools': tools ? 'on' : 'off' } : {}) }
       return wantsCards
-        ? new Response(framed(answer, (text) => ({ cards: cardsFor(calls, found.found, found.addons, text), calls: calls.length })), { headers: { ...headers, 'Content-Type': `${NDJSON}; charset=utf-8` } })
-        : new Response(answer, { headers: { ...headers, 'Content-Type': 'text/plain; charset=utf-8' } })
+        ? new Response(framed(answer, written, () => {
+          const cards = cardsFor(calls, found.found, found.addons, written.text)
+          record(cards)
+          return { cards, calls: calls.length }
+        }), { headers: { ...headers, 'Content-Type': `${NDJSON}; charset=utf-8` } })
+        : new Response(passedOn(answer, written, () => record()), { headers: { ...headers, 'Content-Type': 'text/plain; charset=utf-8' } })
     } catch {
       // overloaded, retired, over its quota: the next model takes over
     }
   }
+  release?.()
   return json(503, 'assistant_unavailable', 'The assistant is busy right now. Try again in a minute.')
 }
 
@@ -165,31 +218,45 @@ const PLAIN_RETRY_BUDGET_MS = 14_000
 /**
  * The answer as lines of JSON: {"t":"text","d":"..."} for every piece of text as it is written, then, once the model has finished, one
  * {"t":"card","c":{...}} for every recommended service, and {"t":"end","calls":N} (N: how many times the model called the tool; the cards also come from
- * the articles its text names). A stream without the end line was cut short. `finish` gets the whole text, once the model is done.
+ * the articles its text names). A stream without the end line was cut short. `written` collects the text as it goes; `finish` is called once the model is done.
  */
-function framed(answer: ReadableStream<Uint8Array>, finish: (text: string) => { cards: ChatCard[]; calls: number }): ReadableStream<Uint8Array> {
+function framed(answer: ReadableStream<Uint8Array>, written: { text: string }, finish: () => { cards: ChatCard[]; calls: number }): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder()
   const encoder = new TextEncoder()
   const line = (event: object) => encoder.encode(`${JSON.stringify(event)}\n`)
-  let text = ''
   return answer.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
       const d = decoder.decode(chunk, { stream: true })
       if (d === '') return
-      text += d
+      written.text += d
       controller.enqueue(line({ t: 'text', d }))
     },
     flush(controller) {
       const rest = decoder.decode()
-      if (rest !== '') { text += rest; controller.enqueue(line({ t: 'text', d: rest })) }
-      const done = finish(text)
+      if (rest !== '') { written.text += rest; controller.enqueue(line({ t: 'text', d: rest })) }
+      const done = finish()
       for (const c of done.cards) controller.enqueue(line({ t: 'card', c }))
       controller.enqueue(line({ t: 'end', calls: done.calls }))
     },
   }))
 }
 
-/** At most `limit` questions per caller in `windowMs`. Kept per instance: it stops a loop, not a determined abuser (the model's own quota is the backstop). */
+/** The plain-text answer, unchanged on its way out; `written` collects the text and `finish` is called when the model is done. */
+function passedOn(answer: ReadableStream<Uint8Array>, written: { text: string }, finish: () => void): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder()
+  return answer.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      written.text += decoder.decode(chunk, { stream: true })
+      controller.enqueue(chunk)
+    },
+    flush() {
+      written.text += decoder.decode()
+      finish()
+    },
+  }))
+}
+
+/** At most `limit` questions per caller in `windowMs`. Kept per instance: it stops a loop, not a determined abuser (the hourly limit of the gate is the real one). */
 export function createRateLimiter(limit = 20, windowMs = 10 * 60_000, now: () => number = Date.now): (caller: string) => boolean {
   const seen = new Map<string, { count: number; resetAt: number }>()
   return (caller) => {

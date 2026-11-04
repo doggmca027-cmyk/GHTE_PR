@@ -309,6 +309,13 @@ export function checkFunctionSecrets(env: Env): Finding[] {
   if (present(env.TON_USD_FALLBACK_RATE)) out.push(warn('TON_USD_FALLBACK_RATE', 'TON_USD_FALLBACK_RATE is a dev-only fixed rate; remove it in production.'))
 
   // Tuning
+  // The shared secret between Vercel's api/chat.ts and the chat-gate function: whoever has it can write to the assistant's log and burn a customer's hour.
+  if (present(env.CHAT_GATE_SECRET) && env.CHAT_GATE_SECRET.trim().length < 32) {
+    out.push(err('CHAT_GATE_SECRET', 'CHAT_GATE_SECRET is shorter than 32 characters (the chat-gate function refuses it). Generate one with: openssl rand -hex 32'))
+  }
+  if (present(env.AI_CHAT_HOURLY_LIMIT) && !(Number.isInteger(Number(env.AI_CHAT_HOURLY_LIMIT)) && Number(env.AI_CHAT_HOURLY_LIMIT) >= 1 && Number(env.AI_CHAT_HOURLY_LIMIT) <= 1000)) {
+    out.push(err('AI_CHAT_HOURLY_LIMIT', 'AI_CHAT_HOURLY_LIMIT must be an integer between 1 and 1000 (questions per person per hour; 20 when unset).'))
+  }
   if (present(env.SYNC_BATCH_SIZE) && !(Number.isInteger(Number(env.SYNC_BATCH_SIZE)) && Number(env.SYNC_BATCH_SIZE) >= 1 && Number(env.SYNC_BATCH_SIZE) <= 200)) {
     out.push(err('SYNC_BATCH_SIZE', 'SYNC_BATCH_SIZE must be an integer between 1 and 200.'))
   }
@@ -411,6 +418,8 @@ export const FUNCTION_SECRET_NAMES = [
   ...REQUIRED_FUNCTION_SECRETS,
   'ADMIN_TELEGRAM_IDS', 'ALLOWED_ORIGIN', 'TONCENTER_API_KEY', 'TONCENTER_URL', 'PROVIDER_KEY_SECRET',
   'SYNC_BATCH_SIZE', 'RECONCILE_AFTER_MINUTES',
+  // the AI assistant's hourly limit and log (the chat-gate function); CHAT_GATE_SECRET is also set, with the same value, in the Vercel project
+  'CHAT_GATE_SECRET', 'AI_CHAT_HOURLY_LIMIT',
   // dev-only names are kept so the checks can REFUSE them in production
   'MOCK_MODE', 'TON_USD_FALLBACK_RATE',
 ] as const

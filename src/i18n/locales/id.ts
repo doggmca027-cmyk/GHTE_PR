@@ -518,6 +518,7 @@ const id: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Periksa nomornya atau tanyakan ke asisten AI.',
   'Find in the catalogue': 'Cari di katalog',
   'Select': 'Pilih',
+  'Question limit reached. Try again in {minutes} min.': 'Batas pertanyaan tercapai. Coba lagi dalam {minutes} menit.',
 }
 
 export default id

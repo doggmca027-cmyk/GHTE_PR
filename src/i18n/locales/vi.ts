@@ -518,6 +518,7 @@ const vi: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Hãy kiểm tra mã hoặc hỏi trợ lý AI.',
   'Find in the catalogue': 'Tìm trong danh mục',
   'Select': 'Chọn',
+  'Question limit reached. Try again in {minutes} min.': 'Đã hết giới hạn câu hỏi. Hãy thử lại sau {minutes} phút.',
 }
 
 export default vi

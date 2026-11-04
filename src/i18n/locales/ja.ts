@@ -518,6 +518,7 @@ const ja: Record<string, string> = {
   'Check the number or ask the AI assistant.': '番号を確認するか、AIアシスタントに聞いてください。',
   'Find in the catalogue': 'カタログで探す',
   'Select': '選択',
+  'Question limit reached. Try again in {minutes} min.': '質問の上限に達しました。{minutes} 分後にもう一度お試しください。',
 }
 
 export default ja

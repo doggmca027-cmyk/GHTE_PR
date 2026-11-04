@@ -48,7 +48,7 @@ describe('legal pages', () => {
     const raw = attr(fillPage(p.html, SITE, BOT), /<script type="application\/ld\+json">([\s\S]*?)<\/script>/)!
     const graph = (JSON.parse(raw) as { '@graph': Record<string, unknown>[] })['@graph']
     const page = graph.find((n) => n['@type'] === 'WebPage')!
-    expect(page).toMatchObject({ url: SITE + docPath(p.doc, p.lang), inLanguage: p.lang, dateModified: '2026-10-12' })
+    expect(page).toMatchObject({ url: SITE + docPath(p.doc, p.lang), inLanguage: p.lang, dateModified: p.doc === 'privacy' ? '2026-11-04' : '2026-10-12' })
     expect(graph.find((n) => n['@type'] === 'Organization')).toMatchObject({ name: 'GRAM Hub', sameAs: [BOT.url] })
     const crumbs = graph.find((n) => n['@type'] === 'BreadcrumbList') as { itemListElement: { item: string }[] }
     expect(crumbs.itemListElement.at(-1)!.item).toBe(SITE + docPath(p.doc, p.lang))

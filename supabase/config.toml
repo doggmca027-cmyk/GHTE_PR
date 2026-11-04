@@ -103,3 +103,8 @@ verify_jwt = false
 # Signed-in users: ask the provider to refill a delivered order (every rule in begin_order_refill). Authenticates the JWT itself.
 [functions.request-refill]
 verify_jwt = false
+
+# Called by the Vercel function api/chat.ts only, with the shared secret CHAT_GATE_SECRET in x-chat-gate-secret (checked by the function itself): counts a
+# question of the AI assistant against the caller's hour and writes the assistant's log. Never called by a browser.
+[functions.chat-gate]
+verify_jwt = false

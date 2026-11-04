@@ -518,6 +518,7 @@ const ar: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'تحقق من الرقم أو اسأل مساعد الذكاء الاصطناعي.',
   'Find in the catalogue': 'ابحث في الكتالوج',
   'Select': 'اختيار',
+  'Question limit reached. Try again in {minutes} min.': 'تم بلوغ حد الأسئلة. حاول مرة أخرى بعد {minutes} د.',
 }
 
 export default ar

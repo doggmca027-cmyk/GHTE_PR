@@ -518,6 +518,7 @@ const zh: Record<string, string> = {
   'Check the number or ask the AI assistant.': '请检查编号或询问 AI 助手。',
   'Find in the catalogue': '在目录中查找',
   'Select': '选择',
+  'Question limit reached. Try again in {minutes} min.': '提问次数已达上限。请在 {minutes} 分钟后重试。',
 }
 
 export default zh

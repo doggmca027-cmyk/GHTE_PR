@@ -518,6 +518,7 @@ const hi: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'नंबर जाँचें या AI सहायक से पूछें।',
   'Find in the catalogue': 'कैटलॉग में खोजें',
   'Select': 'चुनें',
+  'Question limit reached. Try again in {minutes} min.': 'प्रश्नों की सीमा पूरी हो गई। {minutes} मिनट बाद फिर कोशिश करें।',
 }
 
 export default hi

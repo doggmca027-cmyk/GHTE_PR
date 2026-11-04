@@ -518,6 +518,7 @@ const tr: Record<string, string> = {
   'Check the number or ask the AI assistant.': 'Numarayı kontrol edin veya yapay zeka asistanına sorun.',
   'Find in the catalogue': 'Katalogda bul',
   'Select': 'Seç',
+  'Question limit reached. Try again in {minutes} min.': 'Soru sınırına ulaşıldı. {minutes} dk sonra tekrar deneyin.',
 }
 
 export default tr
