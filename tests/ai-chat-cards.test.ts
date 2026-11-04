@@ -194,19 +194,15 @@ describe('the answer with cards (the request)', () => {
       expect.objectContaining({ sku: 'IG-VIEW-STD-ROOTV', name: 'Instagram Video Views', price: 0.12, role: 'addon' }),
     ])
   })
-  it('the model is given the tool and told to use it (and told not to send the customer to the search)', async () => {
+  it('the model is given the tool (optional); the prompt does not oblige it and tells the customer cards come with the answer, not to paste into the search', async () => {
     const d = deps(async () => stream('ok'))
     await handleChat(ask('application/x-ndjson'), d)
     expect(d.seen[0]!.recommend).toBeTypeOf('function')
-    expect(d.seen[0]!.system).toContain(`Ты ОБЯЗАН использовать инструмент ${RECOMMEND_TOOL} для каждой услуги, которую предлагаешь клиенту`)
+    expect(d.seen[0]!.system).toContain('Под ответом клиент увидит карточки названных артикулов с кнопкой «Выбрать»')
     expect(d.seen[0]!.system).toContain('не проси его копировать артикул или вставлять его в поиск')
     expect(d.seen[0]!.system).not.toContain('Вставьте этот артикул в поиск')
-  })
-  it('an answer whose text names articles has their cards although the model called nothing', async () => {
-    const d = deps(async () => stream('Take **IG-FOL-STD-ROOTA** and IG-VIEW-STD-ROOTV. Choose below!'))
-    const out = await lines(await handleChat(ask('application/x-ndjson'), d))
-    expect(out.filter((e) => e.t === 'card').map((e) => e.c!.sku)).toEqual(['IG-FOL-STD-ROOTA', 'IG-VIEW-STD-ROOTV'])
-    expect(out.at(-1)).toMatchObject({ t: 'end', calls: 0 })
+    expect(d.seen[0]!.system).not.toContain('ОБЯЗАН')
+    expect(d.seen[0]!.system).not.toContain(RECOMMEND_TOOL) // cards come from the articles the text names, which is the way that works
   })
   it('a client that did not ask for ndjson gets the plain text of before: no tool, the old ending of the answer', async () => {
     const d = deps(async () => stream('Здравствуйте!'))
@@ -242,13 +238,12 @@ describe('the answer with cards (the request)', () => {
     expect((await handleChat(ask(), plain)).status).toBe(503)
     expect(plain.seen).toHaveLength(2)
   })
-  it('the prompt with cards differs from the plain one only in the way the answer ends, and ends with a reminder where a small model still listens', () => {
+  it('the prompt with cards differs from the plain one only in the way the answer ends', () => {
     const plain = buildSystemPrompt([service('a', 'Followers', 1)])
     const cards = buildSystemPrompt([service('a', 'Followers', 1)], [], undefined, { cards: true })
     const diff = plain.split('\n').filter((l, i) => l !== cards.split('\n')[i])
     expect(diff).toHaveLength(1)
-    expect(diff[0]).toMatch(/^10\. /)
-    expect(cards.endsWith(`НАПОМИНАНИЕ: ты ОБЯЗАН использовать инструмент ${RECOMMEND_TOOL} для каждой услуги, которую предлагаешь клиенту. Закончив текст, сразу вызови его для каждого названного артикула: без этого клиент не увидит карточки.`)).toBe(true)
-    expect(plain).not.toContain('НАПОМИНАНИЕ')
+    expect(diff[0]).toMatch(/^9\. /)
+    expect(cards.split('\n')).toHaveLength(plain.split('\n').length)
   })
 })

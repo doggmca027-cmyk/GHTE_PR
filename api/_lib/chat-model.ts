@@ -15,8 +15,7 @@ export const FIRST_WORD_TIMEOUT_MS = 12_000
  */
 const recommendTool = tool({
   description:
-    'MANDATORY: you MUST call this for EVERY service you recommend to the customer, once per service, right after your text answer (several calls in one response). ' +
-    'It is the only way the customer gets the card with the "Select" button; an answer that names an article without calling it is wrong. ' +
+    'Shows the customer a card of one service with a "Select" button. Optional: call it for a service you recommend, after your text answer. ' +
     'sku must be an article number copied from the list you were given; name and price are those of the list.',
   inputSchema: jsonSchema<{ sku: string; name: string; price: number }>({
     type: 'object',
