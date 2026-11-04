@@ -92,6 +92,18 @@ const QUALITY = /\bu?hq\b|high quality|премиум|premium|качествен
 const DISLIKES = /dislike|downvote|дизлайк|даунвот/
 /** The customer talks about a geography, whichever country it is. */
 const GEO_CUE = /(?<![а-яa-z])гео(?![а-яa-z])|\bgeo\b|таргет|стран[аыуе]|\bcountr(?:y|ies)\b|регион|\bregion\b/
+/**
+ * Countries that no card names (the catalogue names 15, see GEOS), written the way a customer asks ("из Эстонии", "from Canada"): asking for one is a
+ * wish the catalogue cannot select, so it is answered with the closest alternative, not with a refusal.
+ */
+const OTHER_COUNTRIES = new RegExp([
+  'эстон', 'латв', 'литв', 'грузи', 'армен', 'азербайдж', 'белорус', 'беларус', 'молдав', 'узбек', 'киргиз', 'кыргыз', 'таджик', 'туркмен',
+  'канад', 'мексик', 'аргентин', 'колумб', 'япони', 'корея', 'кореи', 'корею', 'корейск', 'китай', 'таиланд', 'тайланд', 'вьетнам', 'филиппин', 'малайз',
+  'пакистан', 'бангладеш', 'нигери', 'нидерланд', 'голланд', 'швеци', 'норвег', 'финлянд', 'румын', 'болгар', 'греци', 'греческ', 'португал', 'израил',
+  'австрали', 'великобритан', 'estonia', 'latvia', 'lithuania', 'georgia', 'armenia', 'azerbaijan', 'belarus', 'moldova', 'uzbek', 'kyrgyz', 'canad',
+  'mexic', 'argentin', 'colombia', 'japan', 'korea', 'china', 'chinese', 'thailand', 'vietnam', 'philippin', 'malaysia', 'pakistan', 'bangladesh',
+  'nigeria', 'netherlands', 'sweden', 'norway', 'finland', 'romania', 'bulgaria', 'greece', 'portugal', 'israel', 'australia', 'united kingdom',
+].join('|'))
 
 export type GeoKey = 'russia' | 'ukraine' | 'usa' | 'germany' | 'turkey' | 'brazil' | 'india' | 'arab' | 'indonesia' | 'kazakhstan' | 'poland' | 'italy' | 'spain' | 'france' | 'europe'
 
@@ -159,7 +171,7 @@ export function extractIntent(text: string): ChatIntent {
   const geo = (Object.keys(GEOS) as GeoKey[]).find((key) => GEOS[key].ask.test(t)) ?? null
   const audience = NETWORK.test(t) ? 'network' : BLOG.test(t) ? 'blog' : null
   return {
-    platform, actions, cheap: CHEAP.test(t), refill: REFILL.test(t), quality: QUALITY.test(t), geo, geoCue: geo !== null || GEO_CUE.test(t),
+    platform, actions, cheap: CHEAP.test(t), refill: REFILL.test(t), quality: QUALITY.test(t), geo, geoCue: geo !== null || GEO_CUE.test(t) || OTHER_COUNTRIES.test(t),
     quantity: parseQuantity(text), audience, dislikes: DISLIKES.test(t), words,
   }
 }
@@ -311,6 +323,19 @@ export function rankServices(services: StorefrontService[], intent: ChatIntent, 
   return [...first, ...(wantsSafety(intent) ? rest : rest.sort(byPrice))]
 }
 
+/**
+ * A customer who asks for a country that no ranked card names must still be shown the closest thing: the best MIX / worldwide cards (a guarantee or
+ * a quality label first, then the price), added after the ranked ones. Ranked by price alone they would often not make the cut.
+ */
+export function withAlternative(found: StorefrontService[], candidates: StorefrontService[], intent: ChatIntent): StorefrontService[] {
+  if (!wantsGeo(intent)) return found
+  const geoName = intent.geo ? GEOS[intent.geo].name : null
+  if (geoName && found.some((s) => geoName.test(s.name))) return found
+  const shown = new Set(found.map((s) => s.id))
+  const mix = rankServices(candidates.filter((s) => WORLDWIDE.test(s.name) && !shown.has(s.id)), { ...intent, geo: null, quality: true }, { top: 2 })
+  return [...found, ...mix]
+}
+
 /** The addons of the package: the cheapest views or likes of the posts and videos of the account. */
 export const rankAddons = (services: StorefrontService[], intent: ChatIntent): StorefrontService[] =>
   rankServices(services, addonIntent(intent), { top: ADDON_TOP, prefer: ADDON_PREFER, avoid: ADDON_AVOID })
@@ -403,7 +428,7 @@ export function buildSystemPrompt(found: StorefrontService[], addons: Storefront
     'КОГДА ТОЧНОГО СОВПАДЕНИЯ НЕТ (отказывать нельзя, предлагай решение):',
     '11. Лимит услуги (колонка «Количество (мин–макс)») меньше, чем просит клиент. Предложи рабочие пути: (а) запустить услугу несколько раз, части не больше максимума; второй запуск на ту же ссылку лучше начинать, когда выполнен первый; (б) Drip-feed, но только если в колонке Drip-feed стоит «да»: в форме заказа включается переключатель Drip-feed, клиент вводит количество одной порции и число порций, и общее количество может быть больше лимита одного заказа; (в) другая услуга из списка с большим лимитом, если подходит по цене. Назови число запусков и итоговую цену; в разделе «СИТУАЦИЯ ЭТОГО КЛИЕНТА» эти числа уже посчитаны.',
     '12. Количество клиента меньше минимума услуги: предложи заказать минимум или услугу из списка с меньшим минимумом.',
-    '13. Нужной страны нет (она не указана ни в одном названии из списка): скажи прямо, что страну выбрать нельзя, и предложи самую близкую альтернативу из списка — MIX / Worldwide, лучше HQ, Real или с гарантией. Не обещай аудиторию конкретной страны, если она не указана в названии услуги. Если страна указана в названии, предложи именно такие услуги.',
+    '13. Нужной страны нет (она не указана ни в одном названии из списка): скажи прямо, что страну выбрать нельзя, и предложи самую близкую альтернативу из списка — MIX / Worldwide, лучше HQ, Real или с гарантией. Называй услугу MIX или Worldwide, только если это написано в её названии; у остальных скажи «без выбора страны». Не обещай аудиторию конкретной страны, если она не указана в названии услуги. Если страна указана в названии, предложи именно такие услуги.',
     '14. Нужной гарантии, срока или типа услуги нет точь-в-точь (например, хотят пожизненную, а в списке 30 дней): предложи ближайшее из списка и назови разницу. Если близкого нет совсем, не отказывай: уточни задачу одним вопросом или предложи то, что решает ту же цель клиента. Ничего не выдумывай.',
     '',
     'КАК ЧИТАТЬ СПИСОК:',

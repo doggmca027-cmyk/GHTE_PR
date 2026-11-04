@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_MODEL, FALLBACK_MODELS, handleChat, type ChatDeps } from '../api/_lib/chat-handler'
 import { fold, reads, withinEdits } from '../api/_lib/chat-language'
-import { buildSearchUrl, buildSystemPrompt, extractIntent, parseQuantity, rankServices, searchKinds, situationNote, type StorefrontService } from '../api/_lib/chat-rag'
+import { buildSearchUrl, buildSystemPrompt, extractIntent, parseQuantity, rankServices, searchKinds, situationNote, withAlternative, type StorefrontService } from '../api/_lib/chat-rag'
 
 const card = (id: string, name: string, rate: number, over: Partial<StorefrontService> = {}): StorefrontService => ({
   id, sku: `TT-FOL-STD-ROOT${id.toUpperCase()}`, name, customer_rate_per_1000: rate, min_quantity: 100, max_quantity: 500_000, refill_supported: false,
@@ -92,6 +92,7 @@ describe('how many the customer wants', () => {
 })
 
 describe('a country in the wish', () => {
+  const ask = (text: string) => extractIntent(text)
   const base = 'https://x.supabase.co'
   const q = (url: string | null) => decodeURIComponent(url!)
 
@@ -116,8 +117,34 @@ describe('a country in the wish', () => {
   ])('"%s" is %s', (text, geo) => {
     expect(extractIntent(`подписчики ${text}`).geo).toBe(geo)
   })
+  it.each(['из Эстонии', 'з Грузії', 'из Канады', 'from Canada', 'аудитория Вьетнама', 'гео любое', 'target country', 'по странам', 'из Японии'])('"%s" is a geography the catalogue cannot select', (text) => {
+    const intent = extractIntent(`подписчики в инсту ${text}`)
+    expect(intent.geoCue).toBe(true)
+    expect(intent.geo).toBeNull()
+  })
+  it('a message without a country says nothing of geography', () => {
+    for (const text of ['подписчики в инсту', 'просмотры на ютуб 5 млн', 'живые подписчики, чтобы не списывали', 'лайки в телеграм для моего блога']) expect(extractIntent(text).geoCue).toBe(false)
+  })
   it('"индивидуальный" is not India', () => {
     expect(extractIntent('индивидуальный подход').geo).toBeNull()
+  })
+  it('a country nobody names: the best MIX / worldwide cards are added after the ranked ones (a label or a guarantee first), whatever the price ranks them', () => {
+    const intent = extractIntent('подписчики из Эстонии')
+    const ranked = [card('a', 'Followers cheap', 0.1), card('b', 'Followers basic', 0.2)]
+    const candidates = [
+      card('m1', 'Followers [worldwide] [no refill]', 0.3), card('m2', 'Followers Mix [HQ]', 3), card('m3', 'Followers worldwide Refill 30 Days', 2, { refill_supported: true }),
+      card('m4', 'Followers Global', 1), card('a', 'Followers cheap mix', 0.1),
+    ]
+    const withMix = withAlternative(ranked, candidates, ask('подписчики из Эстонии'))
+    expect(withMix.map((s) => s.id)).toEqual(['a', 'b', 'm3', 'm2'])
+    expect(intent.geoCue).toBe(true)
+  })
+  it('...but not when a ranked card names the country, when no geography was asked, or when there is no MIX card', () => {
+    const mix = [card('m', 'Followers Mix [HQ]', 3)]
+    const turkey = [card('t', 'Followers Turkey', 1)]
+    expect(withAlternative(turkey, mix, ask('подписчики из Турции'))).toBe(turkey)
+    expect(withAlternative(turkey, mix, ask('подписчики'))).toBe(turkey)
+    expect(withAlternative(turkey, [card('x', 'Followers plain', 1)], ask('подписчики из Эстонии, гео')).map((s) => s.id)).toEqual(['t'])
   })
   it('the cards that name the country come first and narrow the choice; one such card still comes first', () => {
     const intent = extractIntent('подписчики из Турции')
@@ -196,6 +223,7 @@ describe('the sales rules of the prompt', () => {
   it('a country that is not there: say so, offer the closest MIX / worldwide with a quality label, promise no audience of a country', () => {
     expect(prompt).toContain('скажи прямо, что страну выбрать нельзя')
     expect(prompt).toContain('MIX / Worldwide, лучше HQ, Real или с гарантией')
+    expect(prompt).toContain('Называй услугу MIX или Worldwide, только если это написано в её названии')
     expect(prompt).toContain('Не обещай аудиторию конкретной страны')
   })
   it('cross-sell: a package of the main service and views, with the reason and the pattern of the brief', () => {
@@ -272,6 +300,23 @@ describe('a whole request, typed the way people type it', () => {
     expect(urls.some((u) => u.includes('name.ilike.*worldwide*') && u.includes('name.ilike.*hq*'))).toBe(true)
     expect(system).toContain('Не отказывай: скажи прямо, что страну выбрать нельзя')
     expect(system).toContain('TT-FOL-STD-ROOTW') // the MIX card the model can name
+  })
+  it('the MIX card reaches the model even when eight cheaper cards fill the list', async () => {
+    const generated: string[] = []
+    const cheap = Array.from({ length: 8 }, (_, i) => card(`c${i}`, `TikTok Followers ${i}`, 0.1 + i / 100))
+    const deps: ChatDeps = {
+      env,
+      fetch: (async (url: string) => {
+        const u = decodeURIComponent(String(url))
+        const rows = u.includes('name.ilike.*worldwide*') ? [card('w', 'TikTok Followers [worldwide] [HQ]', 9)] : u.includes('name.ilike.*view*') ? [] : cheap
+        return new Response(JSON.stringify(rows), { status: 200 })
+      }) as unknown as typeof fetch,
+      allow: () => true,
+      generate: async ({ system }) => { generated.push(system); return new Response('ok').body! },
+    }
+    await handleChat(body('подписчики в тик ток, гео Эстония'), deps)
+    expect(generated[0]).toContain('TT-FOL-STD-ROOTW | TikTok Followers [worldwide] [HQ]')
+    expect(generated[0]).toContain('(из списка: TT-FOL-STD-ROOTW)')
   })
   it('a message without a geography or a quantity costs no extra request and adds no note', async () => {
     const { urls, system } = await run('подписчики в тик ток')

@@ -1,7 +1,7 @@
 // The request side of the support chat (api/chat.ts): validation, a small rate limit, retrieval from the public storefront, the system prompt, and
 // the model call. The model call is injected, so this is tested without the AI SDK, a key or a network.
 
-import { addonIntent, buildSearchUrl, buildSystemPrompt, companionActions, extractIntent, rankAddons, rankServices, searchKinds, situationNote, type StorefrontService } from './chat-rag'
+import { addonIntent, buildSearchUrl, buildSystemPrompt, companionActions, extractIntent, rankAddons, rankServices, searchKinds, situationNote, withAlternative, type SearchKind, type StorefrontService } from './chat-rag'
 
 export const MAX_BODY_BYTES = 16_384
 export const MAX_MESSAGES = 12
@@ -80,11 +80,15 @@ async function search(deps: ChatDeps, text: string): Promise<Found> {
     if (!res.ok) throw new Error(`storefront search answered ${res.status}`)
     return (await res.json()) as StorefrontService[]
   }
-  const urls = searchKinds(intent).map((kind) => buildSearchUrl(deps.env.supabaseUrl!, intent, kind)).filter((url): url is string => url !== null)
+  const requests = searchKinds(intent)
+    .map((kind) => ({ kind, url: buildSearchUrl(deps.env.supabaseUrl!, intent, kind) }))
+    .filter((r): r is { kind: SearchKind; url: string } => r.url !== null)
   // the addon of the package: one more request, the cheapest cards of the other action on the same platform
   const addonUrl = companionActions(intent).length > 0 ? buildSearchUrl(deps.env.supabaseUrl!, addonIntent(intent), 'any') : null
-  const [lists, addonList] = await Promise.all([Promise.all(urls.map(get)), addonUrl ? get(addonUrl) : Promise.resolve([] as StorefrontService[])])
-  const found = lists.length === 0 ? [] : rankServices(lists.flat(), intent)
+  const [lists, addonList] = await Promise.all([Promise.all(requests.map((r) => get(r.url))), addonUrl ? get(addonUrl) : Promise.resolve([] as StorefrontService[])])
+  // a country nobody names: the best MIX / worldwide cards still reach the model, whatever their price ranks them
+  const mix = lists[requests.findIndex((r) => r.kind === 'worldwide')] ?? []
+  const found = lists.length === 0 ? [] : withAlternative(rankServices(lists.flat(), intent), mix, intent)
   return { found, addons: addonList.length === 0 ? [] : rankAddons(addonList, intent), note: situationNote(intent, found) }
 }
 
