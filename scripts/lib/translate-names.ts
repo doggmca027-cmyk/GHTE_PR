@@ -31,19 +31,31 @@ export function buildPrompt(names: readonly string[], langs: readonly string[]):
   ].join('\n')
 }
 
+/** The writing systems a model may mix in by mistake (a Hindi name with Japanese letters in it), and which of them each language uses. Latin is always fine: brands and tags. */
+const SCRIPTS: Readonly<Record<string, RegExp>> = {
+  cyrillic: /[\u0400-\u04FF]/, arabic: /[\u0600-\u06FF\u0750-\u077F]/, devanagari: /[\u0900-\u097F]/, han: /[\u4E00-\u9FFF]/,
+  kana: /[\u3040-\u30FF]/, hangul: /[\uAC00-\uD7AF]/, thai: /[\u0E00-\u0E7F]/, hebrew: /[\u0590-\u05FF]/,
+}
+const SCRIPTS_OF: Readonly<Record<string, readonly string[]>> = { ru: ['cyrillic'], uk: ['cyrillic'], ar: ['arabic'], hi: ['devanagari'], zh: ['han'], ja: ['han', 'kana'] }
+
+/** A foreign writing system in a translation (one the language does not use and the English name does not have): the model slipped. */
+const mixesScripts = (source: string, lang: string, text: string): boolean =>
+  Object.entries(SCRIPTS).some(([script, re]) => re.test(text) && !re.test(source) && !(SCRIPTS_OF[lang] ?? []).includes(script))
+
 const digitsOf = (s: string): string[] => s.match(/\d+/g) ?? []
 
 /**
  * One translation, or null when it cannot be trusted: not text, empty, too long, markup, control characters, a `$tr$` that could end the SQL
  * literal, or a number of the English name that is missing from it (a translator that changes "100K" or "30 days" changes what is sold).
  */
-export function cleanTranslation(source: string, value: unknown): string | null {
+export function cleanTranslation(source: string, value: unknown, lang?: string): string | null {
   if (typeof value !== 'string') return null
   const text = value.replace(/\s+/g, ' ').trim()
   if (text === '' || text.length > MAX_TRANSLATION_CHARS) return null
   if (/[\u0000-\u001f\u007f<>`]|\$tr\$/.test(text)) return null
   const have = digitsOf(text)
   if (!digitsOf(source).every((d) => have.includes(d))) return null
+  if (lang !== undefined && mixesScripts(source, lang, text)) return null
   return text
 }
 
@@ -64,7 +76,7 @@ export function parseBatch(raw: string, batch: readonly ServiceName[], langs: re
     const service = batch[i]!
     const clean: Record<string, string> = {}
     for (const lang of langs) {
-      const text = cleanTranslation(service.name, (tr as Record<string, unknown>)[lang])
+      const text = cleanTranslation(service.name, (tr as Record<string, unknown>)[lang], lang)
       if (text !== null) clean[lang] = text
     }
     if (Object.keys(clean).length > 0) out.set(service.id, { ...(out.get(service.id) ?? {}), ...clean })

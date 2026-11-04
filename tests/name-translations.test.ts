@@ -36,6 +36,14 @@ describe('what the translator accepts', () => {
   ])('refuses %s', (_why, value) => {
     expect(cleanTranslation('Website Traffic', value)).toBeNull()
   })
+  it('refuses a translation that mixes in a writing system of another language (a Hindi name with Japanese letters)', () => {
+    expect(cleanTranslation('Real Likes and Reactions', 'असली लाइक्स और रिएクション', 'hi')).toBeNull()
+    expect(cleanTranslation('Real Likes and Reactions', 'असली लाइक्स और रिएक्शन', 'hi')).not.toBeNull()
+    expect(cleanTranslation('Real Likes', 'Pinterest 真实点赞', 'ru')).toBeNull()
+    expect(cleanTranslation('Real Likes', 'Pinterest リアルないいね！ 真实', 'ja')).not.toBeNull()
+    expect(cleanTranslation('Real Likes', 'Likes reales UHQ', 'es')).not.toBeNull()
+    expect(cleanTranslation('Likes 🇷🇺 Русские', 'Лайки 🇷🇺 Русские', 'ru')).not.toBeNull() // a script that the English name itself has is fine
+  })
   it('refuses a translation that loses or changes a number of the name', () => {
     expect(cleanTranslation('Instagram Followers 100K [Refill: 30 days]', 'Seguidores de Instagram 100K [Refill: 30 días]')).not.toBeNull()
     expect(cleanTranslation('Instagram Followers 100K [Refill: 30 days]', 'Seguidores de Instagram 10K [Refill: 30 días]')).toBeNull()

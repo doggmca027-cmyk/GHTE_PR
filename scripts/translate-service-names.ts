@@ -48,15 +48,26 @@ async function sql<T>(query: string): Promise<T> {
   return (await res.json()) as T
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Gemini answers 429 / 5xx when it is busy: the same batch is asked again after a growing pause, up to five times. */
+async function ask(body: string): Promise<Response> {
+  let res!: Response
+  for (let attempt = 0; attempt < 5; attempt++) {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey! }, body,
+    })
+    if (res.status !== 429 && res.status < 500) return res
+    await sleep(2000 * 2 ** attempt)
+  }
+  return res
+}
+
 async function translate(batch: ServiceName[]): Promise<ReturnType<typeof parseBatch>> {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey! },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: buildPrompt(batch.map((b) => b.name), langs) }] }],
-      generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
-    }),
-  })
+  const res = await ask(JSON.stringify({
+    contents: [{ role: 'user', parts: [{ text: buildPrompt(batch.map((b) => b.name), langs) }] }],
+    generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+  }))
   if (!res.ok) throw new Error(`gemini ${res.status}`)
   const body = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
   return parseBatch(body.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '', batch, langs)
