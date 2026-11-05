@@ -409,6 +409,7 @@ describe('mapDbError', () => {
     ['service not found or inactive', 404, 'service_unavailable'],
     ['quantity must be between 50 and 500', 400, 'invalid_input'],
     ['order total is too small', 400, 'invalid_input'],
+    ['min_order_amount: the minimum order amount is 0.1000', 400, 'min_order_amount'],
     ['idempotency key po:x was already used with different parameters', 409, 'idempotency_conflict'],
     ['deadlock detected', 500, 'internal_error'],
   ])('%s -> %d %s', (message, httpStatus, error) => {
