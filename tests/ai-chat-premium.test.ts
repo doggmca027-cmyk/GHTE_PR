@@ -20,11 +20,11 @@ describe('the Premium instruction of the prompt', () => {
     expect(prompt).toContain('PREMIUM. Услуги с 💎')
     expect(prompt).toMatch(/боится блокировок или списаний/)
     expect(prompt).toMatch(/предлагай сначала Premium/)
-    expect(prompt).toMatch(/ощущение безопасности/)
+    expect(prompt).toMatch(/Продавай стабильность и очевидную выгоду/)
   })
   it('keeps it honest: no promise of no blocks, no "live people" where the name does not say it, and the mass market is still offered', () => {
     expect(prompt).toMatch(/Не обещай, что аккаунт не заблокируют/)
-    expect(prompt).toMatch(/только ту, что написана/)
+    expect(prompt).toMatch(/только то, что написано в названии и в колонках списка/)
     expect(prompt).toMatch(/Дешёвые услуги без 💎 тоже предлагай/)
   })
   it('the rules still end with the data warning, and the list stays last', () => {

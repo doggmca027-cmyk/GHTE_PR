@@ -163,7 +163,7 @@ describe('what the assistant is told about this customer', () => {
   })
   it('the tone: a network talks ROI, a personal blog talks safety', () => {
     expect(situationNote(ask('лью трафик, нужны подписчики для сетки'), [card('a', 'Followers', 1)])).toContain('ROI')
-    expect(situationNote(ask('подписчики на мой блог'), [card('a', 'Followers', 1)])).toContain('безопасности и органичности')
+    expect(situationNote(ask('подписчики на мой блог'), [card('a', 'Followers', 1)])).toContain('акцент на стабильности')
     expect(ask('мій блог, підписники')).toMatchObject({ audience: 'blog' })
     expect(ask('нужна массовка в тг')).toMatchObject({ audience: 'network' })
     expect(ask('подписчики в инсту').audience).toBeNull()
@@ -247,7 +247,7 @@ describe('the consultant rules of the prompt', () => {
     expect(prompt).toContain('Предлагай не больше трёх вариантов основных услуг')
   })
   it('the extra services are offered only when the account needs them or the customer asks for a set; the old rule of an obligatory package is gone', () => {
-    expect(prompt).toContain('предлагай, только если они действительно нужны для безопасности аккаунта')
+    expect(prompt).toContain('предлагай, только если они логично дополняют заказ')
     expect(prompt).toContain('или если клиент сам просит комплекс. В остальных случаях блок addons не упоминай')
     for (const gone of ['Думай пакетами', 'ВСЕГДА предложи основную услугу', 'cross-sell', 'Умный upsell', 'сбалансированный пакет', 'бюджет не сгорит на дистанции', 'сильный продавец']) {
       expect(prompt, gone).not.toContain(gone)
@@ -273,7 +273,7 @@ describe('the consultant rules of the prompt', () => {
   })
   it('the tone: price and volume for a network, safety for a personal blog, neutral when unknown', () => {
     expect(prompt).toContain('говори про цену за 1000, объём и скорость')
-    expect(prompt).toContain('про безопасность и органичный рост')
+    expect(prompt).toContain('про стабильность и плавную подачу')
     expect(prompt).toContain('говори нейтрально')
   })
   it('the article is always monospace (backticks), and without cards the answer ends with the call to paste it into the search (in the language of the customer)', () => {

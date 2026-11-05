@@ -51,9 +51,9 @@ describe('the prompt about sites', () => {
     expect(prompt).toContain('строго предлагай услуги категории «Website Traffic» / «Веб-трафик» из списка')
   })
   it('turns the expectation of SEO into an offer of two or three traffic variants, without promising positions', () => {
-    expect(prompt).toContain('Мы не занимаемся прямой SEO-оптимизацией кода, но можем направить качественный целевой трафик на ваш сайт')
+    expect(prompt).toContain('Мы не занимаемся прямой SEO-оптимизацией кода, но можем направить на ваш сайт трафик. Это технический трафик для увеличения показателей счётчиков.')
     expect(prompt).toContain('предложи 2–3 варианта веб-трафика')
-    expect(prompt).toContain('Не обещай конкретных позиций')
+    expect(prompt).toContain('Не обещай позиций в поисковой выдаче')
   })
   it('the off-topic refusal stays, but 13а has already taken sites out of it, and the list is still last', () => {
     expect(prompt).toContain('а не «не по теме»')
