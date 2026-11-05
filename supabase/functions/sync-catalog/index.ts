@@ -22,6 +22,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createSupabaseCatalogStore, must, type Db } from './store.ts'
 import { fillProviderGaps, syncProviderCatalog } from '../_shared/catalog-sync-run.ts'
 import { emptyProviderReport, isAuthorized, summarize, type ProviderSyncReport } from '../_shared/catalog-sync.ts'
+import { loadPriceRules } from '../_shared/order-pricing.ts'
 import { recordHeartbeat } from '../_shared/heartbeat.ts'
 import { instrument } from '../_shared/http.ts'
 import { registerSecret, type Logger } from '../_shared/logger.ts'
@@ -100,19 +101,9 @@ Deno.serve(instrument('sync-catalog', async (req: Request, { log, correlationId 
   }
   return locked.value
 
+  // every active rule, page by page (see loadPriceRules): the same set quote-order and place-order price with
   async function loadRules(): Promise<PriceRule[]> {
-    return (must(
-      await db.from('price_rules').select('id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, min_markup, min_price, name_all, name_any, priority, is_active, quality_scope').eq('is_active', true),
-      'load price_rules',
-    ) as unknown as (Omit<PriceRule, 'platform'> & { platform: { slug: string } | null })[]).map((r) => ({
-      ...r,
-      platform: r.platform?.slug ?? null,
-      value: Number(r.value),
-      min_rate: r.min_rate == null ? null : Number(r.min_rate),
-      max_rate: r.max_rate == null ? null : Number(r.max_rate),
-      min_markup: r.min_markup == null ? null : Number(r.min_markup),
-      min_price: r.min_price == null ? null : Number(r.min_price),
-    }))
+    return loadPriceRules(db)
   }
 
   async function runCatalog(): Promise<Response> {

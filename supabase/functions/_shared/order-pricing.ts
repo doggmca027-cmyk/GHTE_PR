@@ -60,13 +60,25 @@ export function toPricedService(r: PricedServiceRow): PricedService {
 // deno-lint-ignore no-explicit-any
 type DbLike = { from(table: string): any }
 
-/** The active price rules, as sync-catalog reads them. */
+/** PostgREST answers at most this many rows to one request (max-rows), whatever the query asks for: more rules than that are read page by page. */
+export const RULE_PAGE = 1000
+
+const RULE_SELECT = 'id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, min_markup, min_price, name_all, name_any, priority, is_active, quality_scope'
+
+/**
+ * The active price rules, as sync-catalog reads them. EVERY active rule is read, page by page in the order of their id: a page of exactly RULE_PAGE rows
+ * means there may be more. (One request would silently drop the rules past the 1000th, and prices would come out of a different set of rules.)
+ */
 export async function loadPriceRules(db: DbLike): Promise<PriceRule[]> {
-  const { data, error } = await db.from('price_rules')
-    .select('id, type, value, platform:platforms(slug), category_id, service_id, min_rate, max_rate, min_markup, min_price, name_all, name_any, priority, is_active, quality_scope')
-    .eq('is_active', true)
-  if (error) throw new Error(`load price_rules: ${error.message}`)
-  return ((data ?? []) as (Omit<PriceRule, 'platform'> & { platform: { slug: string } | null })[]).map((r) => ({
+  const rows: (Omit<PriceRule, 'platform'> & { platform: { slug: string } | null })[] = []
+  for (let from = 0; ; from += RULE_PAGE) {
+    const { data, error } = await db.from('price_rules').select(RULE_SELECT).eq('is_active', true).order('id').range(from, from + RULE_PAGE - 1)
+    if (error) throw new Error(`load price_rules: ${error.message}`)
+    const page = (data ?? []) as typeof rows
+    rows.push(...page)
+    if (page.length < RULE_PAGE) break
+  }
+  return rows.map((r) => ({
     ...r,
     platform: r.platform?.slug ?? null,
     value: Number(r.value),
