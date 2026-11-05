@@ -387,7 +387,7 @@ describe('against the real schema: a whole flight test, observed', () => {
     await db.query(`select record_worker_heartbeat('sync-order-status', true, null, 100)`)
     await db.query(`select record_worker_heartbeat('provider-health-monitor', true, null, 80)`)
   }
-  const place = async () => one<string>(`select id v from place_order($1::uuid, $2::uuid, 'https://t.me/ch/1', 100, $3::uuid, $4::uuid, $5::uuid, 0.005::numeric, $6)`,
+  const place = async () => one<string>(`select id v from place_order($1::uuid, $2::uuid, 'https://t.me/ch/1', 1000, $3::uuid, $4::uuid, $5::uuid, 0.05::numeric, $6)`,
     [user, serviceId, offer.id, offer.provider_id, offer.provider_service_id, `obs-${++n}`])
   const set = (id: string, sql: string) => db.query(`update orders set ${sql} where id = $1`, [id])
 
@@ -418,11 +418,11 @@ describe('against the real schema: a whole flight test, observed', () => {
     const rowsOut = await readOnlyQuery(snapshotQuery({ orderId: id }))
     expect(rowsOut).toHaveLength(1)
     const s = parseSnapshot(rowsOut)
-    expect(s.order).toMatchObject({ id, status: 'submitted', provider_order_id: 'P-77', quantity: 100, effective_provider_id: providerId })
-    expect([s.order!.charge_amount, s.order!.cost_amount, s.order!.profit_amount]).toEqual([0.015, 0.005, 0.01])
+    expect(s.order).toMatchObject({ id, status: 'submitted', provider_order_id: 'P-77', quantity: 1000, effective_provider_id: providerId })
+    expect([s.order!.charge_amount, s.order!.cost_amount, s.order!.profit_amount]).toEqual([0.15, 0.05, 0.1])
     expect(s.history.map((h) => h.new_status)).toEqual(['draft', 'awaiting_payment', 'paid', 'processing', 'submitted'])
     expect(s.wallet).toHaveLength(1)
-    expect(s.wallet[0]).toMatchObject({ type: 'purchase', status: 'completed', amount: -0.015 })
+    expect(s.wallet[0]).toMatchObject({ type: 'purchase', status: 'completed', amount: -0.15 })
     expect(s.providers.map((p) => p.name)).toEqual(['Flight Panel'])
     expect(s.heartbeats.map((h) => h.worker)).toEqual(['provider-health-monitor', 'sync-order-status'])
     expect(s.heartbeats.every((h) => h.last_success_at !== null)).toBe(true)
@@ -461,8 +461,8 @@ describe('against the real schema: a whole flight test, observed', () => {
     expect(text).toContain('submitted -> in_progress')
     expect(text).toContain('in_progress -> completed')
     expect(text).toContain('provider_order_id: - -> P-100')
-    expect(text).toMatch(/WALLET {2}\S+ purchase -\$0\.015 \(completed\)/)
-    expect(text).toContain('[PASS] exactly one purchase entry of -$0.015')
+    expect(text).toMatch(/WALLET {2}\S+ purchase -\$0.15 \(completed\)/)
+    expect(text).toContain('[PASS] exactly one purchase entry of -$0.15')
     expect(text).toContain('RESULT  CLEAN: the flight test passed')
     expect(text).not.toContain('[CRIT]')
     expect(r.verdict!.ok).toBe(true)
@@ -520,10 +520,10 @@ describe('against the real schema: a whole flight test, observed', () => {
     expect(r.exitCode, text).toBe(1)
     expect(text).toContain('submitted -> canceled')
     expect(text).toContain('[WARN] a refund is owed and the sync worker will book it')
-    expect(text).toMatch(/WALLET {2}\S+ refund \+\$0\.015 \(completed\)/)
+    expect(text).toMatch(/WALLET {2}\S+ refund \+\$0.15 \(completed\)/)
     expect(text).toContain('canceled -> refunded')
     expect(text).toContain('[FAIL] final status is "refunded"')
-    expect(text).toContain('[PASS] refunds add up to the charge ($0.015 of $0.015)')
+    expect(text).toContain('[PASS] refunds add up to the charge ($0.15 of $0.15)')
     expect(text).not.toContain('[FAIL] exactly one purchase')
   })
 

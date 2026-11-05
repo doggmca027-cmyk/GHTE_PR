@@ -4,7 +4,7 @@
 // (quote -> intent with memo -> simulated payment -> idempotent credit + ledger entry).
 
 import { MOCK_CATALOG, MOCK_SESSION } from '@/constants/dev'
-import { calcPartialRefund, checkBalance, toUnits, UNITS_PER_CURRENCY, validateQuantity, validateTargetUrl } from '@/lib/order-calc'
+import { calcPartialRefund, checkBalance, isBelowMinimumOrder, toUnits, UNITS_PER_CURRENCY, validateQuantity, validateTargetUrl } from '@/lib/order-calc'
 import { DEPOSIT_VALIDITY_SECONDS, generateMemo, minDepositUsd, quoteDeposit, validateDepositAmountUsd } from '@/lib/ton'
 import { buildMessage, type NotifyEvent } from '../../../supabase/functions/_shared/telegram-notify.ts'
 import type { MetricOrder } from '../../../supabase/functions/_shared/admin-metrics.ts'
@@ -214,6 +214,8 @@ export function createMockBackend(
       } catch (e) {
         throw new OrderApiError('promo_not_found', e instanceof Error ? e.message : 'This promo code does not exist.')
       }
+      // like the database: an order under the minimum amount is refused, not lifted
+      if (isBelowMinimumOrder(totalUnits)) throw new OrderApiError('min_order_amount', 'The minimum order amount is $0.10.')
       const check = checkBalance(state.balanceUnits / UNITS_PER_CURRENCY, totalUnits)
       if (!check.sufficient) {
         throw new OrderApiError('insufficient_funds', 'Insufficient balance.', { shortfall: check.shortfallUnits / UNITS_PER_CURRENCY })

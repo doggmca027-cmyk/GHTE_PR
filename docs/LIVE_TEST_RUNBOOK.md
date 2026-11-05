@@ -172,7 +172,7 @@ select id, name, slug, is_active from public.categories where slug = 'telegram-p
 ```
 
 **2d. Create the storefront service with its single offer.** It is created **active**, which is the point of this step. Rules enforced by the function: the customer rate must be at or above the panel's cost (`below_cost`), the limits must fit the panel's. Pick:
-`<CUSTOMER RATE PER 1000>` = the panel rate x 2.5 or more; `<MIN QTY>` = the panel minimum; `<MAX QTY>` = a small cap such as `1000`, so no single order can be large.
+`<CUSTOMER RATE PER 1000>` = the panel rate x 2.5 or more, and not under `0.12` (the platform's price floor); `<MIN QTY>` = the smallest quantity that costs at least the minimum order amount (`$0.10`; at `0.15` per 1000 that is 667) and not under the panel minimum, for example `1000`; `<MAX QTY>` = a small cap such as `2000`, so no single order can be large. An order under `$0.10` is refused (`min_order_amount`), so a smaller minimum would make the flight order impossible.
 
 ```sql
 -- live-test: create-service

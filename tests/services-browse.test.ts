@@ -256,7 +256,7 @@ describe('browsing the services', () => {
       if (String(input).includes('/functions/v1/quote-order')) {
         requests.push(String(input))
         auth.push(new Headers(init?.headers).get('Authorization'))
-        return new Response(JSON.stringify({ success: true, listPrice: 0.01, finalPrice: 0.01, totalDiscount: 0 }), { status: 200 })
+        return new Response(JSON.stringify({ success: true, listPrice: 0.5, finalPrice: 0.5, totalDiscount: 0 }), { status: 200 })
       }
       return fakeFetch(input)
     })
@@ -274,5 +274,51 @@ describe('browsing the services', () => {
     await click(cta)
     expect(signIn).toHaveBeenCalledTimes(1)
     expect(requests.some((r) => r.includes('place-order'))).toBe(false)
+  })
+
+  // the minimum order amount ($0.10): below it the button is blocked with the message and nothing is sent; at it, the order goes
+  const openFirstCard = async (quote: { status: number; body: unknown }) => {
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/functions/v1/quote-order')) {
+        requests.push(String(input))
+        return new Response(JSON.stringify(quote.body), { status: quote.status })
+      }
+      return fakeFetch(input)
+    })
+    await mount()
+    await click(buttonWith('Instagram'))
+    await click(host.querySelector('h3')?.closest('button'))
+    await act(async () => { await new Promise((r) => setTimeout(r, 600)) })
+    await flush()
+  }
+  const cta = () => [...host.querySelectorAll('button')].find((b) => /Minimum order amount|Order Now|Top Up Balance/.test(b.textContent ?? ''))
+
+  it('an order under ten cents blocks the button with "Minimum order amount: $0.10", and nothing is placed', async () => {
+    await openFirstCard({ status: 200, body: { success: true, listPrice: 0.05, finalPrice: 0.05, totalDiscount: 0 } })
+    expect(host.querySelector('[data-testid="min-order"]')?.textContent).toContain('Minimum order amount: $0.10')
+    expect(cta()?.textContent).toContain('Minimum order amount: $0.10')
+    expect(cta()?.disabled).toBe(true)
+    await click(cta())
+    expect(requests.some((r) => r.includes('place-order'))).toBe(false)
+  })
+
+  it('...also when the server refuses the quote itself (min_order_amount)', async () => {
+    await openFirstCard({ status: 400, body: { success: false, error: 'min_order_amount', message: 'The minimum order amount is $0.10.' } })
+    expect(host.querySelector('[data-testid="min-order"]')).not.toBeNull()
+    expect(cta()?.disabled).toBe(true)
+    expect(cta()?.textContent).toContain('Minimum order amount: $0.10')
+  })
+
+  it('an order of exactly ten cents is allowed: the button orders', async () => {
+    await openFirstCard({ status: 200, body: { success: true, listPrice: 0.1, finalPrice: 0.1, totalDiscount: 0 } })
+    expect(host.querySelector('[data-testid="min-order"]')).toBeNull()
+    expect(cta()?.textContent).toContain('Order Now')
+    expect(cta()?.disabled).toBe(false)
+  })
+
+  it('the message is in the customer\'s language', async () => {
+    await setLang('ru', { persist: false })
+    await openFirstCard({ status: 200, body: { success: true, listPrice: 0.05, finalPrice: 0.05, totalDiscount: 0 } })
+    expect(host.querySelector('[data-testid="min-order"]')?.textContent).toContain('Минимальная сумма заказа: $0.10')
   })
 })

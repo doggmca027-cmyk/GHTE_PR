@@ -256,10 +256,12 @@ describe('getQuote / createOrder over HTTP', () => {
     const { createOrder } = await import('../src/services/api/orders')
     const s = session(true)
     const svc = MOCK_CATALOG.services[0]
-    const q = await getQuote(s, { serviceId: svc.id, quantity: svc.minQuantity, promoCode: MOCK_PROMO_CODE })
-    const r = await createOrder(s, { serviceId: svc.id, targetUrl: 'https://t.me/mockchannel', quantity: svc.minQuantity, idempotencyKey: `mock-key-${Date.now()}`, promoCode: MOCK_PROMO_CODE })
+    // about fifty cents: the minimum order amount ($0.10) holds in the mock too, also after the promo discount
+    const quantity = Math.min(svc.maxQuantity, Math.max(svc.minQuantity, Math.ceil(500 / svc.ratePer1000)))
+    const q = await getQuote(s, { serviceId: svc.id, quantity, promoCode: MOCK_PROMO_CODE })
+    const r = await createOrder(s, { serviceId: svc.id, targetUrl: 'https://t.me/mockchannel', quantity, idempotencyKey: `mock-key-${Date.now()}`, promoCode: MOCK_PROMO_CODE })
     expect(r.order.chargeAmount).toBe(q.finalPrice)
     expect(q.finalPrice).toBeLessThan(q.listPrice)
-    await expect(createOrder(s, { serviceId: svc.id, targetUrl: 'https://t.me/mockchannel', quantity: svc.minQuantity, idempotencyKey: `mock-key-bad-${Date.now()}`, promoCode: 'NOPE' })).rejects.toMatchObject({ code: 'promo_not_found' })
+    await expect(createOrder(s, { serviceId: svc.id, targetUrl: 'https://t.me/mockchannel', quantity, idempotencyKey: `mock-key-bad-${Date.now()}`, promoCode: 'NOPE' })).rejects.toMatchObject({ code: 'promo_not_found' })
   })
 })

@@ -35,9 +35,16 @@ export function parseQuoteBody(raw: unknown): { ok: true; value: QuoteInput } | 
 /** Does the request carry a bearer token at all? (None: a guest of the website asking for the price list.) */
 export const hasBearer = (authorization: string | null): boolean => /^Bearer\s+\S+/i.test(authorization ?? '')
 
+/** "min_order_amount: the minimum order amount is 0.1000" -> "The minimum order amount is $0.10." (the amount the database holds). */
+export function minOrderMessage(message: string): string {
+  const amount = Number(/is\s+(\d+(?:\.\d+)?)/.exec(message)?.[1])
+  return `The minimum order amount is ${Number.isFinite(amount) && amount > 0 ? `$${amount.toFixed(2)}` : '$0.10'}.`
+}
+
 /** A database error (message of the SQL exception) -> the HTTP answer. 500 means "not a business error". */
 export function mapQuoteError(message: string): { status: number; error: string; message: string } {
   if (/user_banned/.test(message)) return { status: 403, error: 'banned', message: 'Your account is suspended.' }
+  if (/min_order_amount/.test(message)) return { status: 400, error: 'min_order_amount', message: minOrderMessage(message) }
   if (/promo_not_found/.test(message)) return { status: 404, error: 'promo_not_found', message: 'This promo code does not exist.' }
   if (/promo_inactive|promo_expired/.test(message)) return { status: 409, error: 'promo_expired', message: 'This promo code is no longer valid.' }
   if (/promo_exhausted/.test(message)) return { status: 409, error: 'promo_exhausted', message: 'This promo code has been used up.' }

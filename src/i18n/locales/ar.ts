@@ -519,6 +519,7 @@ const ar: Record<string, string> = {
   'Select': 'اختيار',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 انتهى حد ردود الذكاء الاصطناعي لدي لهذه الساعة! يرجى استخدام البحث في الكتالوج أو مراسلة الدعم. يمكنك سؤالي مجددًا بعد {minutes} د.',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 انتهى حد ردود الذكاء الاصطناعي لدي لهذه الساعة! يرجى استخدام البحث في الكتالوج أو مراسلة الدعم.',
+  'Minimum order amount: {amount}': 'الحد الأدنى لمبلغ الطلب: {amount}',
 }
 
 export default ar

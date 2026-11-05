@@ -519,6 +519,7 @@ const de: Record<string, string> = {
   'Select': 'Auswählen',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Mein KI-Antwortlimit für diese Stunde ist aufgebraucht! Bitte nutzen Sie die Katalogsuche oder schreiben Sie dem Support. Sie können mich in {minutes} Min. wieder fragen.',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Mein KI-Antwortlimit für diese Stunde ist aufgebraucht! Bitte nutzen Sie die Katalogsuche oder schreiben Sie dem Support.',
+  'Minimum order amount: {amount}': 'Mindestbestellwert: {amount}',
 }
 
 export default de

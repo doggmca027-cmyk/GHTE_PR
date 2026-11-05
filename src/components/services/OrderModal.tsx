@@ -17,6 +17,8 @@ import {
   formatInt,
   formatMoneyAmount,
   formatUnits,
+  isBelowMinimumOrder,
+  MIN_ORDER_AMOUNT,
   quantityPresets,
   toUnits,
   validateQuantity,
@@ -128,6 +130,8 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
   const balance = checkBalance(wallet.balance, totalUnits)
   const pricing = quoteState.kind === 'loading'
   const promoRefused = quoteState.kind === 'ready' && quoteState.promoError !== null
+  // the final check under the minimum amount ($0.10): the button is blocked, nothing is sent. The server refuses it too (min_order_amount).
+  const belowMinimum = orderOk && !pricing && (isBelowMinimumOrder(totalUnits) || (quoteState.kind === 'error' && /minimum order amount/i.test(quoteState.message)))
 
   const showLinkError = linkTouched && !url.ok
   const showQtyError = quantity !== '' && !qty.ok
@@ -141,7 +145,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
   }
 
   async function submit() {
-    if (!shape || !url.ok || submittingRef.current || pricing || promoRefused) return
+    if (!shape || !url.ok || submittingRef.current || pricing || promoRefused || belowMinimum) return
     submittingRef.current = true
     dirtySinceAttempt.current = true
     setPhase({ kind: 'submitting' })
@@ -170,14 +174,14 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
       }
       haptic.error()
       if (err.code.startsWith('promo_')) invalidate() // the code's state changed under us: price it again
-      setPhase({ kind: 'error', message: tm(err.message) })
+      setPhase({ kind: 'error', message: err.code === 'min_order_amount' ? t('Minimum order amount: {amount}', { amount: formatMoneyAmount(MIN_ORDER_AMOUNT) }) : tm(err.message) })
     } finally {
       submittingRef.current = false
     }
   }
 
   function handleCta() {
-    if (busy || !orderOk || pricing || promoRefused) return
+    if (busy || !orderOk || pricing || promoRefused || belowMinimum) return
     if (guest) {
       haptic.tap()
       signIn()
@@ -205,6 +209,8 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
         ? t('Calculating price…')
         : promoRefused
           ? t('Fix or remove the promo code')
+          : belowMinimum
+          ? t('Minimum order amount: {amount}', { amount: formatMoneyAmount(MIN_ORDER_AMOUNT) })
           : guest
           ? t('Sign in with Telegram to order')
           : balance.sufficient
@@ -337,9 +343,16 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
               </div>
             )}
 
+            {belowMinimum && (
+              <div className="mt-4 flex gap-2.5 rounded-2xl bg-amber-50 p-3.5 text-[13px] font-medium text-amber-800" role="alert" data-testid="min-order">
+                <TriangleAlert size={18} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                <p>{t('Minimum order amount: {amount}', { amount: formatMoneyAmount(MIN_ORDER_AMOUNT) })}</p>
+              </div>
+            )}
+
             <Button
-              className={cn('mt-5 h-14 w-full text-[15px]', (!orderOk || busy || pricing || promoRefused) && 'cursor-not-allowed opacity-60 hover:bg-brand')}
-              disabled={!orderOk || busy || pricing || promoRefused}
+              className={cn('mt-5 h-14 w-full text-[15px]', (!orderOk || busy || pricing || promoRefused || belowMinimum) && 'cursor-not-allowed opacity-60 hover:bg-brand')}
+              disabled={!orderOk || busy || pricing || promoRefused || belowMinimum}
               aria-busy={busy}
               onClick={handleCta}
             >

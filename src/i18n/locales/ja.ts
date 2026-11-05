@@ -519,6 +519,7 @@ const ja: Record<string, string> = {
   'Select': '選択',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 この1時間の AI 返信の上限に達しました！カタログ検索をご利用いただくか、サポートへご連絡ください。{minutes} 分後にもう一度ご質問いただけます。',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 この1時間の AI 返信の上限に達しました！カタログ検索をご利用いただくか、サポートへご連絡ください。',
+  'Minimum order amount: {amount}': '最低注文金額：{amount}',
 }
 
 export default ja

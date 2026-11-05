@@ -19,7 +19,7 @@ const PROVIDER = 'Flight Panel'
 const fill = (sql: string, over: Record<string, string> = {}) => {
   const values: Record<string, string> = {
     'YOUR TELEGRAM ID': String(TG), 'PROVIDER NAME': PROVIDER, 'PANEL API URL': 'https://panel.example.com/api/v2', 'PROJECT REF': 'abcdefgh',
-    'CUSTOMER RATE PER 1000': '0.15', 'MIN QTY': '100', 'MAX QTY': '1000', 'TEST FUNDS USD': '1.00', 'UNUSED TEST FUNDS USD': '0.60', ...over,
+    'CUSTOMER RATE PER 1000': '0.15', 'MIN QTY': '1000', 'MAX QTY': '2000', 'TEST FUNDS USD': '1.00', 'UNUSED TEST FUNDS USD': '0.60', ...over,
   }
   const out = sql.replace(/<([A-Z][A-Z0-9 ]+[A-Z0-9])>/g, (whole, key: string) => {
     if (!(key in values)) throw new Error(`placeholder ${whole} has no test value`)
@@ -168,7 +168,7 @@ describe('the flight test, step by step, on the real schema', () => {
     serviceId = created[0].admin_create_service_with_offer.service_id
     const r = await run('service-state')
     expect(r).toHaveLength(1)
-    expect(r[0]).toMatchObject({ name: 'Telegram Post Views (flight test)', is_active: true, offer_active: true, anomaly_detected: false, provider: PROVIDER, min_quantity: 100, max_quantity: 1000 })
+    expect(r[0]).toMatchObject({ name: 'Telegram Post Views (flight test)', is_active: true, offer_active: true, anomaly_detected: false, provider: PROVIDER, min_quantity: 1000, max_quantity: 2000 })
     expect(Number(r[0].customer_rate_per_1000)).toBe(0.15)
     expect(Number(r[0].cost_per_1000)).toBe(0.05)
     expect(Number(r[0].active_services)).toBe(1)
@@ -197,7 +197,7 @@ describe('the flight test, step by step, on the real schema', () => {
   it('step 4 and 5: an order goes through its life and every verification block tells the truth', async () => {
     const offer = (await rows(`select id, provider_id, provider_service_id from provider_service_offers where service_id = $1`, [serviceId]))[0]
     // place-order, played: the database function that charges the wallet
-    orderId = await one<string>(`select id v from place_order($1::uuid, $2::uuid, 'https://t.me/mychannel/7', 100, $3::uuid, $4::uuid, $5::uuid, 0.005::numeric, 'flight-1')`,
+    orderId = await one<string>(`select id v from place_order($1::uuid, $2::uuid, 'https://t.me/mychannel/7', 1000, $3::uuid, $4::uuid, $5::uuid, 0.05::numeric, 'flight-1')`,
       [admin, serviceId, offer.id, offer.provider_id, offer.provider_service_id])
     await run('close-orders')
     await db.query(`update orders set status = 'processing' where id = $1`, [orderId])
@@ -212,8 +212,8 @@ describe('the flight test, step by step, on the real schema', () => {
     await db.query(`update providers set provider_balance = 4.995, last_balance_sync = now() where id = $1`, [providerId])
 
     const o = (await run('order-state', { 'ORDER ID': orderId }))[0]
-    expect(o).toMatchObject({ status: 'completed', quantity: 100, provider_order_id: 'P-8841', provider: PROVIDER, error_message: null })
-    expect([Number(o.charge_amount), Number(o.cost_amount), Number(o.profit_amount)]).toEqual([0.015, 0.005, 0.01])
+    expect(o).toMatchObject({ status: 'completed', quantity: 1000, provider_order_id: 'P-8841', provider: PROVIDER, error_message: null })
+    expect([Number(o.charge_amount), Number(o.cost_amount), Number(o.profit_amount)]).toEqual([0.15, 0.05, 0.1])
 
     const history = await run('order-history', { 'ORDER ID': orderId })
     expect(history.map((h) => h.new_status)).toEqual(['draft', 'awaiting_payment', 'paid', 'processing', 'submitted', 'in_progress', 'completed'])
@@ -221,11 +221,11 @@ describe('the flight test, step by step, on the real schema', () => {
     const ledger = await run('wallet-ledger', { 'ORDER ID': orderId })
     expect(ledger).toHaveLength(1)
     expect(ledger[0]).toMatchObject({ type: 'purchase', status: 'completed' })
-    expect(Number(ledger[0].amount)).toBe(-0.015)
+    expect(Number(ledger[0].amount)).toBe(-0.15)
 
     const money = (await run('money-identity', { 'ORDER ID': orderId }))[0]
     expect(money).toMatchObject({ status: 'completed', profit_adds_up: true })
-    expect(Number(money.net_wallet_effect)).toBe(-0.015)
+    expect(Number(money.net_wallet_effect)).toBe(-0.15)
 
     const workers = await run('worker-state')
     const lease = workers.find((w) => w.kind === 'lease')!
@@ -244,7 +244,7 @@ describe('the flight test, step by step, on the real schema', () => {
 
   it('step 5: the money identity for an order the provider canceled: the refund brings the wallet effect back to zero', async () => {
     const offer = (await rows(`select id, provider_id, provider_service_id from provider_service_offers where service_id = $1`, [serviceId]))[0]
-    const id = await one<string>(`select id v from place_order($1::uuid, $2::uuid, 'https://t.me/mychannel/8', 100, $3::uuid, $4::uuid, $5::uuid, 0.005::numeric, 'flight-2')`,
+    const id = await one<string>(`select id v from place_order($1::uuid, $2::uuid, 'https://t.me/mychannel/8', 1000, $3::uuid, $4::uuid, $5::uuid, 0.05::numeric, 'flight-2')`,
       [admin, serviceId, offer.id, offer.provider_id, offer.provider_service_id])
     await db.query(`update orders set status = 'processing' where id = $1`, [id])
     await db.query(`update orders set status = 'submitted', provider_order_id = 'P-8842' where id = $1`, [id])
@@ -264,7 +264,7 @@ describe('the flight test, step by step, on the real schema', () => {
     expect(await rows(`select 1 from admin_audit_log where action = 'live_test_closeout'`)).toHaveLength(1)
 
     const before = Number((await rows(`select balance from wallets where user_id = $1`, [admin]))[0].balance)
-    expect(before).toBeCloseTo(0.985, 4) // 1.00 funded, one order of 0.015 completed, the other refunded
+    expect(before).toBeCloseTo(0.85, 4) // 1.00 funded, one order of 0.15 completed, the other refunded
     const r = await run('reclaim-funds')
     expect(Number(r[0].balance)).toBeCloseTo(before - 0.6, 4)
     await run('reclaim-funds')

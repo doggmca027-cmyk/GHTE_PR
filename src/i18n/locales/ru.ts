@@ -519,6 +519,7 @@ const ru: Record<string, string> = {
   'Select': 'Выбрать',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Мой лимит ответов нейросети на этот час исчерпан! Пожалуйста, воспользуйтесь удобным поиском по каталогу или напишите в поддержку. Спросить меня снова можно через {minutes} мин.',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Мой лимит ответов нейросети на этот час исчерпан! Пожалуйста, воспользуйтесь удобным поиском по каталогу или напишите в поддержку.',
+  'Minimum order amount: {amount}': 'Минимальная сумма заказа: {amount}',
 }
 
 export default ru

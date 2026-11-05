@@ -1,6 +1,7 @@
 // The owner's tiered markup (2026-10-19), the minimum order charge and the floor under the volume steps (migration 20261222000000):
 //   cost < 0.05: max(cost x 5, cost + 0.10, 0.12) · < 0.50: max(cost x 3, cost + 0.12) · < 5: max(cost x 2, cost + 0.30) · else cost x 1.6
-// as four tier rules with the new rule minimums; no order under $0.01; a volume step never under cost x 1.35 nor cost + 0.05 per 1000.
+// as four tier rules with the new rule minimums; a volume step never under cost x 1.35 nor cost + 0.05 per 1000.
+// Since migration 20270103000000: no order under $0.10 (refused, no longer lifted to a cent) and no price per 1000 under $0.12 in any step (tests/rate-floor.test.ts).
 import fs from 'node:fs'
 import path from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
@@ -81,32 +82,43 @@ describe('the minimum order charge and the volume floor (real SQL)', () => {
     await db.query(`select process_wallet_transaction($1::uuid,'deposit',100,null,'fund','fund-1')`, [u])
   }, 180_000)
 
-  it('the defaults: one cent, x1.35, + $0.05', async () => {
-    expect((await q(`select min_order_charge::float8 m, volume_floor_multiplier::float8 k, volume_floor_markup::float8 a from platform_settings where id = 1`))[0]).toEqual({ m: 0.01, k: 1.35, a: 0.05 })
+  it('the defaults: $0.10 minimum order, x1.35, + $0.05, $0.12 floor', async () => {
+    expect((await q(`select min_order_charge::float8 m, volume_floor_multiplier::float8 k, volume_floor_markup::float8 a, min_rate_per_1000::float8 f from platform_settings where id = 1`))[0]).toEqual({ m: 0.1, k: 1.35, a: 0.05, f: 0.12 })
   })
 
-  it('REQUIRED: 10 views of a $0.006 service cost exactly $0.01 (not $0.0003), in the quote and in the charge, with the profit', async () => {
+  it('REQUIRED: 10 views of a $0.006 service are refused (min_order_amount), in the quote and in the order, and nothing is charged', async () => {
     await setCard(0.006)
-    const quoted = await quote(10, 0.006)
-    expect(quoted).toMatchObject({ list_price: 0.01, final_price: 0.01, rate_per_1000: 0.12 })
-    const [order] = await q(`select * from place_order($1::uuid, '${SVC}', 'https://t.me/x', 10, '${OFFER}', '${P}', '${PS}', 0.0001, $2, null, false, 1, 0, '${OFFER}', $3)`, [u, `k${++n}`, rate(0.006)])
-    expect(Number(order.charge_amount)).toBe(0.01)
-    expect(Number(order.profit_amount)).toBe(0.0099)
+    const before = (await q<{ n: number }>(`select count(*)::int n from orders where user_id = $1`, [u]))[0].n
+    await expect(quote(10, 0.006)).rejects.toThrow(/min_order_amount: the minimum order amount is 0\.1/)
+    await expect(q(`select * from place_order($1::uuid, '${SVC}', 'https://t.me/x', 10, '${OFFER}', '${P}', '${PS}', 0.0001, $2, null, false, 1, 0, '${OFFER}', $3)`, [u, `k${++n}`, rate(0.006)])).rejects.toThrow(/min_order_amount/)
+    expect((await q<{ n: number }>(`select count(*)::int n from orders where user_id = $1`, [u]))[0].n).toBe(before)
   })
 
-  it('a discount never takes an order under the minimum charge', async () => {
+  it('a discount never takes an order under the minimum amount', async () => {
     await setCard(0.006)
     await db.query(`insert into user_tiers(slug, name, min_spent, discount_percentage, is_active) values ('vip-test', 'VIP', 0, 50, true) on conflict do nothing`).catch(() => undefined)
     const tier = (await q<{ id: string }>(`select id from user_tiers where discount_percentage > 0 and is_active order by discount_percentage desc limit 1`))[0]
-    if (tier) await db.query(`update users set tier_id = $2 where id = $1`, [u, tier.id])
-    const quoted = await quote(50, 0.006) // 50 x 0.12 / 1000 = 0.006 -> lifted to 0.01; a tier discount cannot go below it
-    expect(Number(quoted.final_price)).toBe(0.01)
-    await db.query(`update users set tier_id = null where id = $1`, [u])
+    if (!tier) throw new Error('no tier to test with')
+    const original = (await q<{ p: string }>(`select discount_percentage::text p from user_tiers where id = $1`, [tier.id]))[0].p
+    try {
+      await db.query(`update user_tiers set discount_percentage = 50 where id = $1`, [tier.id])
+      await db.query(`update users set tier_id = $2 where id = $1`, [u, tier.id])
+      const quoted = await quote(1000, 0.006) // 1000 x 0.12 / 1000 = 0.12; a 50 % tier discount would give 0.06, it cannot go under 0.10
+      expect(Number(quoted.final_price)).toBe(0.1)
+      expect(quoted.capped).toBe(true)
+    } finally {
+      await db.query(`update users set tier_id = null where id = $1`, [u])
+      await db.query(`update user_tiers set discount_percentage = $2 where id = $1`, [tier.id, original])
+    }
   })
 
-  it('above one cent the price is the rate times the quantity, as before', async () => {
+  it('from the minimum amount up the price is the rate times the quantity, and just under it the order is refused', async () => {
     await setCard(0.006)
-    expect(await quote(500, 0.006)).toMatchObject({ list_price: 0.06, final_price: 0.06 })
+    expect(await quote(1000, 0.006)).toMatchObject({ list_price: 0.12, final_price: 0.12 })
+    expect(await quote(834, 0.006)).toMatchObject({ list_price: 0.1001, final_price: 0.1001 })
+    await expect(quote(832, 0.006)).rejects.toThrow(/min_order_amount/) // 0.0998
+    const [order] = await q(`select * from place_order($1::uuid, '${SVC}', 'https://t.me/x', 1000, '${OFFER}', '${P}', '${PS}', 0.006, $2, null, false, 1, 0, '${OFFER}', $3)`, [u, `k${++n}`, rate(0.006)])
+    expect(Number(order.charge_amount)).toBe(0.12)
   })
 
   it('REQUIRED: a volume step never goes under cost x 1.35 nor cost + $0.05 per 1000, nor above the retail rate', async () => {
@@ -115,8 +127,8 @@ describe('the minimum order charge and the volume floor (real SQL)', () => {
     expect((await quote(500, 5)).volume_rates.map((v: { rate_per_1000: number }) => Number(v.rate_per_1000))).toEqual([8, 6.75, 6.75, 6.75])
     await setCard(0.1) // x3 = 0.30; steps 0.20 / 0.1625 / 0.1375, the last one lifted to the floor max(0.135, 0.15) = 0.15
     expect((await quote(500, 0.1)).volume_rates.map((v: { rate_per_1000: number }) => Number(v.rate_per_1000))).toEqual([0.3, 0.2, 0.1625, 0.15])
-    await setCard(0.04) // max(0.20, 0.14, 0.12) = 0.20; the 100 000 step 0.04 x (1 + 4 x 0.15 / 0.8) = 0.07 -> floor max(0.054, 0.09) = 0.09
-    expect((await quote(100_000, 0.04)).rate_per_1000).toBe(0.09)
+    await setCard(0.04) // max(0.20, 0.14, 0.12) = 0.20; the 100 000 step 0.04 x (1 + 4 x 0.15 / 0.8) = 0.07 -> floor max(0.054, 0.09) = 0.09 -> the absolute floor 0.12
+    expect((await quote(100_000, 0.04)).rate_per_1000).toBe(0.12)
     expect(await q(`select volume_floor_rate(0.2, 1, 1.35, 0.05) v`)).toEqual([{ v: '0.2' }]) // never above the retail rate
   })
 

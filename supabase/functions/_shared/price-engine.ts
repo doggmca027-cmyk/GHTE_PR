@@ -7,6 +7,11 @@ const SCALE = 8 // provider rates / margins / fixed markups: 1e-8 units
 const PERCENT_SCALE = 4 // percent markups: P / 10000 of the rate (value has 2 decimals => value * 100 / 10000)
 /** Anti-loss floor: the price is never below cost + this, whatever the rules say (covers gateway / network fees on tiny orders). */
 export const DEFAULT_MIN_MARGIN = 0.02
+/**
+ * Absolute floor: no price per 1000 is under this, whatever the rules say (the same number as platform_settings.min_rate_per_1000, which the database
+ * holds under every volume step; tests/rate-floor.test.ts keeps the two equal). A card that costs a fraction of a cent still sells at $0.12 per 1000.
+ */
+export const DEFAULT_MIN_RATE = 0.12
 
 function toFixedPoint(n: number, decimals: number): bigint {
   if (!Number.isFinite(n)) throw new RangeError(`Not a finite number: ${n}`)
@@ -106,7 +111,8 @@ export function selectPriceRule(
  * - tier:       percentage markup, only inside [min_rate, max_rate]
  * - no rule:    rate (then the margin floor applies)
  * A rule may also set a minimum: min_markup (the price is at least rate + min_markup) and min_price (at least min_price), so a cascade
- * "max(cost x 5, cost + 0.10, 0.12)" is one tier rule. The result is never below providerRate + minMargin, and is rounded UP to 4 decimals.
+ * "max(cost x 5, cost + 0.10, 0.12)" is one tier rule. The result is never below providerRate + minMargin, never below minRate (DEFAULT_MIN_RATE),
+ * and is rounded UP to 4 decimals.
  */
 export function calculateCustomerRate(
   providerRate: number,
@@ -120,6 +126,11 @@ export function calculateCustomerRate(
   const minMargin = options.minMargin ?? DEFAULT_MIN_MARGIN
   if (!Number.isFinite(minMargin) || minMargin < 0) {
     throw new RangeError(`minMargin must be a non-negative finite number, got ${minMargin}`)
+  }
+
+  const minRate = options.minRate ?? DEFAULT_MIN_RATE
+  if (!Number.isFinite(minRate) || minRate < 0) {
+    throw new RangeError(`minRate must be a non-negative finite number, got ${minRate}`)
   }
 
   const rate = toFixedPoint(providerRate, SCALE)
@@ -148,7 +159,8 @@ export function calculateCustomerRate(
   }
 
   const floorNum = (rate + toFixedPoint(minMargin, SCALE)) * PERCENT_DEN
-  const finalNum = candidateNum > floorNum ? candidateNum : floorNum
+  const rateFloorNum = toFixedPoint(minRate, SCALE) * PERCENT_DEN
+  const finalNum = [candidateNum, floorNum, rateFloorNum].reduce((a, b) => (b > a ? b : a))
 
   // Round up to 4 decimals: 1e-4 = 1e4 units of 1e-8.
   const units4 = ceilDiv(finalNum, PERCENT_DEN * 10n ** BigInt(SCALE - 4))

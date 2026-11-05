@@ -34,6 +34,7 @@ export type QuoteErrorCode =
   | 'promo_exhausted'
   | 'promo_already_used'
   | 'promo_not_applicable'
+  | 'min_order_amount'
   | 'service_unavailable'
   | 'invalid_input'
   | 'unauthorized'

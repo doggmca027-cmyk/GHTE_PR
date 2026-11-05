@@ -9,7 +9,7 @@ const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 const QUOTE_TIMEOUT_MS = 10_000
 
-const KNOWN: readonly QuoteErrorCode[] = ['promo_not_found', 'promo_expired', 'promo_exhausted', 'promo_already_used', 'promo_not_applicable', 'service_unavailable', 'invalid_input']
+const KNOWN: readonly QuoteErrorCode[] = ['promo_not_found', 'promo_expired', 'promo_exhausted', 'promo_already_used', 'promo_not_applicable', 'min_order_amount', 'service_unavailable', 'invalid_input']
 
 /** Asks the `quote-order` Edge Function for the price this customer would be charged. Read-only: nothing is spent or redeemed. */
 export async function getQuote(session: AuthSession, request: QuoteRequest, signal?: AbortSignal): Promise<Quote> {

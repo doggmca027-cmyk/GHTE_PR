@@ -70,10 +70,17 @@ describe('fallback tiers (cost per 1000 -> multiplier)', () => {
     expect(price(cost, 'snapchat', 'Snapchat Followers')).toBe(expected)
   })
 
-  it('never goes below cost + 0.02 and rounds UP to 4 decimals', () => {
+  it('never goes below cost + 0.02 and rounds UP to 4 decimals (the $0.12 price floor switched off)', () => {
+    const bare = (cost: number) => calculateCustomerRate(cost, RULES, { platform: 'snapchat', serviceName: 'Snapchat Views' }, { minRate: 0 })
     expect(DEFAULT_MIN_MARGIN).toBe(0.02)
-    expect(price(0.001, 'snapchat', 'Snapchat Views')).toBe(0.021) // 0.004 would be a loss on a small order
-    expect(price(0.01234, 'snapchat', 'Snapchat Views')).toBe(0.0494) // 0.01234 * 4 = 0.04936 -> up
+    expect(bare(0.001)).toBe(0.021) // 0.004 would be a loss on a small order
+    expect(bare(0.01234)).toBe(0.0494) // 0.01234 * 4 = 0.04936 -> up
+  })
+
+  it('and never below the $0.12 price floor either: the same tiny costs sell at 0.12', () => {
+    expect(price(0.001, 'snapchat', 'Snapchat Views')).toBe(0.12)
+    expect(price(0.01234, 'snapchat', 'Snapchat Views')).toBe(0.12)
+    expect(price(0.0499, 'snapchat', 'Snapchat Views')).toBeGreaterThanOrEqual(0.12)
   })
 })
 

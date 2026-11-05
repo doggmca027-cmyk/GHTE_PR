@@ -14,6 +14,8 @@ export type OrderErrorCode =
   | 'promo_exhausted'
   | 'promo_already_used'
   | 'promo_not_applicable'
+  /** The order is smaller than the minimum amount ($0.10). */
+  | 'min_order_amount'
   /** Connection lost / timed out: the order MAY have been created. Retrying with the same key is safe. */
   | 'network'
   | 'server'

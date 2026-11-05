@@ -519,6 +519,7 @@ const id: Record<string, string> = {
   'Select': 'Pilih',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Batas balasan AI saya untuk jam ini sudah habis! Silakan gunakan pencarian katalog atau hubungi dukungan. Anda bisa bertanya lagi dalam {minutes} menit.',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Batas balasan AI saya untuk jam ini sudah habis! Silakan gunakan pencarian katalog atau hubungi dukungan.',
+  'Minimum order amount: {amount}': 'Jumlah pesanan minimum: {amount}',
 }
 
 export default id

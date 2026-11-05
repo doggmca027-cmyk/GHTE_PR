@@ -519,6 +519,7 @@ const hi: Record<string, string> = {
   'Select': 'चुनें',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 इस घंटे के लिए मेरी AI उत्तर सीमा समाप्त हो गई है! कृपया कैटलॉग खोज का उपयोग करें या सहायता को लिखें। आप {minutes} मिनट बाद फिर पूछ सकते हैं।',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 इस घंटे के लिए मेरी AI उत्तर सीमा समाप्त हो गई है! कृपया कैटलॉग खोज का उपयोग करें या सहायता को लिखें।',
+  'Minimum order amount: {amount}': 'न्यूनतम ऑर्डर राशि: {amount}',
 }
 
 export default hi

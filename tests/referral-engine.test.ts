@@ -236,10 +236,16 @@ describe('referral engine (SQL)', () => {
       await setRate(1.25, 7)
       const buyer = await newUser({ funds: 100 })
       await refer(buyer, alice)
-      const o = await order(buyer, { quantity: 1 }) // charge 0.004; 1.25% = 0.00005 -> 0.0001
-      await complete(o)
-      expect(await one(`select amount::text v from referral_ledger where order_id = $1`, [o])).toBe('0.0001')
-      await setRate(5, 7)
+      // an order of a fraction of a cent exists only with the minimum order amount switched off (it is $0.10 on production)
+      await db.query(`update platform_settings set min_order_charge = 0 where id = 1`)
+      try {
+        const o = await order(buyer, { quantity: 1 }) // charge 0.004; 1.25% = 0.00005 -> 0.0001
+        await complete(o)
+        expect(await one(`select amount::text v from referral_ledger where order_id = $1`, [o])).toBe('0.0001')
+      } finally {
+        await db.query(`update platform_settings set min_order_charge = 0.10 where id = 1`)
+        await setRate(5, 7)
+      }
     })
 
     it('never pays more than the order earned', async () => {

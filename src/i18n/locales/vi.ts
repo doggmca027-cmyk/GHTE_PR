@@ -519,6 +519,7 @@ const vi: Record<string, string> = {
   'Select': 'Chọn',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Giới hạn trả lời AI của tôi trong giờ này đã hết! Vui lòng dùng tìm kiếm trong danh mục hoặc nhắn cho hỗ trợ. Bạn có thể hỏi lại sau {minutes} phút.',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Giới hạn trả lời AI của tôi trong giờ này đã hết! Vui lòng dùng tìm kiếm trong danh mục hoặc nhắn cho hỗ trợ.',
+  'Minimum order amount: {amount}': 'Số tiền đặt hàng tối thiểu: {amount}',
 }
 
 export default vi

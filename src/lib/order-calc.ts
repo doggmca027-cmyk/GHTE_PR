@@ -19,6 +19,14 @@ export const UNITS_PER_CURRENCY = 10_000
 
 export const toUnits = (amount: number): number => Math.round(amount * UNITS_PER_CURRENCY)
 
+/** The smallest order the platform takes, in USD (platform_settings.min_order_charge; the database refuses a smaller one: min_order_amount). */
+export const MIN_ORDER_AMOUNT = 0.1
+/** The same, in units of 1e-4. */
+export const MIN_ORDER_UNITS = toUnits(MIN_ORDER_AMOUNT)
+
+/** An order of this many units is under the minimum amount. */
+export const isBelowMinimumOrder = (totalUnits: number): boolean => totalUnits > 0 && totalUnits < MIN_ORDER_UNITS
+
 /** round-half-up(quantity * rate / 1000) at 4 decimals, in units. Matches PostgreSQL round(numeric, 4). */
 export function calcTotalUnits(quantity: number, ratePer1000: number): number {
   const rateUnits = toUnits(ratePer1000)

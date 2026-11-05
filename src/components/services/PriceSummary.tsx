@@ -78,7 +78,8 @@ export function PriceSummary({ quantity, ratePer1000, estimateUnits, state, bala
           {state.kind === 'ready' && state.quote.discountReduced && (
             <p className="mt-1 text-xs font-medium text-amber-700">{t('Your discount was limited for this order.')}</p>
           )}
-          {state.kind === 'error' && (
+          {/* the minimum order amount has its own notice under the price (OrderModal), in the customer's language */}
+          {state.kind === 'error' && !/minimum order amount/i.test(state.message) && (
             <p role="status" className="mt-1 text-xs font-medium text-amber-700">{t('Showing the list price: {message} Your discounts are applied when you order.', { message: tm(state.message) })}</p>
           )}
         </>

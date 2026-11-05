@@ -519,6 +519,7 @@ const uk: Record<string, string> = {
   'Select': 'Обрати',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Мій ліміт відповідей нейромережі на цю годину вичерпано! Будь ласка, скористайтеся зручним пошуком за каталогом або напишіть у підтримку. Запитати мене знову можна за {minutes} хв.',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Мій ліміт відповідей нейромережі на цю годину вичерпано! Будь ласка, скористайтеся зручним пошуком за каталогом або напишіть у підтримку.',
+  'Minimum order amount: {amount}': 'Мінімальна сума замовлення: {amount}',
 }
 
 export default uk

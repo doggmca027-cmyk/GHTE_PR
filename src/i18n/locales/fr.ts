@@ -519,6 +519,7 @@ const fr: Record<string, string> = {
   'Select': 'Choisir',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Ma limite de réponses IA pour cette heure est atteinte ! Utilisez la recherche du catalogue ou écrivez au support. Vous pourrez me reposer une question dans {minutes} min.',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Ma limite de réponses IA pour cette heure est atteinte ! Utilisez la recherche du catalogue ou écrivez au support.',
+  'Minimum order amount: {amount}': 'Montant minimum de commande : {amount}',
 }
 
 export default fr

@@ -11,6 +11,7 @@
 //      garbled response, or any unexpected error. A held order is flagged `needs_reconciliation`.
 
 import { SMMProviderError } from './providers/contract.ts'
+import { minOrderMessage } from './discounts.ts'
 import type { ISMMProviderAdapter, OrderStatus } from './types.ts'
 
 export const NEEDS_RECONCILIATION = 'needs_reconciliation'
@@ -295,6 +296,7 @@ export function mapDbError(message: string): MappedError {
   }
   if (/user is banned/.test(message)) return { httpStatus: 403, error: 'banned', message: 'Your account is suspended.' }
   if (/service not found or inactive/.test(message)) return { httpStatus: 404, error: 'service_unavailable', message: 'This service is no longer available.' }
+  if (/min_order_amount/.test(message)) return { httpStatus: 400, error: 'min_order_amount', message: minOrderMessage(message) }
   if (/promo_not_found/.test(message)) return { httpStatus: 404, error: 'promo_not_found', message: 'This promo code does not exist.' }
   if (/promo_inactive|promo_expired/.test(message)) return { httpStatus: 409, error: 'promo_expired', message: 'This promo code is no longer valid.' }
   if (/promo_exhausted/.test(message)) return { httpStatus: 409, error: 'promo_exhausted', message: 'This promo code has been used up.' }

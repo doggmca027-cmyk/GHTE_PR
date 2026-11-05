@@ -519,6 +519,7 @@ const tr: Record<string, string> = {
   'Select': 'Seç',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 Bu saat için yapay zekâ yanıt sınırım doldu! Lütfen katalog aramasını kullanın veya destekle iletişime geçin. Bana {minutes} dk sonra tekrar sorabilirsiniz.',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 Bu saat için yapay zekâ yanıt sınırım doldu! Lütfen katalog aramasını kullanın veya destekle iletişime geçin.',
+  'Minimum order amount: {amount}': 'Minimum sipariş tutarı: {amount}',
 }
 
 export default tr

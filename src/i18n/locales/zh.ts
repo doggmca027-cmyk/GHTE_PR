@@ -519,6 +519,7 @@ const zh: Record<string, string> = {
   'Select': '选择',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support. You can ask me again in {minutes} min.': '🤖 我本小时的 AI 回复额度已用完！请使用目录搜索或联系客服。您可以在 {minutes} 分钟后再次提问。',
   '🤖 My AI reply limit for this hour is used up! Please use the catalogue search or contact support.': '🤖 我本小时的 AI 回复额度已用完！请使用目录搜索或联系客服。',
+  'Minimum order amount: {amount}': '最低订单金额：{amount}',
 }
 
 export default zh

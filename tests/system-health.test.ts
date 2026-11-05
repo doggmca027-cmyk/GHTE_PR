@@ -68,7 +68,7 @@ describe('catalogue, router and price, on one database', () => {
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.sql')).sort()) await db.exec(fs.readFileSync(path.join(dir, f), 'utf8'))
     // the settings of the storefront as they are on production (data, not migration): the volume steps and their floor
     await db.exec(`update platform_settings set volume_margin_tiers = '[{"min":0,"margin":0.8},{"min":1000,"margin":0.4},{"min":10000,"margin":0.25},{"min":100000,"margin":0.15}]',
-      volume_floor_multiplier = 1.35, volume_floor_markup = 0.05, min_order_charge = 0.01, discount_min_margin_per_1000 = 0.01 where id = 1`)
+      volume_floor_multiplier = 1.35, volume_floor_markup = 0.05, min_order_charge = 0.10, discount_min_margin_per_1000 = 0.01 where id = 1`)
     await db.exec(`insert into providers (id, name, api_url, is_active, routing_enabled, health_status, is_premium, catalog_mode) values
       ('${P.jap}', 'JAP', 'https://j', true, true, 'healthy', false, 'linked_only'), ('${P.root}', 'RootPanel', 'https://r', true, true, 'healthy', false, 'linked_only'),
       ('${P.secsers}', 'Secsers', 'https://s', true, true, 'healthy', true, 'publish'), ('${P.mtp}', 'MoreThanPanel', 'https://m', true, true, 'healthy', true, 'publish'),
@@ -117,11 +117,11 @@ describe('catalogue, router and price, on one database', () => {
       expect(ranked[0].costPer1000).toBe(0.04)
     })
 
-    it('ten views cost the minimum charge, one cent, and the price per 1000 falls with the quantity without going under the cost', async () => {
+    it('ten views are under the minimum order amount and refused, and the price per 1000 falls with the quantity without going under the cost', async () => {
       const rate = rateOf(0.04, PLAIN_CARD)
       expect(rate).toBe(0.2)
-      expect(Number((await quote(S.views, 10, S.viewsRoot, rate)).final_price)).toBe(0.01)
-      const unit = async (qty: number) => Number((await quote(S.views, qty, S.viewsRoot, rate)).final_price) / qty * 1000
+      await expect(quote(S.views, 10, S.viewsRoot, rate)).rejects.toThrow(/min_order_amount/)
+      const unit = async (qty: number) => Math.round(Number((await quote(S.views, qty, S.viewsRoot, rate)).final_price) / qty * 1000 * 10_000) / 10_000
       const [u1, u2, u3] = [await unit(1000), await unit(10_000), await unit(100_000)]
       expect(u1).toBeLessThan(rate)
       expect(u2).toBeLessThanOrEqual(u1)

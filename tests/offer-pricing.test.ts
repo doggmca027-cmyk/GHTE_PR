@@ -122,7 +122,7 @@ describe('the quote is the charge, on every quantity of the card (real SQL)', ()
   })
 
   it('REQUIRED: the quote and the charge are the same to the cent on every quantity of the range, with the volume steps', async () => {
-    for (const qty of [10, 999, 1000, 4321, 10_000, 99_999, 100_000, 1_000_000]) {
+    for (const qty of [100, 999, 1000, 4321, 10_000, 99_999, 100_000, 1_000_000]) { // 10 units are under the $0.10 minimum order amount
       const p = qty < 1000 ? R : W // the cheapest offer that takes it (what rankOffers picks)
       const quoted = await quote(qty, p)
       const order = await place(qty, p)

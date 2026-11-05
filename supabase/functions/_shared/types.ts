@@ -225,4 +225,6 @@ export interface PriceContext {
 export interface PriceOptions {
   /** Minimum absolute profit per 1000 units. Default 0.02. */
   minMargin?: number
+  /** Absolute floor per 1000 (default DEFAULT_MIN_RATE, $0.12). */
+  minRate?: number
 }

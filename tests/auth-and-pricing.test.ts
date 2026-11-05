@@ -126,11 +126,15 @@ describe('calculateCustomerRate', () => {
     ['fixed +$0.50 on 0.8', 0.8, [rule({ type: 'fixed', value: 0.5 })], {}, 1.3],
     ['percentage +33.33% on 1.2345 rounds UP to 4dp', 1.2345, [rule({ type: 'percentage', value: 33.33 })], {}, 1.646],
     ['no rules -> provider rate + default margin', 2, [], {}, 2.02],
-    ['zero provider rate -> margin only', 0, [rule({ type: 'percentage', value: 300 })], {}, 0.02],
+    ['zero provider rate -> the $0.12 price floor (cost + margin alone would be 0.02)', 0, [rule({ type: 'percentage', value: 300 })], {}, 0.12],
     ['markup below margin is lifted to the floor', 1, [rule({ type: 'percentage', value: 0 })], {}, 1.02],
   ]
   it.each(cases.map((c) => [`${c[0]} => ${c[4]}`, ...c.slice(1)] as typeof c))('%s', (_name, providerRate, rules, ctx, expected) => {
     expect(calculateCustomerRate(providerRate, rules, ctx)).toBe(expected)
+  })
+
+  it('without the price floor a zero rate is the margin only', () => {
+    expect(calculateCustomerRate(0, [rule({ type: 'percentage', value: 300 })], {}, { minRate: 0 })).toBe(0.02)
   })
 
   it('honours a custom minimum margin', () => {
