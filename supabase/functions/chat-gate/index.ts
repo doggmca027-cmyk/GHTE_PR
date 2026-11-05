@@ -9,8 +9,9 @@
 //            customer's token (verified here, with the project's JWT secret) or, for a guest, a keyed hash of the IP address.
 //   * log    stores what was asked, what the assistant understood and which services it recommended (see _shared/chat-gate.ts for what is kept).
 // Neither action is ever shown to a customer: if this function is down, the chat answers anyway (api/_lib/chat-gate.ts lets the question through).
-// The limit follows the money: 20 an hour for a guest or an account that never paid, 100 for a customer with funds on the balance or any completed
-// ledger line (chat_rate_hit decides in the same call that counts the question).
+// The limit follows the account: 20 an hour for a guest (no token: counted by a keyed hash of the address), 100 for every signed-in customer, paid or not
+// (people ask the assistant before they top up). The answer's `paying` (funds on the balance or any completed ledger line) is only the kind of caller for
+// the log; chat_rate_hit decides the limit in the same call that counts the question.
 // Secrets: CHAT_GATE_SECRET (32+ characters), JWT_SECRET; optional AI_CHAT_HOURLY_LIMIT, AI_CHAT_PAYING_LIMIT. Auto-injected: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 
 import { createClient } from 'npm:@supabase/supabase-js@2'

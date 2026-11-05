@@ -130,20 +130,22 @@ describe('the assistant\'s limit and log (SQL)', () => {
       await expect(q('select chat_rate_hit($1, null, 3600)', [TG])).rejects.toThrow(/invalid_parameter_value/)
       await expect(q('select chat_rate_hit($1, 3, null)', [TG])).rejects.toThrow(/invalid_parameter_value/)
     })
-    describe('the limit follows the money', () => {
+    describe('the larger hour is for every signed-in account (money only tells the kind of caller)', () => {
       const user = async (telegram: number) => (await q<{ id: string }>('insert into users (telegram_id) values ($1) returning id', [telegram]))[0]!.id
       const paying = async (id: string, identifier: string, limit = 3, payingLimit = 6) =>
         (await q<{ r: { allowed: boolean; limit: number; remaining: number; paying: boolean } }>('select chat_rate_hit($1, $2, 3600, $3::uuid, $4) r', [identifier, limit, id, payingLimit]))[0]!.r
       const fund = (id: string, amount: number) => q(`select process_wallet_transaction($1::uuid, 'deposit', $2::numeric, null, 'fund', $3)`, [id, amount, `fund-${id}-${amount}`])
 
-      it('an account that never paid, and a guest, keep the ordinary limit', async () => {
+      it('a signed-in account that never paid gets the larger hour (people ask before they top up); a guest keeps the ordinary one', async () => {
         const id = await user(881_001)
-        expect(await paying(id, 'tg:881001')).toMatchObject({ allowed: true, limit: 3, paying: false })
-        for (let i = 0; i < 2; i++) await paying(id, 'tg:881001')
-        expect((await paying(id, 'tg:881001')).allowed).toBe(false) // the 4th question
+        expect(await paying(id, 'tg:881001')).toMatchObject({ allowed: true, limit: 6, remaining: 5, paying: false })
+        for (let i = 0; i < 5; i++) expect((await paying(id, 'tg:881001')).allowed, `question ${i + 2}`).toBe(true)
+        expect((await paying(id, 'tg:881001')).allowed).toBe(false) // the 7th
         expect(await hit(GUEST)).toMatchObject({ limit: 3 }) // no user id: the plain three-argument call
+        for (let i = 0; i < 2; i++) await hit(GUEST)
+        expect((await hit(GUEST)).allowed).toBe(false) // the 4th question of a guest
       })
-      it('money on the balance gives the larger hour', async () => {
+      it('money on the balance does not widen it further, it only says paying: true', async () => {
         const id = await user(881_002)
         await fund(id, 5)
         const first = await paying(id, 'tg:881002')
@@ -159,17 +161,16 @@ describe('the assistant\'s limit and log (SQL)', () => {
         expect(wallet).toBeGreaterThanOrEqual(0)
         expect(await paying(id, 'tg:881003')).toMatchObject({ limit: 6, paying: true })
       })
-      it('a pending credit is not money: only completed lines and a positive balance count', async () => {
+      it('a pending credit is not money (paying stays false), and the hour is the larger one all the same', async () => {
         const id = await user(881_004)
         await q(`select process_wallet_transaction($1::uuid, 'deposit', 3::numeric, null, 'pending', $2, 'pending')`, [id, `p-${id}`])
-        expect(await paying(id, 'tg:881004')).toMatchObject({ limit: 3, paying: false })
+        expect(await paying(id, 'tg:881004')).toMatchObject({ limit: 6, paying: false })
       })
       it('the larger hour is never smaller than the ordinary one', async () => {
         const id = await user(881_005)
-        await fund(id, 5)
-        expect(await paying(id, 'tg:881005', 10, 4)).toMatchObject({ limit: 10, paying: true })
+        expect(await paying(id, 'tg:881005', 10, 4)).toMatchObject({ limit: 10, paying: false })
       })
-      it('without a paying limit, or for an unknown user, nothing changes', async () => {
+      it('without the larger limit, or for an account that does not exist, nothing changes', async () => {
         const id = await user(881_006)
         await fund(id, 5)
         expect((await q<{ r: { limit: number } }>('select chat_rate_hit($1, 3, 3600, $2::uuid, null) r', ['tg:881006', id]))[0]!.r.limit).toBe(3)
@@ -178,16 +179,15 @@ describe('the assistant\'s limit and log (SQL)', () => {
       it('a paying limit that is not positive is refused', async () => {
         await expect(q('select chat_rate_hit($1, 3, 3600, null, 0)', ['tg:881008'])).rejects.toThrow(/invalid_parameter_value/)
       })
-      it('once the customer pays the same hour widens at once: the questions already asked count against the new limit', async () => {
+      it('paying later changes nothing about the hour: the questions asked before count in the same limit, and only the log flag turns', async () => {
         const id = await user(881_009)
         for (let i = 0; i < 3; i++) await paying(id, 'tg:881009')
-        expect((await paying(id, 'tg:881009')).allowed).toBe(false)
+        expect(await paying(id, 'tg:881009')).toMatchObject({ allowed: true, limit: 6, remaining: 2, paying: false }) // the 4th: still room
         await fund(id, 5)
-        expect(await paying(id, 'tg:881009')).toMatchObject({ allowed: true, limit: 6, remaining: 2, paying: true })
+        expect(await paying(id, 'tg:881009')).toMatchObject({ allowed: true, limit: 6, remaining: 1, paying: true })
       })
-      it('the retry hint of a refused paying customer is for their own hour', async () => {
+      it('the retry hint of a refused signed-in customer is for their own hour', async () => {
         const id = await user(881_010)
-        await fund(id, 5)
         for (let i = 0; i < 6; i++) await paying(id, 'tg:881010')
         const r = (await q<{ r: { allowed: boolean; retry_after: number } }>('select chat_rate_hit($1, 3, 3600, $2::uuid, 6) r', ['tg:881010', id]))[0]!.r
         expect(r.allowed).toBe(false)

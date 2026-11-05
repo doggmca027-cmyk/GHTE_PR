@@ -80,12 +80,14 @@ describe('the quality tier 3a', () => {
 describe('where the rule is read', () => {
   const read = (p: string) => fs.readFileSync(path.resolve(__dirname, '..', p), 'utf8')
   it.each([
-    'supabase/functions/_shared/order-pricing.ts',
+    'supabase/functions/_shared/order-pricing.ts', // the shared loader: sync-catalog, quote-order and place-order read their rules through it
     'supabase/functions/admin-pricing/index.ts',
     'supabase/functions/admin-catalog-mapping/index.ts',
-    'supabase/functions/sync-catalog/index.ts',
   ])('%s reads quality_scope with the other columns of a rule', (file) => {
     expect(read(file)).toContain("name_all, name_any, priority, is_active, quality_scope'")
+  })
+  it('sync-catalog reads its rules through that shared loader', () => {
+    expect(read('supabase/functions/sync-catalog/index.ts')).toContain('loadPriceRules(db)')
   })
   it('the proposal that is applied by hand names the same rule', () => {
     const sql = read('docs/proposals/premium-markup.sql')
