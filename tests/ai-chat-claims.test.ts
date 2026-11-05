@@ -22,10 +22,12 @@ describe('the assistant no longer says it', () => {
     expect(blog.toLowerCase()).not.toContain(phrase.toLowerCase())
   })
 
-  it('the only "safe" in the prompt is a ban on calling a service safe', () => {
-    const safe = prompt.match(/[^.]*безопасн[^.]*\./g) ?? []
-    expect(safe).toHaveLength(1)
-    expect(safe[0]).toContain('не называй услугу «безопасной» для аккаунта')
+  it('every "safe" in the prompt is part of a ban: do not call a service safe, do not repeat the panel label "AdSense Safe" as a promise', () => {
+    const safe = prompt.match(/[^.]*безопас[^.]*\./g) ?? []
+    expect(safe.length).toBeGreaterThanOrEqual(2)
+    for (const sentence of safe) expect(sentence, sentence).toMatch(/не называй|не повторяй|не обещаем/)
+    expect(prompt).toContain('Метки панели вроде «Safe» или «AdSense Safe» из названия не повторяй как гарантию')
+    expect(prompt).toContain('Метку «AdSense Safe» из названия не повторяй')
   })
 })
 

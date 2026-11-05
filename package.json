@@ -22,6 +22,7 @@
     "test:concurrency": "node --disable-warning=ExperimentalWarning scripts/concurrency-test.ts",
     "sync-services": "node --disable-warning=ExperimentalWarning scripts/sync-services.ts",
     "translate-names": "node --disable-warning=ExperimentalWarning scripts/translate-service-names.ts",
+    "parse-prices": "node --disable-warning=ExperimentalWarning scripts/parse-tiktok-yt-prices.ts",
     "e2e:provider": "node --disable-warning=ExperimentalWarning scripts/provider-e2e.ts",
     "test:ton": "node --disable-warning=ExperimentalWarning scripts/ton-e2e.ts",
     "secrets:rotate": "node --disable-warning=ExperimentalWarning scripts/rotate-secrets.ts",
