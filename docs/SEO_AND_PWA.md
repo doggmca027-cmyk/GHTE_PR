@@ -10,8 +10,12 @@ How the site is found (SEO, GEO, AI search) and how the app opens on a bad conne
 | Address | What |
 |---|---|
 | `/` , `/<lang>/` | the app's home page; the English one is `/` (x-default), the other 14 languages `/<lang>/` |
-| `/<lang>/buy-<platform>-<kind>` | `buy-telegram-followers`, `buy-instagram-likes`, `buy-spotify-plays`… (28 pairs the catalogue sells) |
-| `/<lang>/buy-<platform>-<flavor>-<kind>` | only `premium-followers` (Telegram), `slow-auto-views` (Telegram), `real-followers` (Instagram) |
+| `/<lang>/buy-<platform>-<kind>` | `buy-telegram-followers`, `buy-instagram-likes`, `buy-spotify-plays`… (28 pairs, each with services on the storefront: checked against the catalogue on 2026-11-06) |
+| `/<lang>/buy-<platform>-<flavor>-<kind>` | only `premium-followers` (Telegram) and `real-followers` (Instagram): the ones the storefront has services for |
+
+`slow-auto-views` (Telegram) is **written, translated and tested but not published** (`PREPARED_FLAVORED` in `src/seo/pages.ts`): on 2026-11-06 the storefront had 13
+Telegram auto-views cards, none of them slow and none with drip-feed, so a page for it would promise what the shop cannot sell. To publish it, put its line into
+`FLAVORED`, add its slug to the two `:slug(...)` lists of `vercel.json` (a test compares the lists with the table), and add its address to `public/llm-context.txt`.
 | `/<lang>/crypto-smm-panel`, `/<lang>/smm-panel-for-agencies` | topic pages |
 
 An address that is not in the table is not a page (404), and a page exists only in a language that has its text (`LANDING_LANGS`: en, ru, uk, es, ar).
@@ -26,7 +30,7 @@ Home pages exist in all 15 languages (`HOME_META`).
   one of these addresses gets `next()` at once. A crawler on `/` gets the English `index.html` (its own title, canonical and x-default); the sitemap carries the
   hreflang of the home pages.
 * `public/llm-context.txt` (`/llm-context.txt`, not linked from the app): what GRAM Hub is and what it does **not** promise, for AI crawlers.
-* `sitemap.xml` is written at every build by `scripts/postbuild.ts` (`npm run generate-sitemap` does it by hand): 186 URLs, `hreflang` reciprocal on each.
+* `sitemap.xml` is written at every build by `scripts/postbuild.ts` (`npm run generate-sitemap` does it by hand): 181 URLs, `hreflang` reciprocal on each.
 
 ## What the texts may say
 

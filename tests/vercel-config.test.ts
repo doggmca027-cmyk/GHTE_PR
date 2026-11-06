@@ -6,7 +6,7 @@ import path from 'node:path'
 import { getTransformedRoutes } from '@vercel/routing-utils'
 import { describe, expect, it } from 'vitest'
 import { sitemapEntries } from '../scripts/lib/sitemap'
-import { SEO_LANGS } from '../src/seo/pages'
+import { LANDING_LANGS, SEO_LANGS, allLandings, landingSlug } from '../src/seo/pages'
 
 const config = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../vercel.json'), 'utf8')) as {
   cleanUrls?: boolean
@@ -88,8 +88,18 @@ describe('vercel.json as Vercel reads it', () => {
       expect(unreachable(old, withSlash([...sitemapPaths, ...everyLanguage]))).toEqual(expect.arrayContaining(['/ru/', '/es/buy-instagram-followers/']))
     })
 
-    it('what is not a page does not open (a made-up address is a 404, never the app under a thin duplicate address)', () => {
-      expect(unreachable(config, ['/xx/', '/ru/anything', '/de/buy-telegram-views', '/en/buy-telegram-views/extra'])).toEqual(['/xx/', '/ru/anything', '/de/buy-telegram-views', '/en/buy-telegram-views/extra'])
+    it('what is not a page does not open (a made-up address is a 404, never the app under a thin duplicate address), and neither does a page that is prepared but not published', () => {
+      const notPages = ['/xx/', '/ru/anything', '/de/buy-telegram-views', '/en/buy-telegram-views/extra', '/en/buy-telegram-likes', '/en/buy-garbage', '/en/buy-telegram-slow-auto-views', '/buy-telegram-slow-auto-views']
+      expect(unreachable(config, notPages)).toEqual(notPages)
+    })
+
+    it('the slugs in the rewrite and in the redirect are EXACTLY the pages of the table, the languages those of the table: a page is added in one place and a test says where the other is missing', () => {
+      const listOf = (source: string, name: string) => new RegExp(`:${name}\\(([^)]*)\\)`).exec(source)![1]!.split('|').sort()
+      const expected = allLandings().map(landingSlug).sort()
+      expect(listOf(config.redirects![0]!.source, 'slug')).toEqual(expected)
+      expect(listOf(config.rewrites![1]!.source, 'slug')).toEqual(expected)
+      expect(listOf(config.rewrites![1]!.source, 'lang')).toEqual([...LANDING_LANGS].sort())
+      expect(listOf(config.rewrites![0]!.source, 'lang')).toEqual([...SEO_LANGS].sort())
     })
   })
 

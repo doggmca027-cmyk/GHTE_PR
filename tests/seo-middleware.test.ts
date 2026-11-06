@@ -49,9 +49,9 @@ describe('1. who gets the finished page: crawlers, and only on an address that i
   })
 
   it('an AI crawler (ChatGPT-User) gets the same: it reads the page without running its JavaScript', async () => {
-    const res = await (await fresh())(ask('/en/buy-telegram-slow-auto-views', CHATGPT), { fetch: site().fn, env })
+    const res = await (await fresh())(ask('/en/buy-telegram-premium-followers', CHATGPT), { fetch: site().fn, env })
     const html = await res.text()
-    expect(html).toContain('<h1>Buy Telegram slow auto views with TON</h1>')
+    expect(html).toContain('<h1>Buy Telegram premium followers with TON</h1>')
     expect(html).toContain('application/ld+json')
   })
 

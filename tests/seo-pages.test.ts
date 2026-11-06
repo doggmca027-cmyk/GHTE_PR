@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { LANGUAGES } from '../src/i18n/languages'
 import { COPY, HOME_META, copyFor, pageText } from '../src/seo/copy'
 import {
-  FLAVORED, LANDING_LANGS, SEO_LANGS, SEO_PLATFORMS, TOPICS, allLandings, landingPath, landingSlug, parseLandingSlug, parseSeoPath, type Landing,
+  FLAVORED, LANDING_LANGS, PREPARED_FLAVORED, SEO_LANGS, SEO_PLATFORMS, TOPICS, allLandings, landingPath, landingSlug, parseLandingSlug, parseSeoPath, type Landing,
 } from '../src/seo/pages'
 
 describe('1. the pages: one per (platform, service), a few flavours, two topics; the address says which', () => {
@@ -23,8 +23,8 @@ describe('1. the pages: one per (platform, service), a few flavours, two topics;
     const slugs = allLandings().map(landingSlug)
     expect(slugs).toContain('buy-telegram-followers')
     expect(slugs).toContain('buy-telegram-premium-followers') // "buy telegram premium followers with ton"
-    expect(slugs).toContain('buy-telegram-slow-auto-views') // "buy slow telegram auto views"
     expect(slugs).toContain('buy-instagram-real-followers') // "comprar seguidores instagram reales"
+    expect(slugs).toHaveLength(32)
     expect(slugs).toContain('crypto-smm-panel')
     expect(slugs).toContain('smm-panel-for-agencies')
     expect(landingPath('es', parseLandingSlug('buy-instagram-followers')!)).toBe('/es/buy-instagram-followers')
@@ -43,15 +43,30 @@ describe('1. the pages: one per (platform, service), a few flavours, two topics;
     '/en/buy-telegram-likes', // Telegram has no likes
     '/en/buy-spotify-views', // Spotify sells plays
     '/en/buy-telegram-real-followers', // "real" exists for Instagram only
-    '/en/buy-instagram-slow-auto-views', // so does the slow auto flavour for Telegram
+    '/en/buy-instagram-slow-auto-views', // the slow auto flavour is Telegram's, and not published at all
+    '/en/buy-telegram-slow-auto-views', // prepared, not published: the storefront has no slow auto-views service yet (PREPARED_FLAVORED)
     '/en/buy-nowhere-followers', '/xx/buy-telegram-followers', '/en/buy-telegram-followers/extra', '/en/random', '/buy-telegram-followers', '/en/../etc/passwd',
     '/de/buy-telegram-followers', // German has no text of its own yet: not a page
   ])('"%s" is not a page', (path) => {
     expect(parseSeoPath(path)).toBeNull()
   })
 
-  it('a flavour is only a page where the catalogue has the flavoured line', () => {
-    expect(FLAVORED.map((f) => `${f.platform}/${f.flavor}/${f.kind}`).sort()).toEqual(['instagram/real/followers', 'telegram/premium/followers', 'telegram/slow-auto/views'])
+  it('a flavour is only a page where the catalogue has the flavoured line (checked 2026-11-06: Telegram Premium followers 119, Instagram followers named Real 107)', () => {
+    expect(FLAVORED.map((f) => `${f.platform}/${f.flavor}/${f.kind}`).sort()).toEqual(['instagram/real/followers', 'telegram/premium/followers'])
+  })
+
+  it('the slow auto views of Telegram are prepared but NOT published: no storefront service is both automatic and slow yet; the text is ready in every language', () => {
+    expect(PREPARED_FLAVORED.map((f) => `${f.platform}/${f.flavor}/${f.kind}`)).toEqual(['telegram/slow-auto/views'])
+    expect(allLandings().map(landingSlug)).not.toContain('buy-telegram-slow-auto-views')
+    expect(parseLandingSlug('buy-telegram-slow-auto-views')).toBeNull()
+    const telegram = SEO_PLATFORMS.find((p) => p.slug === 'telegram')!
+    const prepared: Landing = { type: 'service', platform: telegram, kind: 'views', flavor: 'slow-auto' }
+    expect(pageText('en', prepared).h1).toBe('Buy Telegram slow auto views with TON')
+    expect(pageText('es', prepared).h1).toContain('vistas automáticas')
+    expect(pageText('ru', prepared).h1).toContain('автопросмотры')
+    expect(pageText('uk', prepared).h1).toContain('автоперегляди')
+    expect(pageText('ar', prepared).h1).toContain('مشاهدات تلقائية')
+    for (const lang of LANDING_LANGS) for (const s of Object.values(pageText(lang, prepared))) expect(s, lang).not.toMatch(/\{\w+\}/)
   })
 
   it('every page of the table is sold: its platform lists the kind', () => {
@@ -104,11 +119,8 @@ describe('2. the texts: complete in every language a page is written in, and tru
   it('the pages of the brief say what the brief asks in the language of its keyword', () => {
     const page = (lang: 'en' | 'es' | 'ru' | 'uk' | 'ar', slug: string) => pageText(lang, parseLandingSlug(slug)!)
     expect(page('en', 'buy-telegram-premium-followers').h1).toBe('Buy Telegram premium followers with TON')
-    expect(page('en', 'buy-telegram-slow-auto-views').h1).toBe('Buy Telegram slow auto views with TON')
     expect(page('es', 'buy-instagram-real-followers').h1).toBe('Comprar seguidores reales de Instagram con TON')
-    expect(page('es', 'buy-telegram-slow-auto-views').h1).toContain('vistas automáticas')
     expect(page('ru', 'buy-telegram-premium-followers').h1).toBe('Купить премиум подписчиков Telegram за TON')
-    expect(page('ru', 'buy-telegram-slow-auto-views').h1).toContain('автопросмотры')
     expect(page('uk', 'buy-instagram-followers').h1).toBe('Купити підписників Instagram за TON')
     expect(page('ar', 'buy-instagram-real-followers').h1).toBe('شراء متابعين حقيقيين انستقرام بعملة TON') // "buy real Instagram followers"
     expect(page('en', 'crypto-smm-panel').h1).toContain('crypto')

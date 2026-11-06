@@ -34,7 +34,7 @@ Every service has its own line with a name, a price per 1,000, a quantity range 
 - Home page: __SITE_URL__/
 - Crypto SMM panel (pay with TON): __SITE_URL__/en/crypto-smm-panel
 - SMM panel for agencies (volume prices): __SITE_URL__/en/smm-panel-for-agencies
-- Telegram services: __SITE_URL__/en/buy-telegram-followers, __SITE_URL__/en/buy-telegram-views, __SITE_URL__/en/buy-telegram-premium-followers, __SITE_URL__/en/buy-telegram-slow-auto-views
+- Telegram services: __SITE_URL__/en/buy-telegram-followers, __SITE_URL__/en/buy-telegram-views, __SITE_URL__/en/buy-telegram-premium-followers
 - Instagram services: __SITE_URL__/en/buy-instagram-followers, __SITE_URL__/en/buy-instagram-likes, __SITE_URL__/en/buy-instagram-real-followers
 - Terms of Service: __SITE_URL__/terms
 - Privacy Policy: __SITE_URL__/privacy

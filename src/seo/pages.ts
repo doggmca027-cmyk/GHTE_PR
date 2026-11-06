@@ -48,11 +48,24 @@ export const SEO_PLATFORMS: readonly SeoPlatform[] = [
   { slug: 'vk', name: 'VK', kinds: ['followers', 'likes', 'views'] },
 ]
 
-/** The flavours there are a page for: only these (platform, kind) pairs, each with its own wording in copy.ts. */
+/**
+ * The flavours there are a page for: only these (platform, kind) pairs, each with its own wording in copy.ts. Every one is backed by services on the storefront
+ * (checked against the catalogue on 2026-11-06: Telegram Premium followers 119 services, Instagram followers named Real 107): a page for a product that is not
+ * on sale promises what the shop cannot sell.
+ */
 export const FLAVORED: readonly { platform: string; flavor: Flavor; kind: ServiceKind }[] = [
   { platform: 'telegram', flavor: 'premium', kind: 'followers' },
-  { platform: 'telegram', flavor: 'slow-auto', kind: 'views' },
   { platform: 'instagram', flavor: 'real', kind: 'followers' },
+]
+
+/**
+ * Written, translated (copy.ts, five languages) and tested, but NOT published: the catalogue has no such service yet. On 2026-11-06 the storefront had 13
+ * Telegram auto-views cards on future posts (MoreThanPanel, Secsers), none of them slow and none with drip-feed; the slow ones ("Auto Views Slow", the Subscription
+ * and Future Posts lines of the other panels) are in the panels' lists, not on the storefront. To publish a page: put its line into FLAVORED once a card that is
+ * both automatic (Auto / Future Posts) and slow (Slow in the name, or drip-feed yes) is on sale, then add its address to llm-context.txt.
+ */
+export const PREPARED_FLAVORED: readonly { platform: string; flavor: Flavor; kind: ServiceKind }[] = [
+  { platform: 'telegram', flavor: 'slow-auto', kind: 'views' },
 ]
 
 /** Pages that are not about one platform. */
@@ -70,7 +83,7 @@ export interface SeoRoute { lang: LangCode; landing: Landing }
 const platformOf = (slug: string): SeoPlatform | undefined => SEO_PLATFORMS.find((p) => p.slug === slug)
 export const isSeoLang = (v: string): v is LangCode => SEO_LANGS.includes(v as LangCode)
 
-/** The slug of a page in its address: "buy-telegram-followers", "buy-telegram-slow-auto-views", "crypto-smm-panel"; "" for the home page. */
+/** The slug of a page in its address: "buy-telegram-followers", "buy-telegram-premium-followers", "crypto-smm-panel"; "" for the home page. */
 export function landingSlug(landing: Landing): string {
   if (landing.type === 'home') return ''
   if (landing.type === 'topic') return landing.topic

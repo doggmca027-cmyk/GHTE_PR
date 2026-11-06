@@ -6,11 +6,11 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "redirects": [
-    { "source": "/:slug(buy-[a-z0-9-]+|crypto-smm-panel|smm-panel-for-agencies)", "destination": "/en/:slug", "permanent": true }
+    { "source": "/:slug(buy-telegram-followers|buy-telegram-views|buy-telegram-reactions|buy-telegram-premium-followers|buy-instagram-followers|buy-instagram-likes|buy-instagram-views|buy-instagram-comments|buy-instagram-real-followers|buy-tiktok-followers|buy-tiktok-likes|buy-tiktok-views|buy-tiktok-comments|buy-youtube-followers|buy-youtube-views|buy-youtube-likes|buy-youtube-comments|buy-twitter-followers|buy-twitter-likes|buy-twitter-views|buy-facebook-followers|buy-facebook-likes|buy-facebook-views|buy-spotify-plays|buy-spotify-followers|buy-twitch-followers|buy-twitch-views|buy-vk-followers|buy-vk-likes|buy-vk-views|crypto-smm-panel|smm-panel-for-agencies){/}?", "destination": "/en/:slug", "permanent": true }
   ],
   "rewrites": [
     { "source": "/:lang(en|ru|uk|es|pt|id|tr|ar|hi|fr|de|it|vi|zh|ja){/}?", "destination": "/" },
-    { "source": "/:lang(en|ru|uk|es|ar)/:slug(buy-[a-z0-9-]+|crypto-smm-panel|smm-panel-for-agencies){/}?", "destination": "/" }
+    { "source": "/:lang(en|ru|uk|es|ar)/:slug(buy-telegram-followers|buy-telegram-views|buy-telegram-reactions|buy-telegram-premium-followers|buy-instagram-followers|buy-instagram-likes|buy-instagram-views|buy-instagram-comments|buy-instagram-real-followers|buy-tiktok-followers|buy-tiktok-likes|buy-tiktok-views|buy-tiktok-comments|buy-youtube-followers|buy-youtube-views|buy-youtube-likes|buy-youtube-comments|buy-twitter-followers|buy-twitter-likes|buy-twitter-views|buy-facebook-followers|buy-facebook-likes|buy-facebook-views|buy-spotify-plays|buy-spotify-followers|buy-twitch-followers|buy-twitch-views|buy-vk-followers|buy-vk-likes|buy-vk-views|crypto-smm-panel|smm-panel-for-agencies){/}?", "destination": "/" }
   ],
   "headers": [
     {

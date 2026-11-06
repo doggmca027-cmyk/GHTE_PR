@@ -133,12 +133,12 @@ describe('3. sitemap.xml of the whole site', () => {
   const xmlOf = buildFullSitemap(SITE, '2026-11-06')
   const entries = sitemapEntries(SITE)
 
-  it('lists the 15 home pages, every landing page in every language it is written in, and the legal pages: 186 URLs, far under the 50,000 of one file', () => {
+  it('lists the 15 home pages, every landing page in every language it is written in, and the legal pages: 181 URLs, far under the 50,000 of one file', () => {
     expect(entries).toHaveLength(SEO_LANGS.length + allLandings().length * LANDING_LANGS.length + 6)
-    expect(entries).toHaveLength(186)
+    expect(entries).toHaveLength(181)
     expect(entries.length).toBeLessThan(MAX_SITEMAP_URLS)
     expect(new Set(entries.map((e) => e.loc)).size).toBe(entries.length) // no URL twice
-    expect((xmlOf.match(/<url>/g) ?? []).length).toBe(186)
+    expect((xmlOf.match(/<url>/g) ?? []).length).toBe(181)
   })
 
   it('every URL is absolute, on the site, and lists ALL its language versions plus x-default; the list is the same on every version (reciprocal)', () => {
@@ -157,7 +157,7 @@ describe('3. sitemap.xml of the whole site', () => {
     for (const lang of LANDING_LANGS) {
       expect(urls).toContain(`${SITE}${landingPath(lang, parseLandingSlug('buy-telegram-views')!)}`)
       expect(urls).toContain(`${SITE}${landingPath(lang, parseLandingSlug('buy-spotify-plays')!)}`)
-      expect(urls).toContain(`${SITE}${landingPath(lang, parseLandingSlug('buy-telegram-slow-auto-views')!)}`)
+      expect(urls).toContain(`${SITE}${landingPath(lang, parseLandingSlug('buy-telegram-premium-followers')!)}`)
       expect(urls).toContain(`${SITE}/${lang}/crypto-smm-panel`)
     }
     expect(urls).not.toContain(`${SITE}/de/buy-telegram-views`) // no German text: no German page
