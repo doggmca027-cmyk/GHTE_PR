@@ -508,7 +508,7 @@ const tr: Record<string, string> = {
   'No connection. Check the network and try again.': 'Bağlantı yok. Ağı kontrol edip tekrar deneyin.',
   'Premium': 'Premium / Gerçek',
   'With guarantee': 'Garantili',
-  'Safe growth': 'Güvenli büyüme',
+  'Stable growth': 'İstikrarlı büyüme',
   'Filter by type': 'Türe göre filtrele',
   'Search platforms or SKU': 'Platform veya ürün numarası ara',
   'Search services or SKU': 'Hizmet veya ürün numarası ara',

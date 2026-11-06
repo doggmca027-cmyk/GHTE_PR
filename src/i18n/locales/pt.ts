@@ -508,7 +508,7 @@ const pt: Record<string, string> = {
   'No connection. Check the network and try again.': 'Sem conexão. Verifique a rede e tente novamente.',
   'Premium': 'Premium / Reais',
   'With guarantee': 'Com garantia',
-  'Safe growth': 'Crescimento seguro',
+  'Stable growth': 'Crescimento estável',
   'Filter by type': 'Filtrar por tipo',
   'Search platforms or SKU': 'Buscar plataformas ou artigo',
   'Search services or SKU': 'Buscar serviços ou artigo',

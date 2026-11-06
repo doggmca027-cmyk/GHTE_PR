@@ -9,7 +9,7 @@ import type { Segment } from '@/types/catalog'
 export const SEGMENT_VIEW: Record<Segment, { label: string; icon: LucideIcon }> = {
   premium: { label: tr('Premium'), icon: Star },
   guaranteed: { label: tr('With guarantee'), icon: ShieldCheck },
-  safe: { label: tr('Safe growth'), icon: Droplets },
+  safe: { label: tr('Stable growth'), icon: Droplets },
 }
 
 interface Props {

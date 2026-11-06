@@ -508,7 +508,7 @@ const de: Record<string, string> = {
   'No connection. Check the network and try again.': 'Keine Verbindung. Prüfe das Netzwerk und versuche es erneut.',
   'Premium': 'Premium / Echt',
   'With guarantee': 'Mit Garantie',
-  'Safe growth': 'Sicherer Zuwachs',
+  'Stable growth': 'Stabiles Wachstum',
   'Filter by type': 'Nach Typ filtern',
   'Search platforms or SKU': 'Plattform oder Artikelnummer suchen',
   'Search services or SKU': 'Service oder Artikelnummer suchen',

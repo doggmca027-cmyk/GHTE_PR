@@ -508,7 +508,7 @@ const id: Record<string, string> = {
   'No connection. Check the network and try again.': 'Tidak ada koneksi. Periksa jaringan dan coba lagi.',
   'Premium': 'Premium / Asli',
   'With guarantee': 'Dengan garansi',
-  'Safe growth': 'Pertumbuhan aman',
+  'Stable growth': 'Pertumbuhan stabil',
   'Filter by type': 'Filter menurut jenis',
   'Search platforms or SKU': 'Cari platform atau nomor artikel',
   'Search services or SKU': 'Cari layanan atau nomor artikel',

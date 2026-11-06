@@ -25,7 +25,7 @@ export function ServiceBadges({ service }: { service: ICatalogService }) {
   else if (refill === 'lifetime') badges.push(<Badge key="refill"><RefreshCw size={12} strokeWidth={2} /> {t('Recovery: {time}', { time: t('lifetime') })}</Badge>)
   else if (refill === 'none') badges.push(<Badge key="refill"><ShieldOff size={12} strokeWidth={2} /> {t('No refill')}</Badge>)
   else if (service.refillSupported) badges.push(<Badge key="refill"><RefreshCw size={12} strokeWidth={2} /> {t('Refill')}</Badge>)
-  // what the name promises as a whole: premium and safe growth always, the guarantee only when the badge above has not said it already
+  // what the name promises as a whole: premium and stable growth always, the guarantee only when the badge above has not said it already
   for (const id of service.segments ?? []) {
     if (id === 'premium') continue // shown first, as the 💎 badge
     if (id === 'guaranteed' && badges.some((b) => (b as { key?: string }).key === 'refill')) continue

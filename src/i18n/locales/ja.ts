@@ -508,7 +508,7 @@ const ja: Record<string, string> = {
   'No connection. Check the network and try again.': '接続がありません。ネットワークを確認してもう一度お試しください。',
   'Premium': 'プレミアム / 本物',
   'With guarantee': '保証付き',
-  'Safe growth': '安全な成長',
+  'Stable growth': '安定した成長',
   'Filter by type': '種類で絞り込む',
   'Search platforms or SKU': 'プラットフォームまたは商品番号を検索',
   'Search services or SKU': 'サービスまたは商品番号を検索',

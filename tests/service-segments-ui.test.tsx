@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The segment chips of the storefront: premium / with guarantee / safe growth. The cards carry them, a chip under the search field shows only the cards of
+// The segment chips of the storefront: premium / with guarantee / stable growth. The cards carry them, a chip under the search field shows only the cards of
 // that kind (with or without words typed), tapping it again shows all, and leaving the platform clears it.
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -99,7 +99,7 @@ describe('the chips on the services screen (offline catalogue)', () => {
     await click(buttonWith('Telegram'), 20)
     const group = host.querySelector('[data-testid="segment-chips"]')!
     expect(group.getAttribute('aria-label')).toBe('Filter by type')
-    expect([...group.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['Premium', 'With guarantee', 'Safe growth'])
+    expect([...group.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['Premium', 'With guarantee', 'Stable growth'])
   })
 
   it('a chip lists only the cards of that kind, a second tap brings the categories back', async () => {

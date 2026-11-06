@@ -508,7 +508,7 @@ const uk: Record<string, string> = {
   'No connection. Check the network and try again.': 'Немає з’єднання. Перевірте мережу й спробуйте ще раз.',
   'Premium': 'Premium / Живі',
   'With guarantee': 'З гарантією',
-  'Safe growth': 'Безпечне зростання',
+  'Stable growth': 'Стабільне зростання',
   'Filter by type': 'Фільтр за типом',
   'Search platforms or SKU': 'Пошук платформ або артикула',
   'Search services or SKU': 'Пошук послуг або артикула',

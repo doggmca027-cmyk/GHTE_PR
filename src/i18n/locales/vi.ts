@@ -508,7 +508,7 @@ const vi: Record<string, string> = {
   'No connection. Check the network and try again.': 'Không có kết nối. Hãy kiểm tra mạng và thử lại.',
   'Premium': 'Premium / Thật',
   'With guarantee': 'Có bảo hành',
-  'Safe growth': 'Tăng trưởng an toàn',
+  'Stable growth': 'Tăng trưởng ổn định',
   'Filter by type': 'Lọc theo loại',
   'Search platforms or SKU': 'Tìm nền tảng hoặc mã sản phẩm',
   'Search services or SKU': 'Tìm dịch vụ hoặc mã sản phẩm',

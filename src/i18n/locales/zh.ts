@@ -508,7 +508,7 @@ const zh: Record<string, string> = {
   'No connection. Check the network and try again.': '无网络连接，请检查网络后重试。',
   'Premium': '高级 / 真人',
   'With guarantee': '有保障',
-  'Safe growth': '安全增长',
+  'Stable growth': '稳定增长',
   'Filter by type': '按类型筛选',
   'Search platforms or SKU': '搜索平台或商品编号',
   'Search services or SKU': '搜索服务或商品编号',

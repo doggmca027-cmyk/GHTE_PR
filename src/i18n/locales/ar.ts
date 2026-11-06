@@ -508,7 +508,7 @@ const ar: Record<string, string> = {
   'No connection. Check the network and try again.': 'لا يوجد اتصال. تحقق من الشبكة وحاول مرة أخرى.',
   'Premium': 'مميز / حقيقي',
   'With guarantee': 'مع ضمان',
-  'Safe growth': 'نمو آمن',
+  'Stable growth': 'نمو مستقر',
   'Filter by type': 'تصفية حسب النوع',
   'Search platforms or SKU': 'ابحث عن منصة أو رقم المنتج',
   'Search services or SKU': 'ابحث عن خدمة أو رقم المنتج',

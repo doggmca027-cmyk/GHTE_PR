@@ -508,7 +508,7 @@ const hi: Record<string, string> = {
   'No connection. Check the network and try again.': 'कनेक्शन नहीं है। नेटवर्क जाँचें और फिर कोशिश करें।',
   'Premium': 'प्रीमियम / असली',
   'With guarantee': 'गारंटी के साथ',
-  'Safe growth': 'सुरक्षित वृद्धि',
+  'Stable growth': 'स्थिर वृद्धि',
   'Filter by type': 'प्रकार से फ़िल्टर करें',
   'Search platforms or SKU': 'प्लैटफ़ॉर्म या आर्टिकल नंबर खोजें',
   'Search services or SKU': 'सेवा या आर्टिकल नंबर खोजें',

@@ -508,7 +508,7 @@ const ru: Record<string, string> = {
   'No connection. Check the network and try again.': 'Нет соединения. Проверьте сеть и попробуйте снова.',
   'Premium': 'Premium / Живые',
   'With guarantee': 'С гарантией',
-  'Safe growth': 'Безопасный рост',
+  'Stable growth': 'Стабильный рост',
   'Filter by type': 'Фильтр по типу',
   'Search platforms or SKU': 'Поиск платформ или артикула',
   'Search services or SKU': 'Поиск услуг или артикула',

@@ -37,7 +37,7 @@ describe('what a name says', () => {
     // a name that takes the promise back keeps neither premium nor guaranteed ...
     ['Instagram Followers [no refill] [high quality]', []],
     ['Instagram Followers | Real | Non Refill', []],
-    // ... and a bot is not safe growth
+    // ... and a bot is not stable growth
     ['Instagram Followers | Slow | Bot', []],
   ])('%s -> %j', async (name, expected) => {
     expect(await segments(name)).toEqual(expected)
