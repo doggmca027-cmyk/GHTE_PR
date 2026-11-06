@@ -179,6 +179,43 @@ describe('3. the matcher: path strings only (outside Next.js Vercel refuses anyt
   })
 })
 
+describe('3b. the runtime: Edge, so the whole graph is bundled into one file', () => {
+  it('runs on the Edge runtime: as a Node.js function Vercel left every import as written and Node could not find "./src/lib/telegram-bot" (500 on every matched address)', () => {
+    expect((config as { runtime?: string }).runtime).toBe('edge')
+  })
+
+  it('imports nothing the Edge runtime does not have: no Node built-ins, no require, no process outside a typeof guard, no import.meta, no dynamic code', () => {
+    const seen = new Set<string>()
+    const files: string[] = []
+    const walk = (file: string) => {
+      if (seen.has(file)) return
+      seen.add(file)
+      files.push(file)
+      const text = fs.readFileSync(file, 'utf8')
+      for (const m of text.matchAll(/from\s+'(\.[^']+)'/g)) {
+        const base = path.resolve(path.dirname(file), m[1]!)
+        const resolved = [base, `${base}.ts`, `${base}.tsx`].find((p) => fs.existsSync(p) && fs.statSync(p).isFile())
+        expect(resolved, `${m[1]} imported from ${path.relative(root, file)}`).toBeTruthy()
+        walk(resolved!)
+      }
+    }
+    walk(path.join(root, 'middleware.ts'))
+    expect(files.length).toBeGreaterThan(6)
+    for (const file of files) {
+      const text = fs.readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+      const where = path.relative(root, file)
+      expect(text, `${where}: node: built-in`).not.toMatch(/from\s+'node:/)
+      expect(text, `${where}: require`).not.toMatch(/\brequire\(/)
+      expect(text, `${where}: eval`).not.toMatch(/\beval\(|new Function\(/)
+      if (/\bprocess\./.test(text)) expect(text, `${where}: process without a typeof guard`).toContain("typeof process !== 'undefined'")
+    }
+    // only the middleware's own graph is checked here; telegram-bot.ts has an import.meta default that the bundler drops when it is not called
+    const graph = files.map((f) => path.relative(root, f).replace(/\\/g, '/'))
+    expect(graph).toContain('src/seo/render.ts')
+    expect(graph).toContain('src/lib/telegram-bot.ts')
+  })
+})
+
 describe('4. what the default export is, for Vercel', () => {
   it('is a function of one request (Vercel passes nothing else) that returns a Response', async () => {
     expect(typeof middleware).toBe('function')

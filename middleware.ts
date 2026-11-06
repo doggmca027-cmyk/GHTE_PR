@@ -21,7 +21,12 @@ import { renderSeoHtml } from './src/seo/render'
 
 // Path strings only, and literals: Vercel reads `config` statically and turns each string into a pattern with path-to-regexp. The languages and the slugs
 // are those of src/seo/pages.ts; tests/seo-middleware.test.ts checks that every page of that table is matched here and that nothing else is.
+//
+// runtime: 'edge' is REQUIRED. Without it Vercel ran this file as a plain Node.js function (/var/task/middleware.js, one transpiled file per source, no
+// bundle) and Node's ESM loader could not resolve the extensionless imports below: every matched address answered 500 MIDDLEWARE_INVOCATION_FAILED
+// ("Cannot find module '/var/task/src/lib/telegram-bot'"). The Edge runtime bundles the whole graph into one file, like api/chat.ts and api/catalog.ts.
 export const config = {
+  runtime: 'edge',
   matcher: [
     '/:lang(en|ru|uk|es|pt|id|tr|ar|hi|fr|de|it|vi|zh|ja)',
     '/:lang(en|ru|uk|es|ar)/:slug(buy-[a-z0-9-]+|crypto-smm-panel|smm-panel-for-agencies)',
