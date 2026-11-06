@@ -104,7 +104,8 @@ describe('4. the headers that make the worker updatable (vercel.json)', () => {
   })
   it('the landing addresses open the app (a rewrite), and only the ones that exist; a bare /buy-... goes to /en/ for good', () => {
     const langs = 'en|ru|uk|es|ar'
-    expect(vercel.rewrites.map((r) => r.destination)).toEqual(['/index.html', '/index.html'])
+    // "/", not "/index.html": with cleanUrls the file is served as "/" and "/index.html" itself answers a redirect, so a rewrite to it ended in 404 (NOT_FOUND)
+    expect(vercel.rewrites.map((r) => r.destination)).toEqual(['/', '/'])
     expect(vercel.rewrites[1]!.source).toContain(`(${langs})`)
     expect(vercel.redirects[0]).toMatchObject({ destination: '/en/:slug', permanent: true })
     expect(rule('/llm-context.txt').headers).toContainEqual({ key: 'Content-Type', value: 'text/plain; charset=utf-8' })

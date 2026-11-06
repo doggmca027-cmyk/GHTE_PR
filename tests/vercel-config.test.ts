@@ -49,6 +49,17 @@ describe('vercel.json as Vercel reads it', () => {
     expect(list.findIndex((s, i) => i > files && /\(en\|ru\|uk\|es\|pt/.test(s))).toBeGreaterThan(files) // the rewrite to the app, after the real files
   })
 
+  it('with cleanUrls a rewrite to the app must point at "/", never at "/index.html" (that address is itself a redirect to "/": the rewrite ended in NOT_FOUND on production)', () => {
+    expect(config.cleanUrls).toBe(true)
+    for (const r of config.rewrites ?? []) {
+      expect(r.destination, r.source).toBe('/')
+      expect(r.destination).not.toMatch(/index(\.html)?$/)
+    }
+    const { routes } = transform(config)
+    const redirectsIndex = routes!.find((r) => /index/.test(String((r as { src?: string }).src)) && (r as { status?: number }).status === 308)
+    expect(redirectsIndex, 'cleanUrls redirects /index.html to /').toBeTruthy()
+  })
+
   it('the static pages keep their address: a rewrite never reaches /ru/terms or /uk/privacy (they are files, and files come first)', () => {
     const { routes } = transform(config)
     const list = routes!.map((r) => String((r as { src?: string }).src ?? ''))
