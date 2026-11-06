@@ -102,8 +102,14 @@ describe('assess: what is wrong right now', () => {
   it('a stale or missing sync worker is critical while an order depends on it', () => {
     expect(codes(snap({ heartbeats: [beat('sync-order-status', 200_000), beat('provider-health-monitor', 10_000)] }))).toContain('critical:sync_stale')
     expect(codes(snap({ heartbeats: [beat('provider-health-monitor', 10_000)] }))).toContain('critical:sync_never_ran')
-    expect(codes(snap({ order: order({ status: 'completed' }), heartbeats: [beat('sync-order-status', 200_000), beat('provider-health-monitor', 10_000)] }))).toContain('warn:sync_stale')
     expect(codes(snap({ heartbeats: [beat('sync-order-status', 149_000), beat('provider-health-monitor', 10_000)] }))).toEqual([])
+  })
+
+  it('the egress diet: with no order in flight the sync runs once in 10 minutes, so only more than 15 minutes of silence is a warning', () => {
+    const done = (ms: number) => codes(snap({ order: order({ status: 'completed' }), heartbeats: [beat('sync-order-status', ms), beat('provider-health-monitor', 10_000)] }))
+    expect(done(200_000)).toEqual([]) // 3 minutes: the idle cadence, not a fault
+    expect(done(9 * 60_000)).toEqual([])
+    expect(done(16 * 60_000)).toContain('warn:sync_stale')
   })
 
   it('a failed run newer than the last success is reported with its message', () => {
@@ -115,7 +121,9 @@ describe('assess: what is wrong right now', () => {
   })
 
   it('a silent health monitor and an overrunning lease are warnings', () => {
-    expect(codes(snap({ heartbeats: [beat('sync-order-status', 10_000), beat('provider-health-monitor', 400_000)] }))).toContain('warn:monitor_stale')
+    // the monitor runs every 5 minutes (egress diet): 6.7 minutes is a normal gap, more than 12 minutes is a silent monitor
+    expect(codes(snap({ heartbeats: [beat('sync-order-status', 10_000), beat('provider-health-monitor', 400_000)] }))).toEqual([])
+    expect(codes(snap({ heartbeats: [beat('sync-order-status', 10_000), beat('provider-health-monitor', 13 * 60_000)] }))).toContain('warn:monitor_stale')
     expect(codes(snap({ lock: { held: true, locked_until: iso(NOW - 10_000), acquired_at: ago(160_000) } }))).toContain('warn:lock_overrun')
     expect(codes(snap({ lock: { held: true, locked_until: iso(NOW + 100_000), acquired_at: ago(30_000) } }))).toEqual([])
   })

@@ -29,14 +29,19 @@ export interface ExpectedJob {
   worker?: string
 }
 
+// The cadences are those of the egress diet (docs/proposals/egress-diet.sql; the free plan of Supabase allows 5 GB of egress and the workers' own API
+// calls were ~95% of the requests): the health monitor runs every 5 minutes; the order sync and the notifier fire every minute ONLY when there is work
+// (an order in flight, a notification due) and otherwise once in 10 minutes, which is also their heartbeat. So the idle gap is 10 minutes, and "late" is
+// judged against that, not against the old every-minute cadence.
 export const EXPECTED_JOBS: readonly ExpectedJob[] = [
-  { name: 'provider-health-monitor', label: 'Provider health monitor', kind: 'http', everyMinutes: 1, lateAfterMinutes: 5, critical: true, worker: 'provider-health-monitor' },
+  { name: 'provider-health-monitor', label: 'Provider health monitor', kind: 'http', everyMinutes: 5, lateAfterMinutes: 15, critical: true, worker: 'provider-health-monitor' },
   { name: 'sync-reconciliation-cases', label: 'Reconciliation detector', kind: 'sql', everyMinutes: 5, lateAfterMinutes: 12, critical: true },
-  { name: 'sync-order-status', label: 'Order status sync', kind: 'http', everyMinutes: 1, lateAfterMinutes: 5, critical: true, worker: 'sync-order-status' },
+  { name: 'sync-order-status', label: 'Order status sync', kind: 'http', everyMinutes: 10, lateAfterMinutes: 15, critical: true, worker: 'sync-order-status' },
   { name: 'notify-admin-anomalies', label: 'Admin alerts', kind: 'sql', everyMinutes: 5, lateAfterMinutes: 12, critical: false },
-  { name: 'telegram-notifier', label: 'Customer notifications', kind: 'http', everyMinutes: 1, lateAfterMinutes: 10, critical: false, worker: 'telegram-notifier' },
-  // one provider per run, every 5 minutes (migration 20261203000000); a long run makes the next ones skip, so allow a few
-  { name: 'sync-catalog', label: 'Catalog sync', kind: 'http', everyMinutes: 5, lateAfterMinutes: 45, critical: false, worker: 'sync-catalog' },
+  { name: 'telegram-notifier', label: 'Customer notifications', kind: 'http', everyMinutes: 10, lateAfterMinutes: 25, critical: false, worker: 'telegram-notifier' },
+  // one provider per run, every 15 minutes since the egress diet (migration 20261203000000 hands out a provider that was last synced over 50 minutes ago,
+  // so each provider is synced about every 65-75 minutes); a long run makes the next ones skip, so allow five runs
+  { name: 'sync-catalog', label: 'Catalog sync', kind: 'http', everyMinutes: 15, lateAfterMinutes: 75, critical: false, worker: 'sync-catalog' },
 ]
 
 // ---------------------------------------------------------------------------

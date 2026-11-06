@@ -62,7 +62,8 @@ describe('catalogue sync rotation', () => {
         expect((await db.query<{ p: boolean }>(`select has_function_privilege('${role}', 'public.${fn}', 'execute') p`)).rows[0].p).toBe(false)
       }
     }
-    expect(EXPECTED_JOBS.find((j) => j.name === 'sync-catalog')).toMatchObject({ everyMinutes: 5, lateAfterMinutes: 45 })
+    // every 15 minutes since the egress diet (docs/proposals/egress-diet.sql): five runs of silence before it is late
+    expect(EXPECTED_JOBS.find((j) => j.name === 'sync-catalog')).toMatchObject({ everyMinutes: 15, lateAfterMinutes: 75 })
     const fn = fs.readFileSync(path.resolve(__dirname, '../supabase/functions/sync-catalog/index.ts'), 'utf8')
     expect(fn).toContain("db.rpc('claim_catalog_sync_provider')")
     expect(fn).toContain("db.rpc('finish_catalog_sync'")

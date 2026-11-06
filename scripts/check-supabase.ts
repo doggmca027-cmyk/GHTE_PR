@@ -85,9 +85,10 @@ if (applied === migrations.length) {
     }
   }
 
+  // catalog_version (migration 20270104000000) is a view that exposes one hash of what the storefront shows and a count of its services
   const READABLE: Record<string, string[]> = {
-    anon: ['categories', 'services', 'platforms'],
-    authenticated: ['categories', 'services', 'platforms', 'users', 'wallets', 'wallet_transactions', 'orders', 'order_status_history', 'deposits'],
+    anon: ['categories', 'services', 'platforms', 'catalog_version'],
+    authenticated: ['categories', 'services', 'platforms', 'catalog_version', 'users', 'wallets', 'wallet_transactions', 'orders', 'order_status_history', 'deposits'],
   }
   const reads = await rows<{ grantee: string; table_name: string }>(`select grantee, table_name from information_schema.role_table_grants where table_schema = 'public' and grantee in ('anon','authenticated') and privilege_type = 'SELECT'`)
   for (const g of reads) {

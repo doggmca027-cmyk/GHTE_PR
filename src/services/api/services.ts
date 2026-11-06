@@ -1,5 +1,6 @@
 import { MOCK_CATALOG, MOCK_PLATFORMS, MOCK_SKUS } from '@/constants/dev'
 import type { PlatformInfo } from '@/constants/platforms'
+import { catalogProxyOff, catalogVersionReady } from '@/lib/catalog-version'
 import { segmentParam, segmentsFromRow } from '@/lib/segments'
 import { serviceMatches, serviceSearchFilter, type SearchTerm } from '@/lib/service-search'
 import type { PlatformCategory } from '@/types/platform'
@@ -51,7 +52,23 @@ export const SERVICE_COLUMNS = ['id', 'category_id', 'name', 'description', 'cus
 /** Services shown at a time in a category: a category can hold hundreds, the customer asks for more. */
 export const SERVICES_PAGE = 30
 
+/**
+ * The public catalogue through the CDN (api/catalog.ts): the same rows Supabase would answer, but kept by Vercel for the version of the catalogue
+ * (lib/catalog-version.ts), so Supabase is asked once per version and not once per customer (its free plan allows 5 GB of egress a month). The catalogue
+ * is the same for everyone, so the customer's token plays no part in it.
+ */
+async function viaProxy<T>(path: string): Promise<T> {
+  const version = await catalogVersionReady()
+  const res = await fetch(`/api/catalog?p=${encodeURIComponent(path)}${version ? `&v=${version}` : ''}`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+  if (!res.ok) throw new Error(`Catalog proxy failed (${res.status})`)
+  return (await res.json()) as T
+}
+
 async function rest<T>(path: string, token: string): Promise<T> {
+  // The proxy is an optimisation, never a dependency: when it cannot answer (not deployed, development, an error) the app reads Supabase itself, as before.
+  if (!catalogProxyOff()) {
+    try { return await viaProxy<T>(path) } catch { /* fall back to Supabase below */ }
+  }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: { apikey: SUPABASE_ANON_KEY!, Authorization: `Bearer ${token || SUPABASE_ANON_KEY}` },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -104,7 +121,7 @@ export async function fetchPlatforms(session: AuthSession): Promise<PlatformInfo
   if (session.isMock) return MOCK_PLATFORMS
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Backend is not configured')
   const rows = await rest<Array<{ slug: string; name: string; category: PlatformCategory; sort_order: number }>>(
-    'platforms?select=slug,name,category,sort_order&active=eq.true&order=sort_order,name', session.token)
+    'platforms?select=slug,name,category,sort_order&active=eq.true&order=sort_order,name&limit=500', session.token)
   return rows.map((r) => ({ slug: r.slug, name: r.name, category: r.category, sortOrder: r.sort_order }))
 }
 

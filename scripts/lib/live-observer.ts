@@ -21,8 +21,13 @@ export const FINAL = new Set(['completed', 'partial', 'refunded'])
 /** The provider gave up on the order; the sync worker owes the customer a refund, after which the status becomes `refunded`. */
 export const REFUND_PENDING = new Set(['canceled', 'failed'])
 
-/** A worker that runs every minute and has not succeeded for this long has missed at least two runs. */
+/**
+ * The order sync fires every minute while an order is in flight (docs/proposals/egress-diet.sql) and has not succeeded for this long = it missed at
+ * least two runs. With no order in flight it runs once in 10 minutes (IDLE_WORKER_MS); the health monitor runs every 5 minutes (MONITOR_STALE_MS).
+ */
 export const STALE_WORKER_MS = 150_000
+export const IDLE_WORKER_MS = 15 * 60_000
+export const MONITOR_STALE_MS = 12 * 60_000
 /** The sync lease lasts 140 s (_shared/worker-lock.ts); held longer than this means the run overran. */
 export const LEASE_MS = 150_000
 
@@ -249,14 +254,14 @@ export function assess(s: Snapshot, opts: { stuckAfterMs?: number } = {}): Findi
 
   const sync = s.heartbeats.find((h) => h.worker === 'sync-order-status')
   if (!sync || !sync.last_success_at) add(loud, 'sync_never_ran', 'sync-order-status has never reported a successful run')
-  else if (now - Date.parse(sync.last_success_at) > STALE_WORKER_MS) {
-    add(loud, 'sync_stale', `sync-order-status last succeeded ${ageSince(sync.last_success_at, now)} ago (it should run every minute)`)
+  else if (now - Date.parse(sync.last_success_at) > (inFlight ? STALE_WORKER_MS : IDLE_WORKER_MS)) {
+    add(loud, 'sync_stale', `sync-order-status last succeeded ${ageSince(sync.last_success_at, now)} ago (it should run every minute while an order is in flight, every 10 minutes otherwise)`)
   }
   if (sync?.last_error_at && (!sync.last_success_at || Date.parse(sync.last_error_at) > Date.parse(sync.last_success_at))) {
     add('warn', 'sync_error', `sync-order-status last run failed: ${sync.last_error ?? 'no message'}`)
   }
   const monitor = s.heartbeats.find((h) => h.worker === 'provider-health-monitor')
-  if (!monitor?.last_success_at || now - Date.parse(monitor.last_success_at) > STALE_WORKER_MS) {
+  if (!monitor?.last_success_at || now - Date.parse(monitor.last_success_at) > MONITOR_STALE_MS) {
     add('warn', 'monitor_stale', `provider-health-monitor last succeeded ${ageSince(monitor?.last_success_at ?? null, now)} ago (provider health and balance are not being refreshed)`)
   }
   if (s.lock?.held && s.lock.acquired_at && now - Date.parse(s.lock.acquired_at) > LEASE_MS) {

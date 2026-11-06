@@ -26,6 +26,9 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   server: { host: true },
   test: {
+    // the app reads the catalogue through the CDN proxy (/api/catalog) in production; the tests of the screens read the storefront directly and count
+    // the requests, so the proxy is off for them (tests/catalog-proxy.test.ts and tests/catalog-version.test.ts test it on its own)
+    env: { VITE_CATALOG_PROXY: 'off' },
     // the long lists draw only the cards near the screen, which needs a layout engine; jsdom has none (see the file)
     setupFiles: ['./tests/setup/virtuoso-plain.ts'],
     // On a developer machine: one test file at a time, in one worker. Several of the suites build a whole database (PGlite) per file, so a worker per

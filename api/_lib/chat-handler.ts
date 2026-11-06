@@ -102,7 +102,8 @@ async function search(deps: ChatDeps, text: string): Promise<Found> {
   const intent = extractIntent(text)
   const get = async (url: string): Promise<StorefrontService[]> => {
     const res = await deps.fetch(url, {
-      headers: { apikey: deps.env.anonKey!, Authorization: `Bearer ${deps.env.anonKey}`, Accept: 'application/json' },
+      // compression asked for out loud: the free plan of Supabase allows 5 GB of egress, and the candidates are a few dozen kilobytes of JSON
+      headers: { apikey: deps.env.anonKey!, Authorization: `Bearer ${deps.env.anonKey}`, Accept: 'application/json', 'Accept-Encoding': 'gzip, deflate, br' },
       signal: AbortSignal.timeout(RETRIEVAL_TIMEOUT_MS),
     })
     if (!res.ok) throw new Error(`storefront search answered ${res.status}`)
