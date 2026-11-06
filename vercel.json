@@ -5,6 +5,13 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "cleanUrls": true,
+  "redirects": [
+    { "source": "/:slug(buy-[a-z0-9-]+|crypto-smm-panel|smm-panel-for-agencies)", "destination": "/en/:slug", "permanent": true }
+  ],
+  "rewrites": [
+    { "source": "/:lang(en|ru|uk|es|pt|id|tr|ar|hi|fr|de|it|vi|zh|ja)", "destination": "/index.html" },
+    { "source": "/:lang(en|ru|uk|es|ar)/:slug(buy-[a-z0-9-]+|crypto-smm-panel|smm-panel-for-agencies)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -34,6 +41,20 @@
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Cache-Control", "value": "public, max-age=86400" }
+      ]
+    },
+    {
+      "source": "/(sw.js|registerSW.js|manifest.webmanifest|workbox-(.*).js)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "source": "/llm-context.txt",
+      "headers": [
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
       ]
     }
   ]

@@ -7,7 +7,8 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from '
 import { extname, join } from 'node:path'
 import { loadEnv } from 'vite'
 import { buildManifest, resolveAppUrl, scanBundleForSecrets, type Manifest } from './lib/env-checks.ts'
-import { DOCS, DOC_LANGS, botLink, buildRobots, buildSitemap, docFile, fillPage } from './lib/seo.ts'
+import { DOCS, DOC_LANGS, botLink, buildRobots, docFile, fillPage } from './lib/seo.ts'
+import { buildFullSitemap, sitemapSummary } from './lib/sitemap.ts'
 
 const root = process.cwd()
 const dist = join(root, 'dist')
@@ -40,8 +41,12 @@ for (const doc of DOCS) {
 if (appUrl) writeFileSync(join(dist, 'index.html'), fillPage(readFileSync(join(dist, 'index.html'), 'utf8'), appUrl, bot))
 writeFileSync(join(dist, 'robots.txt'), buildRobots(appUrl))
 if (appUrl) {
-  writeFileSync(join(dist, 'sitemap.xml'), buildSitemap(appUrl, new Date().toISOString().slice(0, 10)))
-  console.log(`postbuild: legal pages, robots.txt and sitemap.xml published for ${appUrl}${bot ? ` (bot ${bot.name})` : ''}`)
+  // the whole site: the home page and the landing pages in their languages, with hreflang (scripts/generate-sitemap.ts is the same function by hand)
+  writeFileSync(join(dist, 'sitemap.xml'), buildFullSitemap(appUrl, new Date().toISOString().slice(0, 10)))
+  // the text for AI crawlers (public/llm-context.txt): the address and the bot link filled in like the legal pages
+  const llm = join(dist, 'llm-context.txt')
+  if (existsSync(llm)) writeFileSync(llm, fillPage(readFileSync(llm, 'utf8'), appUrl, bot))
+  console.log(`postbuild: legal pages, llm-context.txt, robots.txt and sitemap.xml (${sitemapSummary(appUrl)}) published for ${appUrl}${bot ? ` (bot ${bot.name})` : ''}`)
 } else {
   console.log('postbuild: APP_URL unknown, legal pages keep their placeholders and no sitemap.xml is written.')
 }

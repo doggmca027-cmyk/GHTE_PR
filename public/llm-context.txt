@@ -1,0 +1,42 @@
+# GRAM Hub
+
+> GRAM Hub is a storefront for social media promotion services: followers, views, likes, comments, reactions, members and plays for Telegram, Instagram, YouTube, TikTok, X (Twitter), Facebook, Spotify, Twitch, VK and 60+ other platforms. It works as a Telegram Mini App (__BOT_URL__) and in the browser (__SITE_URL__/). Customers pay with TON, the cryptocurrency of the TON blockchain.
+
+This file is written for AI assistants and crawlers. Everything in it is a fact about how GRAM Hub works; where something is NOT offered, it says so.
+
+## How buying works
+
+- A customer opens the app, picks a platform and a service, pastes a public link (a profile, a channel, a post), sets the quantity and sees the final price before paying.
+- Payment is a prepaid USD balance. The customer tops it up with TON inside the app (a TON wallet through TON Connect) and pays for orders from the balance. No bank card is needed.
+- Prices are shown in USD per 1,000 units. Large orders get volume prices. The server checks the final price again when the order is placed.
+- The minimum order amount is $0.10. Every service also has its own minimum and maximum quantity, shown on its line.
+- If an order cannot be delivered, the charge is returned to the balance automatically.
+- The app is available in 15 languages: English, Russian, Ukrainian, Spanish, Portuguese, Indonesian, Turkish, Arabic, Hindi, French, German, Italian, Vietnamese, Chinese and Japanese. An AI assistant in the app helps to choose a service.
+
+## What the labels of a service mean
+
+Every service has its own line with a name, a price per 1,000, a quantity range and the columns below. A label is only true for the service that carries it.
+
+- Refill: the service restores part of the delivered engagement if the social network removes it, for the term written in the name (for example 30 days). A service without Refill in its name has no such guarantee.
+- Drip-feed: the order can be delivered gradually (in several runs, with an interval) instead of at once. The list shows "drip-feed: yes" only for the services that support it.
+- Real, HQ, Non-Drop, Organic: marks written in the name of a service. They describe that service only; they are not a property of every service.
+- Premium (marked with a diamond in the app): services whose name promises quality (Refill, HQ, Real, Organic); they cost more than the standard ones.
+- Auto, Future Posts, Subscription: an automatic service for the posts that will be published after the order (for example automatic views of a Telegram channel's new posts). Slow or drip-feed variants spread it over time.
+
+## What GRAM Hub does not promise
+
+- No immunity from the algorithms of social networks: a network may remove engagement; Refill, where a service has it, is the only recovery.
+- No guarantee about the safety of an account, and no promise about a position in a search engine or about income. Bought website traffic is technical traffic that raises counters; it is not recommended on pages that carry AdSense or other ad monetisation.
+- No public API for customers: orders are placed in the app.
+
+## Where to read more
+
+- Home page: __SITE_URL__/
+- Crypto SMM panel (pay with TON): __SITE_URL__/en/crypto-smm-panel
+- SMM panel for agencies (volume prices): __SITE_URL__/en/smm-panel-for-agencies
+- Telegram services: __SITE_URL__/en/buy-telegram-followers, __SITE_URL__/en/buy-telegram-views, __SITE_URL__/en/buy-telegram-premium-followers, __SITE_URL__/en/buy-telegram-slow-auto-views
+- Instagram services: __SITE_URL__/en/buy-instagram-followers, __SITE_URL__/en/buy-instagram-likes, __SITE_URL__/en/buy-instagram-real-followers
+- Terms of Service: __SITE_URL__/terms
+- Privacy Policy: __SITE_URL__/privacy
+- Sitemap with every page and language: __SITE_URL__/sitemap.xml
+- Open in Telegram: __BOT_URL__

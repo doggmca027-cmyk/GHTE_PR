@@ -19,6 +19,7 @@
     "allowImportingTsExtensions": true,
     "types": [
       "vite/client",
+      "vite-plugin-pwa/client",
       "node"
     ],
     "paths": {
@@ -35,6 +36,8 @@
     "tests",
     "scripts",
     "supabase/functions/_shared",
-    "vite.config.ts"
+    "middleware.ts",
+    "vite.config.ts",
+    "vite.pwa.ts"
   ]
 }

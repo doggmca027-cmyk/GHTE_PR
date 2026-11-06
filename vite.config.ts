@@ -1,7 +1,9 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
+import { PWA_OPTIONS } from './vite.pwa.ts'
 
 /**
  * Splits third-party code into long-lived vendor chunks so that app changes do not invalidate
@@ -22,7 +24,7 @@ function vendorChunk(rawId: string): string | undefined {
 }
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), VitePWA(PWA_OPTIONS)],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   server: { host: true },
   test: {

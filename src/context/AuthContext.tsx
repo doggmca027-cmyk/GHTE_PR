@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { IWallet } from '@/types'
+import { UNITS_PER_CURRENCY } from '@/lib/order-calc'
 import { mockBackend } from '@/services/api/mock-orders'
 import { AuthError, GUEST_SESSION, authenticateWithTelegram, fetchWallet, type AuthSession } from '@/services/api/auth'
 import { clearWebSession, insideTelegram, loadWebSession, saveWebSession } from '@/services/api/web-auth'
@@ -17,6 +18,12 @@ interface AuthContextValue {
   refreshWallet: () => Promise<void>
   /** Replaces the displayed wallet (e.g. with the balance returned by place-order). Works in mock mode too. */
   applyWallet: (wallet: IWallet) => void
+  /**
+   * OPTIMISTIC debit: the displayed balance drops by `units` (1/10,000 of the currency) now, before the server has answered. Returns the undo: it puts the
+   * balance back, but only if nobody has set the wallet since (the server's own answer, applyWallet, is the truth and is never overwritten).
+   * It does not mark the wallet as freshly read, so the next refresh reconciles it with the server. Nothing happens for a guest or a zero amount.
+   */
+  debitWallet: (units: number) => () => void
   /** A session from the web sign-in (e-mail / Telegram widget): shown now and remembered in this browser. */
   signInWeb: (session: AuthSession) => void
   /** Forgets the web session in this browser (nothing to do inside Telegram, where initData signs in again). */
@@ -102,6 +109,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ status: 'authenticated', session: next })
   }, [])
 
+  const debitWallet = useCallback((units: number): (() => void) => {
+    const session = sessionRef.current
+    if (!session || session.isGuest || !Number.isFinite(units) || units <= 0) return () => undefined
+    const before = session.wallet
+    const optimistic: IWallet = { ...before, balance: Math.max(0, Math.round(before.balance * UNITS_PER_CURRENCY - units) / UNITS_PER_CURRENCY) }
+    const next = { ...session, wallet: optimistic }
+    sessionRef.current = next
+    setState({ status: 'authenticated', session: next })
+    return () => {
+      const cur = sessionRef.current
+      if (!cur || cur.wallet !== optimistic) return // the server (or another debit) has spoken since: that is the truth
+      const back = { ...cur, wallet: before }
+      sessionRef.current = back
+      setState({ status: 'authenticated', session: back })
+    }
+  }, [])
+
   const signInWeb = useCallback((session: AuthSession) => {
     saveWebSession(session)
     sessionRef.current = session
@@ -128,8 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshWallet])
 
   const value = useMemo(
-    () => ({ state, retry: () => void login(), refreshWallet, applyWallet, signInWeb, signOut }),
-    [state, login, refreshWallet, applyWallet, signInWeb, signOut],
+    () => ({ state, retry: () => void login(), refreshWallet, applyWallet, debitWallet, signInWeb, signOut }),
+    [state, login, refreshWallet, applyWallet, debitWallet, signInWeb, signOut],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

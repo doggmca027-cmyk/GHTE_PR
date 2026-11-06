@@ -21,6 +21,7 @@ import {
   MIN_ORDER_AMOUNT,
   quantityPresets,
   toUnits,
+  UNITS_PER_CURRENCY,
   validateQuantity,
   validateTargetUrl,
 } from '@/lib/order-calc'
@@ -66,7 +67,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
   const t = useT()
   const wide = useWide()
   const { lang } = useLanguage()
-  const { applyWallet } = useAuth()
+  const { applyWallet, debitWallet } = useAuth()
   // a website guest prices freely; ordering asks to sign in first (this form stays open, so the order continues right after)
   const guest = session.isGuest === true
   const signIn = useSignIn()
@@ -150,6 +151,9 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
     dirtySinceAttempt.current = true
     setPhase({ kind: 'submitting' })
     haptic.tap()
+    // OPTIMISTIC: the balance drops and the order shows as "being confirmed" NOW, before the server answers (the screen below draws it from this phase).
+    // The server's answer is still the truth: its wallet replaces ours, and a refusal puts the balance back and the form returns with the reason.
+    const undo = debitWallet(totalUnits)
     try {
       const result = await createOrder(session, {
         serviceId: service.id,
@@ -165,7 +169,9 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
       setPhase({ kind: 'done', result })
     } catch (e) {
       const err = e instanceof OrderApiError ? e : new OrderApiError('server', tr('Something went wrong. Please try again.'))
+      // the server may say what the wallet is (it is the truth); when it does not, the optimistic debit is taken back
       if (err.wallet) applyWallet(err.wallet)
+      else undo()
       // A definitive answer (rejected / refunded / invalid) closes that key. Network errors keep it
       // so a retry is deduplicated by the server.
       if (err.isDefinitive) {
@@ -201,6 +207,12 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
     void submit()
   }
 
+  // The order as the customer sent it, shown "being confirmed" from the moment of the tap (optimistic): its balance is the one already lowered by
+  // debitWallet. Replaced by the server's own answer (phase 'done'), or by the form again with the reason when the server refuses.
+  const optimistic: CreateOrderResult | null = busy && shape
+    ? { order: { id: 'optimistic', status: 'paid', chargeAmount: totalUnits / UNITS_PER_CURRENCY, quantity: shape.quantity, targetUrl: url.ok ? url.value : link }, pending: true, wallet }
+    : null
+
   const ctaLabel = busy
     ? t('Placing order…')
     : !orderOk
@@ -225,7 +237,7 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-blue-100" />
 
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-extrabold text-content-primary">{done ? t('Order received') : t('Configure order')}</h2>
+          <h2 className="text-lg font-extrabold text-content-primary">{done || optimistic ? t('Order received') : t('Configure order')}</h2>
           <button type="button" onClick={onClose} disabled={busy} aria-label={t('Close')} className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-sub text-content-secondary active:scale-90 disabled:opacity-40">
             <X size={18} strokeWidth={2} />
           </button>
@@ -233,6 +245,8 @@ export function OrderModal({ service, platform, platformName, session, onClose, 
 
         {phase.kind === 'done' ? (
           <SuccessPanel result={phase.result} onViewOrders={onViewOrders} onClose={onClose} />
+        ) : optimistic ? (
+          <SuccessPanel result={optimistic} onViewOrders={onViewOrders} onClose={onClose} unconfirmed />
         ) : (
           <>
             {/* Service summary */}
@@ -408,7 +422,8 @@ export function ServiceDescription({ service }: { service: ICatalogService }) {
   )
 }
 
-function SuccessPanel({ result, onViewOrders, onClose }: { result: CreateOrderResult; onViewOrders: () => void; onClose: () => void }) {
+/** `unconfirmed`: the server has not answered yet (the optimistic panel): the buttons wait, so a refusal can still bring the form back in front of the customer. */
+function SuccessPanel({ result, onViewOrders, onClose, unconfirmed = false }: { result: CreateOrderResult; onViewOrders: () => void; onClose: () => void; unconfirmed?: boolean }) {
   const t = useT()
   const pending = result.pending
   const waiting = result.awaitingFunds === true
@@ -435,8 +450,8 @@ function SuccessPanel({ result, onViewOrders, onClose }: { result: CreateOrderRe
         )}
       </div>
 
-      <Button className="mt-5 h-14 w-full text-[15px]" onClick={() => { haptic.tap(); onViewOrders() }}>{t('View my orders')}</Button>
-      <button type="button" onClick={onClose} className="mt-2 w-full rounded-2xl py-3 text-sm font-semibold text-content-secondary active:scale-95">{t('Done')}</button>
+      <Button className={cn('mt-5 h-14 w-full text-[15px]', unconfirmed && 'cursor-not-allowed opacity-60 hover:bg-brand')} disabled={unconfirmed} aria-busy={unconfirmed} onClick={() => { haptic.tap(); onViewOrders() }}>{unconfirmed && <Loader2 size={18} strokeWidth={2} className="animate-spin" />}{t('View my orders')}</Button>
+      <button type="button" onClick={onClose} disabled={unconfirmed} className="mt-2 w-full rounded-2xl py-3 text-sm font-semibold text-content-secondary active:scale-95 disabled:opacity-40">{t('Done')}</button>
     </div>
   )
 }
