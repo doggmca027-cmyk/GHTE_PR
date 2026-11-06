@@ -87,7 +87,7 @@ describe('the search of the storefront', () => {
     expect(buildSearchUrl(base, extractIntent('да'), 'safe')).toBeNull() // a guarantee alone would bring the cheapest guaranteed card of any platform
   })
   it('never lets a word of the customer change the filter: only letters, digits, spaces and hyphens get through', () => {
-    const url = buildSearchUrl(base, { platform: null, actions: [], cheap: false, refill: false, quality: false, geo: null, geoCue: false, quantity: null, audience: null, dislikes: false, words: ['a*,b)', 'x.or(y', 'drop;table'] })!
+    const url = buildSearchUrl(base, { platform: null, actions: [], cheap: false, refill: false, quality: false, geo: null, geoCue: false, quantity: null, audience: null, dislikes: false, slow: false, auto: false, words: ['a*,b)', 'x.or(y', 'drop;table'] })!
     const q = decoded(url)
     expect(q).toContain('name.ilike.*ab*')
     expect(q).toContain('name.ilike.*xory*')
