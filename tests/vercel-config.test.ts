@@ -1,0 +1,61 @@
+// vercel.json is checked by the validator Vercel itself runs when a deployment is created (@vercel/routing-utils). On 2026-11-06 a header rule with a nested
+// capture group, "workbox-(.*).js", made Vercel refuse the whole deployment ("invalid-route-source-pattern") while every test and the build of CI were green:
+// nothing in this repository read the file the way Vercel does. This test does.
+import fs from 'node:fs'
+import path from 'node:path'
+import { getTransformedRoutes } from '@vercel/routing-utils'
+import { describe, expect, it } from 'vitest'
+
+const config = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../vercel.json'), 'utf8')) as {
+  cleanUrls?: boolean
+  redirects?: { source: string; destination: string; permanent?: boolean }[]
+  rewrites?: { source: string; destination: string }[]
+  headers?: { source: string; headers: { key: string; value: string }[] }[]
+}
+const transform = (c: typeof config) => getTransformedRoutes({ cleanUrls: c.cleanUrls, redirects: c.redirects, rewrites: c.rewrites, headers: c.headers })
+
+describe('vercel.json as Vercel reads it', () => {
+  it('is accepted: every redirect, rewrite and header pattern is valid (an invalid one fails the whole deployment)', () => {
+    const { error, routes } = transform(config)
+    expect(error?.message).toBeUndefined()
+    expect(routes!.length).toBeGreaterThan(10)
+  })
+
+  it('the validator really refuses the mistake that broke the deployment (the control: this test can fail)', () => {
+    const bad = transform({ headers: [{ source: '/(sw.js|registerSW.js|manifest.webmanifest|workbox-(.*).js)', headers: [{ key: 'Cache-Control', value: 'no-cache' }] }] })
+    expect(bad.error?.code).toBe('invalid_header')
+    expect(bad.error?.message).toContain('invalid `source` pattern')
+    // ...and the way to write it that is accepted
+    expect(transform({ headers: [{ source: '/(sw.js|workbox-.*.js)', headers: [{ key: 'Cache-Control', value: 'no-cache' }] }] }).error).toBeNull()
+  })
+
+  it('every source of the file is checked one by one, so a failure names the rule', () => {
+    for (const [kind, rules] of [['redirect', config.redirects ?? []], ['rewrite', config.rewrites ?? []], ['header', config.headers ?? []]] as const) {
+      for (const rule of rules) {
+        const one = kind === 'redirect' ? transform({ redirects: [rule as never] }) : kind === 'rewrite' ? transform({ rewrites: [rule as never] }) : transform({ headers: [rule as never] })
+        expect(one.error?.message, `${kind} ${rule.source}`).toBeUndefined()
+      }
+    }
+  })
+
+  it('the order is what the site relies on: the redirect first, then the headers (which let the request go on), the files, and only then the rewrites', () => {
+    const { routes } = transform(config)
+    const list = routes!.map((r) => ('handle' in r && r.handle ? `handle:${r.handle}` : String((r as { src?: string }).src)))
+    const files = list.indexOf('handle:filesystem')
+    expect(files).toBeGreaterThan(0)
+    const at = (needle: RegExp) => list.findIndex((s) => needle.test(s))
+    expect(at(/buy-\[a-z0-9-\]\+/)).toBeLessThan(files) // the bare /buy-... redirect to /en/
+    expect(at(/sw\.js/)).toBeLessThan(files) // the headers of the worker
+    expect(list.findIndex((s, i) => i > files && /\(en\|ru\|uk\|es\|pt/.test(s))).toBeGreaterThan(files) // the rewrite to the app, after the real files
+  })
+
+  it('the static pages keep their address: a rewrite never reaches /ru/terms or /uk/privacy (they are files, and files come first)', () => {
+    const { routes } = transform(config)
+    const list = routes!.map((r) => String((r as { src?: string }).src ?? ''))
+    for (const p of ['/ru/terms', '/uk/privacy', '/terms']) {
+      const rewriteHits = (config.rewrites ?? []).filter((r) => new RegExp(`^${r.source.replace(/:\w+\(([^)]*)\)/g, '($1)')}$`).test(p))
+      expect(rewriteHits, p).toEqual([])
+    }
+    expect(list.some((s) => /llm-context/.test(s))).toBe(true)
+  })
+})

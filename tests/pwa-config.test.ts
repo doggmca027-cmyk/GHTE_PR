@@ -95,7 +95,7 @@ describe('4. the headers that make the worker updatable (vercel.json)', () => {
   const rule = (source: string) => vercel.headers.find((h) => h.source === source)!
 
   it('sw.js, the loader and the manifest are never cached by the browser (an old worker would keep an old app)', () => {
-    const r = rule('/(sw.js|registerSW.js|manifest.webmanifest|workbox-(.*).js)')
+    const r = rule('/(sw.js|registerSW.js|manifest.webmanifest|workbox-.*.js)') // no nested capture group: Vercel refuses the whole deployment for one (tests/vercel-config.test.ts)
     expect(r.headers).toContainEqual({ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' })
     expect(r.headers).toContainEqual({ key: 'Service-Worker-Allowed', value: '/' })
   })
