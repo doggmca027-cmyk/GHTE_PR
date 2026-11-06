@@ -21,7 +21,10 @@ Home pages exist in all 15 languages (`HOME_META`).
   no request to Supabase).
 * **Crawlers** (`src/seo/bots.ts`: Googlebot, Bing, Telegram/Facebook/X previews, GPTBot, ChatGPT-User, OAI-SearchBot, PerplexityBot, ClaudeBot…) get the finished
   HTML from `middleware.ts`: title, description, canonical, Open Graph, `hreflang` for every language of the page, JSON-LD (Organization, Product, FAQPage) and the
-  text inside `#root`. The `matcher` runs the middleware **only for a crawler's User-Agent**, so ordinary traffic costs no invocation.
+  text inside `#root`. The `matcher` lists **only these public addresses** (Vercel outside Next.js accepts path strings and nothing else: a `has` condition on the
+  User-Agent made the first deployment fail), so the app's own entry `/` never passes through the middleware, and the crawler test is made in its code: a person on
+  one of these addresses gets `next()` at once. A crawler on `/` gets the English `index.html` (its own title, canonical and x-default); the sitemap carries the
+  hreflang of the home pages.
 * `public/llm-context.txt` (`/llm-context.txt`, not linked from the app): what GRAM Hub is and what it does **not** promise, for AI crawlers.
 * `sitemap.xml` is written at every build by `scripts/postbuild.ts` (`npm run generate-sitemap` does it by hand): 186 URLs, `hreflang` reciprocal on each.
 
@@ -55,7 +58,7 @@ The server's wallet always replaces ours; a refusal puts the balance back (the u
 ## Check after the API is back (not done: it was down)
 
 1. `curl -A "Googlebot/2.1" https://<site>/es/buy-instagram-followers` returns the finished page (title, hreflang, JSON-LD, text); the same URL without the
-   crawler's User-Agent returns the plain app. If the middleware is not run on Vercel, replace it by a rewrite with a `has` header condition to an Edge Function:
+   crawler's User-Agent returns the plain app. If the middleware does not run on Vercel, replace it by a rewrite with a `has` header condition (in vercel.json) to an Edge Function:
    the render code (`src/seo/render.ts`) does not change.
 2. Every (platform, kind) in `SEO_PLATFORMS` has active services in the catalogue (`scripts/catalog-coverage.ts`); remove the pair that has none.
 3. Search Console: submit `/sitemap.xml`, inspect one page of each language ("Test live URL" shows the HTML the middleware gave).

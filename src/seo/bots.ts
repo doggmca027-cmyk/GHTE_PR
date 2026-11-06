@@ -1,6 +1,5 @@
 // The crawlers that are given the finished page (middleware.ts): search engines, link previews and the AI crawlers that read a page without running its
-// JavaScript. The same list is written, as a literal, in the `matcher` of middleware.ts (Vercel reads that statically, so it cannot be built from this
-// array): tests/seo-middleware.test.ts checks that every name here is matched there.
+// JavaScript. The test is made in the code of the middleware (Vercel's `matcher` outside Next.js knows paths only, not the User-Agent).
 
 export const BOT_AGENTS: readonly string[] = [
   // search engines

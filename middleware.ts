@@ -1,10 +1,15 @@
 // Vercel Routing Middleware (Edge). Gives CRAWLERS the finished page of a public address: the right <title>, description, canonical, Open Graph, hreflang for
 // every language the page exists in, JSON-LD, and the text of the page inside #root. The app is a single-page application, so without this a crawler that
-// does not run JavaScript (most AI crawlers, link previews) would read an empty shell. People never reach this code: the `matcher` below runs it only for a
-// request whose User-Agent is a crawler, so ordinary traffic costs no middleware invocation and is not delayed.
+// does not run JavaScript (most AI crawlers, link previews) would read an empty shell.
 //
-//   /                                  the English home page      /<lang>/                  the home page in a language (15)
-//   /<lang>/buy-<platform>-<kind>      a landing page             /<lang>/<topic>           a topic page   (see src/seo/pages.ts)
+//   /<lang>/                           the home page in a language (15)       /<lang>/buy-<platform>-<kind>   a landing page
+//   /<lang>/<topic>                    a topic page                           (see src/seo/pages.ts)
+//
+// WHICH REQUESTS: only these public addresses (the `matcher`). Outside Next.js Vercel accepts nothing but path strings in `matcher` (an object with `has` on
+// the User-Agent made the deployment of 527a784 fail: "must be a path matcher (string)"), so the crawler test is made here, in code, and a person who
+// opens one of these addresses gets `next()` at once. The app's own entry "/" is NOT matched: every opening of the Mini App would cost a middleware
+// invocation, and a fault here must never be able to touch it. A crawler on "/" gets the English index.html (its own title, canonical and x-default),
+// and the sitemap carries the hreflang of the home pages.
 //
 // What it does NOT do: ask the database (a crawl would cost Supabase egress, and it is restricted), guess a page that is not in the table (an unknown
 // address is left to the normal routing, which answers 404), or ever fail a crawl: any error lets the request through untouched.
@@ -14,13 +19,12 @@ import { isBot } from './src/seo/bots'
 import { parseSeoPath, type SeoRoute } from './src/seo/pages'
 import { renderSeoHtml } from './src/seo/render'
 
-// A literal on purpose: Vercel reads `config` statically. The names are those of src/seo/bots.ts (a test keeps the two equal).
+// Path strings only, and literals: Vercel reads `config` statically and turns each string into a pattern with path-to-regexp. The languages and the slugs
+// are those of src/seo/pages.ts; tests/seo-middleware.test.ts checks that every page of that table is matched here and that nothing else is.
 export const config = {
   matcher: [
-    {
-      source: '/((?!api/|assets/|.*\\..*).*)',
-      has: [{ type: 'header', key: 'user-agent', value: '.*(Googlebot|Google-InspectionTool|bingbot|BingPreview|Applebot|DuckDuckBot|YandexBot|Baiduspider|TelegramBot|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|WhatsApp|Discordbot|GPTBot|ChatGPT-User|OAI-SearchBot|PerplexityBot|ClaudeBot|Claude-User|Claude-SearchBot|anthropic-ai|Amazonbot|CCBot|cohere-ai|meta-externalagent).*' }],
-    },
+    '/:lang(en|ru|uk|es|pt|id|tr|ar|hi|fr|de|it|vi|zh|ja)',
+    '/:lang(en|ru|uk|es|ar)/:slug(buy-[a-z0-9-]+|crypto-smm-panel|smm-panel-for-agencies)',
   ],
 }
 
@@ -55,9 +59,10 @@ export default async function middleware(
   try {
     if (request.headers.get('x-seo-internal')) return next()
     if (request.method !== 'GET' && request.method !== 'HEAD') return next()
-    if (!isBot(request.headers.get('user-agent'))) return next() // the matcher already says so; this is the same test, for a call that does not come through it
+    // the matcher only knows paths: here is where a person is told apart from a crawler, and sent on at once (nothing is fetched, nothing is built)
+    if (!isBot(request.headers.get('user-agent'))) return next()
     const url = new URL(request.url)
-    const route: SeoRoute | null = url.pathname === '/' ? { lang: 'en', landing: { type: 'home' } } : parseSeoPath(url.pathname)
+    const route: SeoRoute | null = parseSeoPath(url.pathname)
     if (!route) return next()
     const env = deps.env ?? (typeof process !== 'undefined' ? process.env : {})
     const html = await loadTemplate(url.origin, deps.fetch ?? fetch)

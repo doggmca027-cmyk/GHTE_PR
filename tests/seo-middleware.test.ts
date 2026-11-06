@@ -4,8 +4,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import middleware, { config } from '../middleware'
+import { getTransformedRoutes, pathToRegexp } from '@vercel/routing-utils'
 import { fillPage } from '../scripts/lib/seo'
 import { BOT_AGENTS, isBot } from '../src/seo/bots'
+import { LANDING_LANGS, SEO_LANGS, allLandings, landingPath } from '../src/seo/pages'
 
 const root = path.resolve(import.meta.dirname, '..')
 const INDEX = fillPage(fs.readFileSync(path.join(root, 'index.html'), 'utf8'), 'https://hub.example', { url: 'https://t.me/x', name: '@x' })
@@ -53,12 +55,15 @@ describe('1. who gets the finished page: crawlers, and only on an address that i
     expect(html).toContain('application/ld+json')
   })
 
-  it('"/" is the English home page for a crawler; "/ru/" the Russian one', async () => {
+  it('"/ru/" is the Russian home page for a crawler, "/en/" the English one (its canonical is "/"); "/" itself is the app\'s entry and is left alone', async () => {
     const mw = await fresh()
-    expect(await (await mw(ask('/', GOOGLE), { fetch: site().fn, env })).text()).toContain('<title>GRAM Hub — social media promotion paid with TON</title>')
     const ru = await (await mw(ask('/ru/', GOOGLE), { fetch: site().fn, env })).text()
     expect(ru).toContain('<title>GRAM Hub — продвижение в соцсетях за TON</title>')
     expect(ru).toContain('<html lang="ru" dir="ltr">')
+    const en = await (await mw(ask('/en/', GOOGLE), { fetch: site().fn, env })).text()
+    expect(en).toContain('<title>GRAM Hub — social media promotion paid with TON</title>')
+    expect(en).toContain('<link rel="canonical" href="https://hub.example/" />')
+    expect(passes(await mw(ask('/', GOOGLE), { fetch: site().fn, env }))).toBe(true)
   })
 
   it('a person gets nothing from it: the request goes on to the app', async () => {
@@ -67,7 +72,7 @@ describe('1. who gets the finished page: crawlers, and only on an address that i
     expect(calls).toHaveLength(0) // not even the template is fetched
   })
 
-  it.each(['/en/buy-telegram-likes', '/de/buy-telegram-followers', '/xx/', '/random', '/api/chat', '/assets/index.js', '/en/buy-telegram-followers/extra'])(
+  it.each(['/', '/en/buy-telegram-likes', '/de/buy-telegram-followers', '/xx/', '/random', '/api/chat', '/assets/index.js', '/en/buy-telegram-followers/extra'])(
     'an address that is not a page is left to the normal routing, crawler or not: %s', async (p) => {
       expect(passes(await (await fresh())(ask(p, GOOGLE), { fetch: site().fn, env }))).toBe(true)
     },
@@ -123,34 +128,52 @@ describe('2. it never fails a crawl, and never loops', () => {
   })
 })
 
-describe('3. the matcher: the middleware runs for crawlers ONLY, so people cost no invocation and no delay', () => {
-  const rule = config.matcher[0]!
-  const ua = new RegExp(rule.has[0]!.value)
+describe('3. the matcher: path strings only (outside Next.js Vercel refuses anything else), for the public pages only, never for the app itself', () => {
+  // what @vercel/build-utils does with the matcher at build time (middleware-matcher.js): a string that starts with "/", turned into a pattern by path-to-regexp
+  const matchers = config.matcher as unknown[]
+  const patterns = matchers.map((m) => pathToRegexp('316', m as string))
+  const matched = (p: string) => patterns.some((re) => re.test(p))
 
-  it('every crawler of the list is matched by the literal of the matcher, case as it is written by the crawlers', () => {
-    for (const agent of BOT_AGENTS) expect(ua.test(`Mozilla/5.0 (compatible; ${agent}/1.0)`), agent).toBe(true)
-    expect(rule.has[0]).toMatchObject({ type: 'header', key: 'user-agent' })
+  it('is an array of strings that start with "/": an object with a header condition made Vercel refuse the deployment of 527a784 ("must be a path matcher (string)")', () => {
+    expect(Array.isArray(matchers)).toBe(true)
+    for (const m of matchers) {
+      expect(typeof m).toBe('string')
+      expect((m as string).startsWith('/')).toBe(true)
+    }
   })
 
-  it('and the literal has no name the list does not (the two are one list)', () => {
-    const named = rule.has[0]!.value.replace(/^\.\*\(|\)\.\*$/g, '').split('|')
-    expect(named.sort()).toEqual([...BOT_AGENTS].sort())
+  it('every page of the table, in every language it is written in, is matched; and the home page of each of the 15 languages', () => {
+    for (const lang of LANDING_LANGS) {
+      for (const landing of allLandings()) expect(matched(landingPath(lang, landing)), landingPath(lang, landing)).toBe(true)
+    }
+    for (const lang of SEO_LANGS) expect(matched(`/${lang}`), lang).toBe(true)
   })
 
-  it('people, assets, the API and files are not matched', () => {
-    expect(ua.test(HUMAN)).toBe(false)
-    expect(ua.test('Mozilla/5.0 (Linux; Android 14) Chrome/120 Mobile Safari/537.36 Telegram-Android/10.0')).toBe(false)
-    const source = new RegExp(`^${rule.source}$`)
-    expect(source.test('/es/buy-instagram-followers')).toBe(true)
-    expect(source.test('/')).toBe(true) // the English home page is "/": a crawler gets its finished page too
-    for (const p of ['/api/chat', '/assets/index-abc.js', '/sitemap.xml', '/llm-context.txt', '/sw.js', '/tonconnect-icon.png']) expect(source.test(p), p).toBe(false)
+  it('the app\'s own entry "/", the assets, the API, the files, the sitemap, an unknown language and an unknown slug are NOT matched: ordinary traffic costs no invocation', () => {
+    const outside = [
+      '/', '/api/chat', '/api/catalog', '/assets/index-abc.js', '/sitemap.xml', '/llm-context.txt', '/sw.js', '/manifest.webmanifest', '/tonconnect-icon.png',
+      '/terms', '/privacy', '/ru/terms', '/uk/privacy', '/xx', '/xx/buy-telegram-followers', '/de/buy-telegram-followers', '/en/anything-else', '/en/buy-telegram-followers/extra',
+    ]
+    for (const p of outside) expect(matched(p), p).toBe(false)
   })
 
-  it('isBot is the same test in code', () => {
+  it('the patterns are accepted by Vercel\'s own route validator too (the same syntax as the rewrites of vercel.json)', () => {
+    for (const m of matchers) expect(getTransformedRoutes({ rewrites: [{ source: m as string, destination: '/index.html' }] }).error).toBeNull()
+  })
+
+  it('a person who opens a matched address gets next() at once (nothing is fetched): the crawler test is made in code', async () => {
+    const { fn, calls } = site()
+    for (const lang of LANDING_LANGS) expect(passes(await (await fresh())(ask(`/${lang}/crypto-smm-panel`, HUMAN), { fetch: fn, env }))).toBe(true)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('every crawler of the list is a crawler for isBot, whatever the rest of its User-Agent; people and browsers are not', () => {
+    for (const agent of BOT_AGENTS) expect(isBot(`Mozilla/5.0 (compatible; ${agent}/1.0)`), agent).toBe(true)
     expect(isBot(GOOGLE)).toBe(true)
     expect(isBot(CHATGPT)).toBe(true)
     expect(isBot('Mozilla/5.0 (compatible; OAI-SearchBot/1.0)')).toBe(true)
     expect(isBot(HUMAN)).toBe(false)
+    expect(isBot('Mozilla/5.0 (Linux; Android 14) Chrome/120 Mobile Safari/537.36 Telegram-Android/10.0')).toBe(false)
     expect(isBot('')).toBe(false)
     expect(isBot(null)).toBe(false)
   })
