@@ -9,8 +9,8 @@
     { "source": "/:slug(buy-[a-z0-9-]+|crypto-smm-panel|smm-panel-for-agencies)", "destination": "/en/:slug", "permanent": true }
   ],
   "rewrites": [
-    { "source": "/:lang(en|ru|uk|es|pt|id|tr|ar|hi|fr|de|it|vi|zh|ja)", "destination": "/" },
-    { "source": "/:lang(en|ru|uk|es|ar)/:slug(buy-[a-z0-9-]+|crypto-smm-panel|smm-panel-for-agencies)", "destination": "/" }
+    { "source": "/:lang(en|ru|uk|es|pt|id|tr|ar|hi|fr|de|it|vi|zh|ja){/}?", "destination": "/" },
+    { "source": "/:lang(en|ru|uk|es|ar)/:slug(buy-[a-z0-9-]+|crypto-smm-panel|smm-panel-for-agencies){/}?", "destination": "/" }
   ],
   "headers": [
     {

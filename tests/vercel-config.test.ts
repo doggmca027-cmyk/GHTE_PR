@@ -5,6 +5,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { getTransformedRoutes } from '@vercel/routing-utils'
 import { describe, expect, it } from 'vitest'
+import { sitemapEntries } from '../scripts/lib/sitemap'
+import { SEO_LANGS } from '../src/seo/pages'
 
 const config = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../vercel.json'), 'utf8')) as {
   cleanUrls?: boolean
@@ -58,6 +60,37 @@ describe('vercel.json as Vercel reads it', () => {
     const { routes } = transform(config)
     const redirectsIndex = routes!.find((r) => /index/.test(String((r as { src?: string }).src)) && (r as { status?: number }).status === 308)
     expect(redirectsIndex, 'cleanUrls redirects /index.html to /').toBeTruthy()
+  })
+
+  describe('every address of the site opens for a person (the 404 of "/ru/" on production: the rewrite had no optional trailing slash)', () => {
+    type Rule = { src?: string; dest?: string; handle?: string }
+    /** The addresses that do not open: neither a file of public/ (the legal pages, served without ".html" by cleanUrls) nor a rewrite to the app. */
+    const unreachable = (c: typeof config, paths: string[]): string[] => {
+      const routes = (transform(c).routes ?? []) as Rule[]
+      const after = routes.slice(routes.findIndex((r) => r.handle === 'filesystem') + 1).filter((r) => r.src && r.dest)
+      const opens = (p: string) => {
+        if (p === '/') return true // public/index.html of the build
+        const file = path.resolve(import.meta.dirname, '../public', `${p.replace(/\/+$/, '').slice(1)}.html`)
+        return fs.existsSync(file) || after.some((r) => new RegExp(r.src!).test(p))
+      }
+      return paths.filter((p) => !opens(p))
+    }
+    const sitemapPaths = sitemapEntries('https://hub.example').map((e) => new URL(e.loc).pathname)
+    const withSlash = (ps: string[]) => ps.flatMap((p) => (p === '/' ? [p] : [p, `${p.replace(/\/+$/, '')}/`]))
+    const everyLanguage = SEO_LANGS.map((l) => `/${l}`)
+
+    it('every URL of the sitemap, and the home page of each of the 15 languages, with and without a trailing slash', () => {
+      expect(unreachable(config, withSlash([...sitemapPaths, ...everyLanguage]))).toEqual([])
+    })
+
+    it('the control: the rewrites as they were (no optional slash) leave "/ru/" and the landing pages with a slash unreachable, so this test can fail', () => {
+      const old = { ...config, rewrites: (config.rewrites ?? []).map((r) => ({ ...r, source: r.source.replace('{/}?', '') })) }
+      expect(unreachable(old, withSlash([...sitemapPaths, ...everyLanguage]))).toEqual(expect.arrayContaining(['/ru/', '/es/buy-instagram-followers/']))
+    })
+
+    it('what is not a page does not open (a made-up address is a 404, never the app under a thin duplicate address)', () => {
+      expect(unreachable(config, ['/xx/', '/ru/anything', '/de/buy-telegram-views', '/en/buy-telegram-views/extra'])).toEqual(['/xx/', '/ru/anything', '/de/buy-telegram-views', '/en/buy-telegram-views/extra'])
+    })
   })
 
   it('the static pages keep their address: a rewrite never reaches /ru/terms or /uk/privacy (they are files, and files come first)', () => {
